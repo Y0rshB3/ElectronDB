@@ -51,6 +51,12 @@ describe('WHATS_NEW (curated list)', () => {
     expect([...seen]).toEqual(expect.arrayContaining(['0.1.1', '0.1.2', '0.1.3', '0.1.4']))
   })
 
+  it('0.1.5 explains the typed-confirmation environments and that production is always on', () => {
+    const entry = whatsNewFor('0.1.5')
+    expect(entry?.highlights[0]).toMatch(/Ajustes › Seguridad.*Producción por defecto/)
+    expect(entry?.important?.join(' ')).toMatch(/Producción ahora siempre pide escribir el nombre/)
+  })
+
   it('0.1.4 points to the new switch in Ajustes › Seguridad', () => {
     expect(whatsNewFor('0.1.4')?.important?.join(' ')).toMatch(/Ajustes › Seguridad/)
   })

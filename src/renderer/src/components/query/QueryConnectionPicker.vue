@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ConnectionConfig } from '@shared/types'
+import { requiresTypedConfirm } from '@shared/typedConfirm'
+import type { ConnectionConfig, Environment } from '@shared/types'
 import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 
 /**
  * Connection selector of the query toolbar (presentational): colour dot, name
- * and environment pill per connection; production is tinted red. Switching
+ * and environment pill per connection; production is tinted red and the
+ * other environments that need the typed name show a lock. Switching
  * logic (guards, opening, reloading) lives in the view.
  */
 const props = defineProps<{
   modelValue: string
   connections: ConnectionConfig[]
   disabled?: boolean
+  /** Environments that need the typed name (Ajustes › Seguridad); production is always one. */
+  typedEnvironments?: readonly Environment[]
   /** Tooltip explaining why the picker is disabled. */
   disabledReason?: string | null
 }>()
@@ -20,12 +24,16 @@ const emit = defineEmits<{ 'update:modelValue': [id: string] }>()
 
 const current = computed(() => props.connections.find((c) => c.id === props.modelValue))
 const production = computed(() => current.value?.environment === 'production')
+/** Writes need the typed name (production, and the environments of Ajustes › Seguridad). */
+const typed = (c: ConnectionConfig | undefined): boolean =>
+  requiresTypedConfirm(c?.environment, props.typedEnvironments)
 const title = computed(() => {
   if (props.disabled && props.disabledReason) return props.disabledReason
   const c = current.value
   if (!c) return 'Conexión de la consulta'
-  return production.value
-    ? `Conexión: ${c.name} (PRODUCCIÓN: las escrituras piden confirmación)`
+  if (production.value) return `Conexión: ${c.name} (PRODUCCIÓN: las escrituras piden confirmación)`
+  return typed(c)
+    ? `Conexión: ${c.name} (requiere confirmación: las escrituras piden escribir el nombre)`
     : `Conexión: ${c.name}`
 })
 </script>
@@ -61,7 +69,13 @@ const title = computed(() => {
           class="nd-pill query-conn__pill"
           :class="environmentPillClass(item.raw.environment)"
           data-test="connection-env"
-          >{{ environmentLabel(item.raw.environment) }}</span
+          ><v-icon
+            v-if="typed(item.raw) && item.raw.environment !== 'production'"
+            icon="mdi-lock-outline"
+            size="11"
+            aria-hidden="true"
+            data-test="connection-env-lock"
+          />{{ environmentLabel(item.raw.environment) }}</span
         >
       </span>
     </template>
@@ -83,6 +97,11 @@ const title = computed(() => {
             ><v-icon
               v-if="item.raw.environment === 'production'"
               icon="mdi-shield-alert-outline"
+              size="12"
+              aria-hidden="true"
+            /><v-icon
+              v-else-if="typed(item.raw)"
+              icon="mdi-lock-outline"
               size="12"
               aria-hidden="true"
             />{{ environmentLabel(item.raw.environment) }}</span

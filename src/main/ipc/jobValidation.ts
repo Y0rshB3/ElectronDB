@@ -1,5 +1,5 @@
 import { restoreTaskProblem } from '@shared/restoreTask'
-import type { ConnectionConfig, JobInput } from '@shared/types'
+import type { ConnectionConfig, Environment, JobInput } from '@shared/types'
 import { cronToCalendarIntervals, validateCron } from '../automation/cron'
 
 /** jobs:save / jobs:run validation; free of electron so it is unit tested. */
@@ -9,11 +9,13 @@ const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema'])
 /**
  * Boundary validation for jobs:save; throws actionable Spanish messages.
  * `lookup` resolves connections for the restore rules (a restore step may
- * never target production: nobody confirms scheduled or launchd runs).
+ * never target production, nor an environment in `typedEnvironments`: nobody
+ * types the connection name in scheduled or launchd runs).
  */
 export function validateJobInput(
   input: JobInput,
-  lookup: (id: string) => ConnectionConfig | null | undefined = () => null
+  lookup: (id: string) => ConnectionConfig | null | undefined = () => null,
+  typedEnvironments: readonly Environment[] = []
 ): void {
   if (!input || typeof input !== 'object') throw new Error('Datos del trabajo no válidos.')
   if (!input.name || !input.name.trim()) throw new Error('El nombre del trabajo es obligatorio.')
@@ -30,7 +32,7 @@ export function validateJobInput(
     if (task.type === 'runquery' && !task.sql?.trim())
       throw new Error(`El ${label} necesita al menos una sentencia SQL.`)
     if (task.type === 'restoreschema') {
-      const problem = restoreTaskProblem(task, input.tasks, lookup, label)
+      const problem = restoreTaskProblem(task, input.tasks, lookup, label, { typedEnvironments })
       if (problem) throw new Error(problem)
     }
   })
@@ -44,10 +46,14 @@ export function validateJobInput(
   }
 }
 
-/** Restore rules only (the target may have become production after the job was saved). */
+/**
+ * Restore rules only (the target may have become production, or its
+ * environment may have been added to the typed list, after the job was saved).
+ */
 export function assertRestoreStepsAllowed(
   job: Pick<JobInput, 'tasks'>,
-  lookup: (id: string) => ConnectionConfig | null | undefined
+  lookup: (id: string) => ConnectionConfig | null | undefined,
+  typedEnvironments: readonly Environment[] = []
 ): void {
   job.tasks.forEach((task, i) => {
     if (task.type !== 'restoreschema') return
@@ -55,7 +61,8 @@ export function assertRestoreStepsAllowed(
       task,
       job.tasks,
       lookup,
-      task.referenceName?.trim() || `paso ${i + 1}`
+      task.referenceName?.trim() || `paso ${i + 1}`,
+      { typedEnvironments }
     )
     if (problem) throw new Error(problem)
   })

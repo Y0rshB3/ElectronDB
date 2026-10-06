@@ -1,40 +1,53 @@
+import { guardedRiskSignature, guardedWriteTargets, isObviousWrite } from '@shared/productionGuard'
 import {
-  isObviousWrite,
-  productionRiskSignature,
-  productionWriteTargets
-} from '@shared/productionGuard'
-import type { Job, JobInput, WriteOptions } from '@shared/types'
+  environmentPhrase,
+  normalizeTypedConfirmEnvironments,
+  requiresTypedConfirm
+} from '@shared/typedConfirm'
+import type { ConnectionConfig, Environment, Job, JobInput, WriteOptions } from '@shared/types'
 import type { AppContext } from '../context'
 import { MysqlUserError } from '../mysql/errors'
 import { splitStatements } from '../mysql/sqlSplit'
 
 /**
  * Main-side enforcement of the CLAUDE.md rule: writes to a connection whose
- * environment is 'production' need explicit confirmation. The renderer shows
- * the dialog and then sends `confirmProduction: true`; these checks catch any
- * caller that skipped the dialog.
+ * environment needs the typed-name confirmation (always 'production', plus
+ * the environments chosen in Ajustes › Seguridad) need explicit confirmation.
+ * The renderer shows the dialog and then sends `confirmProduction: true` (the
+ * IPC field keeps its historical name); these checks catch any caller that
+ * skipped the dialog. Production is enforced even when the settings file was
+ * edited by hand to leave it out.
  */
 
 type GuardContext = Pick<AppContext, 'connections' | 'settings'>
 
 const CODE = 'E_PRODUCTION_CONFIRM'
 
-function guardEnabled(ctx: GuardContext): boolean {
-  return ctx.settings.get().confirmProductionWrites !== false
+/** Environments that need the typed confirmation, from settings (always with production). */
+export function typedConfirmEnvironments(ctx: Pick<AppContext, 'settings'>): Environment[] {
+  return normalizeTypedConfirmEnvironments(ctx.settings.get().typedConfirmEnvironments)
 }
 
-/** Throws when `connectionId` is a production connection and the write was not confirmed. */
+/** True when writes to `connection` need the typed confirmation. */
+export function needsTypedConfirm(
+  ctx: Pick<AppContext, 'settings'>,
+  connection: Pick<ConnectionConfig, 'environment'> | null | undefined
+): boolean {
+  return requiresTypedConfirm(connection?.environment, typedConfirmEnvironments(ctx))
+}
+
+/** Throws when `connectionId` needs the typed confirmation and the write was not confirmed. */
 export function assertProductionWriteConfirmed(
   ctx: GuardContext,
   connectionId: string,
   options: WriteOptions | undefined,
   action: string
 ): void {
-  if (options?.confirmProduction === true || !guardEnabled(ctx)) return
+  if (options?.confirmProduction === true) return
   const connection = ctx.connections.get(connectionId)
-  if (connection?.environment !== 'production') return
+  if (!connection || !needsTypedConfirm(ctx, connection)) return
   throw new MysqlUserError(
-    `${action} en «${connection.name}» (producción) necesita confirmación explícita. Vuelve a intentarlo desde ElectronDB y confirma la operación.`,
+    `${action} en «${connection.name}» (${environmentPhrase(connection.environment)}) necesita confirmación explícita. Vuelve a intentarlo desde ElectronDB y confirma la operación escribiendo el nombre de la conexión.`,
     CODE
   )
 }
@@ -46,36 +59,43 @@ export function assertScriptAllowed(
   script: string,
   options: WriteOptions | undefined
 ): void {
-  if (options?.confirmProduction === true || !guardEnabled(ctx)) return
+  if (options?.confirmProduction === true) return
   if (!splitStatements(script).some((s) => isObviousWrite(s.sql))) return
   assertProductionWriteConfirmed(ctx, connectionId, options, 'Ejecutar SQL que modifica datos')
 }
 
-function productionNames(ctx: GuardContext, job: Pick<Job, 'tasks'>): string {
-  return productionWriteTargets(job.tasks, (id) => ctx.connections.get(id))
-    .map((c) => `«${c.name}»`)
-    .join(', ')
+function guardedTargets(ctx: GuardContext, job: Pick<Job, 'tasks'>): ConnectionConfig[] {
+  return guardedWriteTargets(
+    job.tasks,
+    (id) => ctx.connections.get(id),
+    typedConfirmEnvironments(ctx)
+  )
 }
 
-/** jobs:run: SQL tasks that target production need confirmation. */
+/** "«Prod» (producción), «Pre» (entorno Staging)" */
+function describeTargets(targets: ConnectionConfig[]): string {
+  return targets.map((c) => `«${c.name}» (${environmentPhrase(c.environment)})`).join(', ')
+}
+
+/** jobs:run: SQL tasks that target a guarded connection need confirmation. */
 export function assertJobRunAllowed(
   ctx: GuardContext,
   job: Pick<Job, 'name' | 'tasks'>,
   options: WriteOptions | undefined
 ): void {
-  if (options?.confirmProduction === true || !guardEnabled(ctx)) return
-  const names = productionNames(ctx, job)
-  if (!names) return
+  if (options?.confirmProduction === true) return
+  const targets = guardedTargets(ctx, job)
+  if (!targets.length) return
   throw new MysqlUserError(
-    `La tarea «${job.name}» ejecuta SQL sobre ${names} (producción) y necesita confirmación explícita. Ejecútala desde ElectronDB y confirma la operación.`,
+    `La tarea «${job.name}» ejecuta SQL sobre ${describeTargets(targets)} y necesita confirmación explícita. Ejecútala desde ElectronDB y confirma la operación.`,
     CODE
   )
 }
 
 /**
- * jobs:save: scheduling SQL tasks against production needs confirmation,
- * unless the stored job already had exactly the same risk (confirmed before).
- * Scheduled and launchd runs rely on this check.
+ * jobs:save: scheduling SQL tasks against a guarded connection needs
+ * confirmation, unless the stored job already had exactly the same risk
+ * (confirmed before). Scheduled and launchd runs rely on this check.
  */
 export function assertJobSaveAllowed(
   ctx: GuardContext,
@@ -83,14 +103,18 @@ export function assertJobSaveAllowed(
   existing: Job | null,
   options: WriteOptions | undefined
 ): void {
-  if (options?.confirmProduction === true || !guardEnabled(ctx) || !input.schedule?.enabled) return
+  if (options?.confirmProduction === true || !input.schedule?.enabled) return
   const lookup = (id: string) => ctx.connections.get(id)
-  const risk = productionRiskSignature(input.tasks, input.schedule, lookup)
+  const environments = typedConfirmEnvironments(ctx)
+  const risk = guardedRiskSignature(input.tasks, input.schedule, lookup, environments)
   if (!risk) return
-  if (existing && productionRiskSignature(existing.tasks, existing.schedule, lookup) === risk)
+  if (
+    existing &&
+    guardedRiskSignature(existing.tasks, existing.schedule, lookup, environments) === risk
+  )
     return
   throw new MysqlUserError(
-    `Programar «${input.name}» ejecutará SQL sobre ${productionNames(ctx, input)} (producción) sin supervisión y necesita confirmación explícita. Guarda la tarea desde ElectronDB y confirma la operación.`,
+    `Programar «${input.name}» ejecutará SQL sobre ${describeTargets(guardedTargets(ctx, input))} sin supervisión y necesita confirmación explícita. Guarda la tarea desde ElectronDB y confirma la operación.`,
     CODE
   )
 }

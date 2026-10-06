@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { AppSettings } from '@shared/types'
+import {
+  DEFAULT_TYPED_CONFIRM_ENVIRONMENTS,
+  normalizeTypedConfirmEnvironments,
+  requiresTypedConfirm
+} from '@shared/typedConfirm'
+import type { AppSettings, Environment } from '@shared/types'
 import { api } from '@renderer/api'
 
 const DEFAULTS: AppSettings = {
@@ -8,7 +13,7 @@ const DEFAULTS: AppSettings = {
   backupsRootDir: '',
   defaultRowLimit: 1000,
   theme: 'dark',
-  confirmProductionWrites: true,
+  typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true
 }
@@ -29,9 +34,25 @@ export const useSettingsStore = defineStore('settings', () => {
   const rowLimit = computed(() =>
     Math.max(1, settings.value.defaultRowLimit || DEFAULTS.defaultRowLimit)
   )
+  /** Environments that need the typed name before writes (always with production). */
+  const typedEnvironments = computed(() =>
+    normalizeTypedConfirmEnvironments(settings.value.typedConfirmEnvironments)
+  )
+  function needsTypedConfirm(environment: Environment | null | undefined): boolean {
+    return requiresTypedConfirm(environment, typedEnvironments.value)
+  }
   const themeName = computed(() =>
     settings.value.theme === 'light' ? 'electrondbLight' : 'electrondbDark'
   )
 
-  return { settings, loaded, rowLimit, themeName, load, update }
+  return {
+    settings,
+    loaded,
+    rowLimit,
+    themeName,
+    typedEnvironments,
+    needsTypedConfirm,
+    load,
+    update
+  }
 })

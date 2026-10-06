@@ -1,5 +1,6 @@
 import { restoreLabel } from '@shared/jobLog'
 import { isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
+import { environmentPhrase } from '@shared/typedConfirm'
 import { MANUAL_ROLLBACKS_JOB_ID, MANUAL_ROLLBACKS_NAME } from '@shared/backupPackages'
 import type {
   BackupMeta,
@@ -22,6 +23,7 @@ import { describeError } from '../mysql/errors'
 import type { SessionFactory } from '../mysql/types'
 import { nowIso } from '../storage/ids'
 import { backupPathKey, backupRunIndex, restorableTasks } from './backupRuns'
+import { needsTypedConfirm } from '../ipc/productionGuard'
 import type { RunOptions } from './runner'
 
 export { restorableTasks } from './backupRuns'
@@ -41,7 +43,7 @@ export interface RollbackInspector {
   targetSchemas(connectionId: string): Promise<string[]>
 }
 
-type RollbackContext = Pick<AppContext, 'runs' | 'jobs' | 'connections'>
+type RollbackContext = Pick<AppContext, 'runs' | 'jobs' | 'connections' | 'settings'>
 
 /** Real disk and server access for rollback plans (manifests through the index cache). */
 export function createRollbackInspector(
@@ -397,8 +399,9 @@ export interface PreparedRollback {
 
 /**
  * Turns a confirmed request into the synthetic job that performs it. The
- * caller has already enforced the production confirmation; `confirmed` says
- * whether the target may be a production connection.
+ * caller has already enforced the typed confirmation; `confirmed` says
+ * whether the target may be a connection that needs it (production or an
+ * environment listed in Ajustes › Seguridad).
  */
 export function prepareRollback(
   ctx: RollbackContext,
@@ -433,9 +436,10 @@ export function prepareRollback(
       )
     seen.add(item.targetSchema)
   }
-  if (target.environment === 'production' && !confirmed)
+  const guarded = needsTypedConfirm(ctx, target)
+  if (guarded && !confirmed)
     throw new Error(
-      `«${target.name}» es una conexión de producción: confirma el reemplazo escribiendo su nombre.`
+      `«${target.name}» es una conexión de ${environmentPhrase(target.environment)}: confirma el reemplazo escribiendo su nombre.`
     )
 
   const sourceJob = ctx.jobs.get(plan.jobId)
@@ -477,7 +481,7 @@ export function prepareRollback(
     options: {
       kind: 'rollback',
       ...(plan.runId ? { rollbackOf: plan.runId } : {}),
-      allowProductionRestore: target.environment === 'production' && confirmed,
+      allowProductionRestore: guarded && confirmed,
       // Objects inside each database follow the source job's «Continuar en caso de error».
       restoreContinueOnError: sourceJob?.continueOnError ?? false
     }

@@ -6,7 +6,7 @@ import { createVuetify } from 'vuetify'
 import * as vuetifyComponents from 'vuetify/components'
 import * as vuetifyDirectives from 'vuetify/directives'
 import { aliases, mdi } from 'vuetify/iconsets/mdi'
-import type { ConnectionConfig } from '@shared/types'
+import type { ConnectionConfig, Environment } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useTabsStore, type OpenTabInput, type WorkspaceTab } from '@renderer/stores/tabs'
 
@@ -108,11 +108,7 @@ export async function mountComponent(
 }
 
 /** Registers connection `id` in the connections store with the given environment. */
-export function seedConnection(
-  id: string,
-  environment: 'production' | 'local',
-  name = 'Servidor'
-): void {
+export function seedConnection(id: string, environment: Environment, name = 'Servidor'): void {
   useConnectionsStore().items = [{ id, name, environment } as ConnectionConfig]
 }
 

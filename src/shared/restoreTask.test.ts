@@ -4,7 +4,8 @@ import {
   restoreSourceOf,
   restoreTargetSchema,
   restoreTaskProblem,
-  restoreProductionRefusal
+  restoreProductionRefusal,
+  restoreTypedRefusal
 } from './restoreTask'
 import type { ConnectionConfig, JobTask } from './types'
 
@@ -52,6 +53,30 @@ describe('restore task rules', () => {
     expect(problem).toMatch(/«Restaurar todo»/)
     // A confirmed rollback from the history may write to production.
     expect(restoreTaskProblem(r, [backup, r], lookup, 'paso 2', { rollback: true })).toBeNull()
+    // Production is refused whatever the typed list says.
+    expect(restoreTaskProblem(r, [backup, r], lookup, 'paso 2', { typedEnvironments: [] })).toBe(
+      problem
+    )
+  })
+
+  it('refuses targets in a listed environment, naming it (nobody types the name in a job)', () => {
+    const fromLocal = { ...backup, connectionId: 'local' }
+    const r = restore({ connectionId: 'staging' })
+    expect(restoreTaskProblem(r, [fromLocal, r], lookup, 'paso 2')).toBeNull()
+    const problem = restoreTaskProblem(r, [fromLocal, r], lookup, 'paso 2', {
+      typedEnvironments: ['production', 'staging']
+    })
+    expect(problem).toBe(restoreTypedRefusal('Restaurar auth', 'staging', 'staging'))
+    expect(problem).toMatch(/entorno Staging/)
+    expect(problem).toMatch(/Ajustes › Seguridad/)
+    expect(problem).not.toMatch(/producción/)
+    expect(
+      restoreTaskProblem(r, [fromLocal, r], lookup, 'paso 2', {
+        typedEnvironments: ['staging'],
+        rollback: true
+      })
+    ).toBeNull()
+    expect(restoreTypedRefusal('x', 'y', 'production')).toBe(restoreProductionRefusal('x', 'y'))
   })
 
   it('refuses restoring a database onto itself (same connection and schema)', () => {

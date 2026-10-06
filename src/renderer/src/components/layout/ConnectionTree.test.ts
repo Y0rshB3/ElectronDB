@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ConnectionTree from './ConnectionTree.vue'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import {
   createTestVuetify,
@@ -50,6 +51,34 @@ describe('ConnectionTree', () => {
     const local = rows[0]
     expect(local.get('[data-test="connection-color"]').attributes('style')).toContain('transparent')
     expect(local.get('[data-test="env-chip"]').text()).toBe('Local')
+    wrapper.unmount()
+  })
+
+  it('marks connections that need the typed name with a lock; the red row stays production-only', async () => {
+    installBridge({
+      'connections:list': [
+        makeConnection({ id: 'p', name: 'Prod', environment: 'production' }),
+        makeConnection({ id: 's', name: 'Pre', environment: 'staging' }),
+        makeConnection({ id: 'l', name: 'Local', environment: 'local' })
+      ]
+    })
+    await useConnectionsStore().load()
+    useSettingsStore().settings.typedConfirmEnvironments = ['production', 'staging']
+    const wrapper = mountTree()
+    await flush()
+    const row = (name: string) =>
+      wrapper
+        .findAll('[data-test="tree-node-connection"]')
+        .find((r) => r.find('.tree-node__label').text() === name)!
+    expect(row('Pre').find('[data-test="env-lock"]').exists()).toBe(true)
+    expect(row('Pre').get('[data-test="env-chip"]').attributes('title')).toContain(
+      'requiere confirmación'
+    )
+    expect(row('Pre').get('.tree-node__row').classes()).not.toContain('tree-node__row--production')
+    expect(row('Prod').find('[data-test="env-lock"]').exists()).toBe(true)
+    expect(row('Prod').get('.tree-node__row').classes()).toContain('tree-node__row--production')
+    expect(row('Local').find('[data-test="env-lock"]').exists()).toBe(false)
+    expect(row('Local').get('[data-test="env-chip"]').attributes('title')).toBeUndefined()
     wrapper.unmount()
   })
 

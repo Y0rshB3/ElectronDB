@@ -5,11 +5,12 @@ import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useUiStore } from '@renderer/stores/ui'
+import { useSettingsStore } from '@renderer/stores/settings'
 import PathPicker from '@renderer/components/common/PathPicker.vue'
 import './pathField.css'
 import { vPathTail } from './pathTail'
 import DialogHeader from './DialogHeader.vue'
-import { ENVIRONMENTS } from '@renderer/components/backups/backupHelpers'
+import { ENVIRONMENTS, environmentLabel } from '@renderer/components/backups/backupHelpers'
 import {
   COLOR_PRESETS,
   emptyConnectionInput,
@@ -20,6 +21,7 @@ import {
 
 const ui = useUiStore()
 const connections = useConnectionsStore()
+const settingsStore = useSettingsStore()
 const notify = useNotify()
 
 const tab = ref<'general' | 'ssh' | 'ssl' | 'advanced'>('general')
@@ -50,7 +52,9 @@ const isCustomColor = computed(
 const environmentHint = computed(() =>
   form.value.environment === 'production'
     ? 'Producción: toda escritura (restauraciones, DDL, cambios de datos) pedirá confirmación explícita.'
-    : 'Marca como «Producción» las conexiones donde un error sea grave: se pedirá confirmación antes de escribir.'
+    : settingsStore.needsTypedConfirm(form.value.environment)
+      ? `${environmentLabel(form.value.environment)}: según Ajustes › Seguridad, toda escritura pedirá escribir el nombre de la conexión.`
+      : 'Marca como «Producción» las conexiones donde un error sea grave: se pedirá confirmación antes de escribir.'
 )
 
 async function reset(): Promise<void> {

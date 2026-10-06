@@ -24,7 +24,7 @@ import {
   destructiveTitle
 } from '@renderer/components/query/destructiveGuard'
 import { analyzeWrites } from '@renderer/components/query/writeGuard'
-import { useConfirm } from '@renderer/composables/useConfirm'
+import { typedTarget, useConfirm } from '@renderer/composables/useConfirm'
 import { useWorkspace } from '@renderer/composables/useWorkspace'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -251,11 +251,10 @@ async function run(selectionOnly = false): Promise<void> {
     return
   }
   if (!(await confirmDiscardEdits())) return
-  // Allowlist: on production anything not provably read-only (SELECT/SHOW/DESCRIBE/EXPLAIN/USE...) asks first.
+  // Allowlist: on production (and the environments of Ajustes › Seguridad) anything not provably
+  // read-only (SELECT/SHOW/DESCRIBE/EXPLAIN/USE...) asks for the typed name first.
   const check = analyzeWrites(script)
-  const production =
-    connections.isProduction(connectionId.value) && settings.settings.confirmProductionWrites
-  const confirmProduction = production && check.writes
+  const confirmProduction = connections.needsTypedConfirm(connectionId.value) && check.writes
   // DROP / TRUNCATE / DELETE / ALTER … DROP / UPDATE without WHERE ask on any connection (setting).
   const drops = settings.settings.confirmDestructiveEverywhere
     ? analyzeDestructiveScript(script)
@@ -264,7 +263,7 @@ async function run(selectionOnly = false): Promise<void> {
     const allRows = drops.filter((d) => d.allRows).length
     const ok = await confirmDestructive({
       connectionId: connectionId.value,
-      title: 'Ejecutar en producción',
+      title: `Ejecutar en ${typedTarget(connections.get(connectionId.value))}`,
       message: `La consulta puede modificar datos, estructura o estado del servidor (${check.reasons.join(', ')}).`,
       details: script.length > 2000 ? script.slice(0, 2000) + '…' : script,
       alwaysAsk: false,
@@ -293,7 +292,8 @@ async function run(selectionOnly = false): Promise<void> {
   totalMs.value = null
   const started = performance.now()
   try {
-    // confirmProduction tells main the user confirmed; main rejects unconfirmed production writes.
+    // confirmProduction tells main the user typed the name; main rejects unconfirmed writes to
+    // production and to the environments of Ajustes › Seguridad.
     const out = await api.invokeSilent('db:execute', connectionId.value, script, {
       schema: schema.value,
       ...(confirmProduction ? { confirmProduction: true } : {})
@@ -553,6 +553,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
       <QueryConnectionPicker
         :model-value="connectionId"
         :connections="connections.sorted"
+        :typed-environments="settings.typedEnvironments"
         :disabled="running || switching"
         :disabled-reason="connectionLockReason"
         class="query-view__conn"

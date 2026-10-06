@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { JobInput } from '@shared/types'
+import type { Environment, JobInput } from '@shared/types'
 import { useTabsStore } from '@renderer/stores/tabs'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import JobEditorView from './JobEditorView.vue'
 import {
@@ -141,8 +142,9 @@ describe('JobEditorView', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  async function mountEditor(jobId: string | null) {
+  async function mountEditor(jobId: string | null, typed?: Environment[]) {
     const pinia = freshPinia()
+    if (typed) useSettingsStore().settings.typedConfirmEnvironments = typed
     const tabs = useTabsStore()
     const tab = tabs.open({ kind: 'jobEditor', title: 'Tarea', payload: { jobId } })
     wrapper = mountWith(JobEditorView, pinia, { props: { tab } })
@@ -222,7 +224,7 @@ describe('JobEditorView', () => {
       'connections:list': () => [
         makeConnection({ id: 'p1', name: 'Prod', environment: 'production' })
       ],
-      'settings:get': () => ({ confirmProductionWrites: true }),
+      'settings:get': () => ({ typedConfirmEnvironments: ['production'] }),
       'jobs:get': () =>
         makeJob({
           id: 'job-2',
@@ -248,6 +250,57 @@ describe('JobEditorView', () => {
     expect(ask).toHaveBeenCalledTimes(1)
     expect(ask.mock.calls[0][0]).toMatchObject({ requireTyped: 'Prod', production: true })
     expect(calls(invoke, 'jobs:run')).toHaveLength(0)
+  })
+
+  function stagingSqlJob() {
+    return mockElectronDB({
+      'connections:list': () => [makeConnection({ id: 's1', name: 'Pre', environment: 'staging' })],
+      'jobs:get': () =>
+        makeJob({
+          id: 'job-3',
+          name: 'Purge',
+          tasks: [
+            {
+              id: 't1',
+              type: 'runquery',
+              connectionId: 's1',
+              schema: 'app',
+              referenceName: 'q',
+              sql: 'DELETE FROM x'
+            }
+          ]
+        }),
+      'jobs:runs': () => [],
+      'jobs:run': () => ({ id: 'run-1' })
+    })
+  }
+
+  it('asks for the typed name before running SQL on a staging connection listed in Ajustes', async () => {
+    invoke = stagingSqlJob()
+    const { w } = await mountEditor('job-3', ['production', 'staging'])
+    const ui = useUiStore()
+    const ask = vi.spyOn(ui, 'ask').mockResolvedValue(true)
+    await w.get('[data-test="job-run"]').trigger('click')
+    await settle()
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(ask.mock.calls[0][0]).toMatchObject({
+      requireTyped: 'Pre',
+      production: true,
+      typedEnvironment: 'staging',
+      title: 'Ejecutar tarea en «Pre»'
+    })
+    expect(ask.mock.calls[0][0].message).toContain('«Pre» (entorno Staging)')
+    expect(calls(invoke, 'jobs:run')).toEqual([['job-3', { confirmProduction: true }]])
+  })
+
+  it('runs SQL on a staging connection that is not listed without the typed name', async () => {
+    invoke = stagingSqlJob()
+    const { w } = await mountEditor('job-3')
+    const ask = vi.spyOn(useUiStore(), 'ask')
+    await w.get('[data-test="job-run"]').trigger('click')
+    await settle()
+    expect(ask).not.toHaveBeenCalled()
+    expect(calls(invoke, 'jobs:run')).toHaveLength(1)
   })
 
   it('does not call jobs:save for an incomplete new job', async () => {

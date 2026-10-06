@@ -7,6 +7,10 @@ import type {
   JobInput,
   JobRun
 } from '@shared/types'
+import {
+  DEFAULT_TYPED_CONFIRM_ENVIRONMENTS,
+  normalizeTypedConfirmEnvironments
+} from '@shared/typedConfirm'
 import { JsonStore } from './jsonStore'
 import { newId, nowIso } from './ids'
 
@@ -153,34 +157,50 @@ export const DEFAULT_SETTINGS = (
   backupsRootDir: join(userData, 'backups'),
   defaultRowLimit: 1000,
   theme: 'dark',
-  confirmProductionWrites: true,
+  typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true
 })
 
+/**
+ * settings.json as stored. `confirmProductionWrites` is the pre-0.1.5 boolean:
+ * it is read only to be dropped (production can no longer be turned off) and
+ * never written again.
+ */
+type StoredSettings = AppSettings & { confirmProductionWrites?: unknown }
+
 export class SettingsRepo {
-  private store: JsonStore<AppSettings>
+  private store: JsonStore<StoredSettings>
   /** The macOS default that older builds also saved on Windows/Linux (never valid there). */
   private readonly staleMacDefault: string | null
   constructor(dir: string, home: string, platform: NodeJS.Platform = process.platform) {
-    this.store = new JsonStore(join(dir, 'settings.json'), () =>
+    this.store = new JsonStore<StoredSettings>(join(dir, 'settings.json'), () =>
       DEFAULT_SETTINGS(dir, home, platform)
     )
     this.staleMacDefault = platform === 'darwin' ? null : macNavicatRootPath(home)
   }
   get(): AppSettings {
-    const stored = this.store.get()
-    // Only an explicit false turns the destructive confirmation off (missing or invalid: on).
-    const settings =
-      stored.confirmDestructiveEverywhere === false || stored.confirmDestructiveEverywhere === true
-        ? stored
-        : { ...stored, confirmDestructiveEverywhere: true }
+    const { confirmProductionWrites: _legacy, ...stored } = this.store.get()
+    const settings: AppSettings = {
+      ...stored,
+      // Only an explicit false turns the destructive confirmation off (missing or invalid: on).
+      confirmDestructiveEverywhere: stored.confirmDestructiveEverywhere !== false,
+      // Old profiles (only confirmProductionWrites, true or false), missing or invalid values:
+      // ['production'] at least. Production is always added back.
+      typedConfirmEnvironments: normalizeTypedConfirmEnvironments(stored.typedConfirmEnvironments)
+    }
     return settings.navicatRootPath === this.staleMacDefault
       ? { ...settings, navicatRootPath: '' }
       : settings
   }
   update(patch: Partial<AppSettings>): AppSettings {
-    this.store.update((s) => Object.assign(s, patch))
+    this.store.update((s) => {
+      const { confirmProductionWrites: _ignored, ...rest } = (patch ??
+        {}) as Partial<StoredSettings>
+      Object.assign(s, rest)
+      s.typedConfirmEnvironments = normalizeTypedConfirmEnvironments(s.typedConfirmEnvironments)
+      delete s.confirmProductionWrites
+    })
     return this.get()
   }
 }

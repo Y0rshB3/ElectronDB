@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api } from '@renderer/api'
-import { useConfirm } from '@renderer/composables/useConfirm'
+import { typedTarget, useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useTreeStore } from '@renderer/stores/tree'
@@ -95,12 +95,13 @@ async function save(): Promise<void> {
   const cid = connectionId.value
   const dbName = name.value.trim()
   try {
-    // CREATE DATABASE is a write: production connections need explicit confirmation.
+    // CREATE DATABASE is a write: guarded connections (production, Ajustes › Seguridad) need the
+    // typed name.
     const ok = await confirmDestructive({
       connectionId: cid,
       title: 'Crear base de datos',
       message: `Se creará la base de datos «${dbName}» en «${connections.nameOf(cid)}».`,
-      confirmText: 'Crear en producción',
+      confirmText: `Crear en ${typedTarget(connections.get(cid))}`,
       alwaysAsk: false
     })
     if (!ok) return

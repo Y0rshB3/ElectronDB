@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { restoreSourceOf } from '@shared/restoreTask'
 import type { JobTask, JobTaskType } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
@@ -19,6 +20,7 @@ import {
 const tasks = defineModel<JobTask[]>({ required: true })
 
 const connections = useConnectionsStore()
+const settings = useSettingsStore()
 const schemaLoader = useSchemaLoader()
 
 const connectionItems = computed(() =>
@@ -31,26 +33,41 @@ function update(index: number, changes: Partial<JobTask>): void {
   tasks.value = next
 }
 
-/** Restore targets: production connections are listed but cannot be chosen. */
+/**
+ * Restore targets: connections that need the typed name (production, and the
+ * environments chosen in Ajustes › Seguridad) are listed but cannot be chosen.
+ */
 const targetItems = computed(() =>
-  connections.sorted.map((c) => ({
-    title: c.name,
-    value: c.id,
-    props: {
-      disabled: c.environment === 'production',
-      subtitle:
-        c.environment === 'production'
-          ? 'Producción: no se puede restaurar desde una tarea'
+  connections.sorted.map((c) => {
+    const blocked = settings.needsTypedConfirm(c.environment)
+    return {
+      title: c.name,
+      value: c.id,
+      props: {
+        disabled: blocked,
+        subtitle: blocked
+          ? `${environmentLabel(c.environment)}: pide escribir el nombre, no se puede restaurar desde una tarea`
           : environmentLabel(c.environment)
+      }
     }
-  }))
+  })
 )
+const blockedHint = computed(() => {
+  const names = settings.typedEnvironments.map((e) =>
+    e === 'production' ? 'producción' : environmentLabel(e)
+  )
+  const list =
+    names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}` : names[0]
+  return `Desde una tarea no se puede restaurar en conexiones de ${list} (piden escribir el nombre).`
+})
 
 function changeType(index: number, type: JobTaskType): void {
   const current = tasks.value[index]
   const base =
     type === 'restoreschema'
-      ? newRestoreTask(tasks.value.slice(0, index), connections.sorted)
+      ? newRestoreTask(tasks.value.slice(0, index), connections.sorted, (c) =>
+          settings.needsTypedConfirm(c.environment)
+        )
       : newTask(type, current.connectionId, current.schema)
   const replacement = { ...base, id: current.id, referenceName: current.referenceName }
   const next = [...tasks.value]
@@ -122,7 +139,9 @@ function add(type: JobTaskType): void {
   const last = tasks.value[tasks.value.length - 1]
   const task =
     type === 'restoreschema'
-      ? newRestoreTask(tasks.value, connections.sorted)
+      ? newRestoreTask(tasks.value, connections.sorted, (c) =>
+          settings.needsTypedConfirm(c.environment)
+        )
       : newTask(type, last?.connectionId ?? '', '')
   tasks.value = [...tasks.value, task]
 }
@@ -316,7 +335,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
             />
             <p class="task-card__hint">
               La base de datos de destino se borra y se crea de nuevo con el contenido de la copia.
-              Desde una tarea no se puede restaurar en conexiones de producción.
+              {{ blockedHint }}
             </p>
           </template>
           <div v-else class="job-tasks__sql">

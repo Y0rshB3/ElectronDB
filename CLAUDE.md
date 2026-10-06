@@ -32,5 +32,5 @@ Private desktop MySQL client (macOS first, also Windows/Linux) compatible with N
 
 - Tests live next to code as `*.test.ts`; node-side tests must not import `electron`.
 - Never log query data, passwords or backup contents. Secrets go through `CredentialStore` only.
-- Any operation that writes to a connection with `environment === 'production'` must require explicit confirmation: the UI dialog (`useConfirm().confirmDestructive`) and then `confirmProduction: true` in the IPC call (`WriteOptions`). Main enforces it in `src/main/ipc/productionGuard.ts`.
+- Any operation that writes to a connection whose environment requires typed confirmation (`requiresTypedConfirm` in `src/shared/typedConfirm.ts`: always `production`, plus the environments listed in `AppSettings.typedConfirmEnvironments`) must require explicit confirmation: the UI dialog (`useConfirm().confirmDestructive`) and then `confirmProduction: true` in the IPC call (`WriteOptions`). Main enforces it in `src/main/ipc/productionGuard.ts`.
 - Errors thrown from IPC handlers surface to the user as their `message`: write actionable messages.

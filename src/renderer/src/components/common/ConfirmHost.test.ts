@@ -29,14 +29,15 @@ describe('ConfirmHost production confirmation', () => {
     setActivePinia(createPinia())
     installBridge({
       'connections:list': [
-        makeConnection({ id: 'prod', name: 'Ventas PROD', environment: 'production' })
+        makeConnection({ id: 'prod', name: 'Ventas PROD', environment: 'production' }),
+        makeConnection({ id: 'stg', name: 'Ventas PRE', environment: 'staging' })
       ],
       'settings:get': {
         navicatRootPath: '',
         backupsRootDir: '',
         defaultRowLimit: 1000,
         theme: 'dark',
-        confirmProductionWrites: true
+        typedConfirmEnvironments: ['production']
       }
     })
     await useConnectionsStore().load()
@@ -70,6 +71,49 @@ describe('ConfirmHost production confirmation', () => {
     expect(ok().disabled).toBe(false)
     ok().click()
     await expect(answer).resolves.toBe(true)
+    wrapper.unmount()
+  })
+
+  it('a staging connection listed in Ajustes asks for its name with a banner naming the environment', async () => {
+    useSettingsStore().settings.typedConfirmEnvironments = ['production', 'staging']
+    const wrapper = mount(ConfirmHost, {
+      global: { plugins: [createTestVuetify()] },
+      attachTo: document.body
+    })
+    const answer = useConfirm().confirmDestructive({
+      connectionId: 'stg',
+      title: 'Truncar tabla',
+      message: 'Se borrarán todas las filas.'
+    })
+    await flush()
+    await flush()
+    expect(q('[data-test="confirm-production"]')!.textContent).toContain(
+      'Entorno STAGING · requiere escribir el nombre'
+    )
+    expect(q('[data-test="confirm-message"]')!.textContent).toContain(
+      'La conexión «Ventas PRE» (entorno Staging) requiere confirmación: escribe su nombre'
+    )
+    expect(q('[data-test="confirm-ok"]')!.textContent).toContain('Ejecutar en «Ventas PRE»')
+    await typeInto('Ventas PRE')
+    q<HTMLButtonElement>('[data-test="confirm-ok"]')!.click()
+    await expect(answer).resolves.toBe(true)
+    wrapper.unmount()
+  })
+
+  it('a staging connection that is not listed never asks for the name', async () => {
+    const wrapper = mount(ConfirmHost, {
+      global: { plugins: [createTestVuetify()] },
+      attachTo: document.body
+    })
+    const answer = useConfirm().confirmDestructive({
+      connectionId: 'stg',
+      title: 'Crear tabla',
+      message: 'Se creará la tabla.',
+      alwaysAsk: false
+    })
+    await flush()
+    await expect(answer).resolves.toBe(true)
+    expect(useUiStore().confirm.open).toBe(false)
     wrapper.unmount()
   })
 

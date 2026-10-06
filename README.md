@@ -46,8 +46,8 @@ La interfaz está en español. El código y los comentarios están en inglés.
   la lista de copias de seguridad con un paquete entero (también los lotes de Navicat).
 - **Importación desde Navicat**: conexiones, colores, trabajos por lotes y copias existentes. Es de solo
   lectura: no modifica nada de Navicat.
-- **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide confirmación
-  explícita.
+- **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide escribir su
+  nombre. En **Ajustes › Seguridad** puedes extenderlo a Staging, Local u Otro.
 - **Confirmación antes de borrar en cualquier conexión**: DROP, TRUNCATE, DELETE y eliminar filas, tablas,
   vistas, rutinas, eventos o bases de datos piden confirmación también en Local o Staging
   ([Producción y confirmaciones](#producción-y-confirmaciones)).
@@ -277,8 +277,24 @@ no existen en otro equipo.
 
 En una conexión con entorno **Producción**, restaurar, borrar, crear bases de datos, editar filas o ejecutar
 sentencias que escriben exige escribir el nombre de la conexión para confirmar. El proceso principal también lo
-comprueba y rechaza la operación si la interfaz no envió la confirmación. Puedes desactivarlo en **Otros →
-Ajustes… → Seguridad**, pero no se recomienda.
+comprueba y rechaza la operación si la interfaz no envió la confirmación. Desde la versión 0.1.5 **no se puede
+desactivar** para Producción (si tenías apagado el antiguo interruptor, vuelve a pedirlo).
+
+En **Otros → Ajustes… → Seguridad → «Pedir confirmación escribiendo el nombre antes de escribir en:»** eliges
+qué otros entornos se comportan igual: **Staging**, **Local** u **Otro** (Producción aparece marcada y bloqueada).
+Para una conexión de un entorno marcado:
+
+- cualquier escritura pide escribir su nombre, con el mismo diálogo que Producción («La conexión «Pre» (entorno
+  Staging) requiere confirmación: escribe su nombre»), y el proceso principal la rechaza sin esa confirmación;
+- se muestra solo ese diálogo, nunca también el de borrado;
+- los **pasos de restauración de una tarea** no pueden usarla como destino (al ejecutarla, programada o con
+  launchd nadie escribe el nombre); usa **Restaurar todo** desde el historial, que pide confirmación;
+- en el árbol de conexiones y en el selector de la consulta lleva un **candado** junto al entorno. La línea roja y
+  la etiqueta roja siguen siendo solo de Producción.
+
+Las tareas con pasos de SQL sobre esas conexiones piden escribir el nombre al ejecutarlas a mano y al
+programarlas (como Producción). Una tarea ya programada antes de marcar su entorno sigue ejecutándose; guárdala
+de nuevo para revisarla.
 
 En **cualquier otra conexión** (Local, Staging, Otro), con **Ajustes → Seguridad → Confirmar antes de borrar o
 eliminar en cualquier conexión** activado (lo está por defecto, también en perfiles anteriores), ElectronDB pide
@@ -295,9 +311,10 @@ una confirmación sencilla, sin escribir el nombre, antes de:
   campos, índices o claves, y eliminar un usuario.
 
 El diálogo muestra la conexión con su entorno, lo que se va a borrar, y deja el foco en **Cancelar** (Intro no
-borra nada). En una conexión de Producción se muestra solo la confirmación de producción, nunca las dos. Es una
-ayuda de la interfaz: el proceso principal no la exige (la de producción sí). Si la desactivas, todo vuelve a
-funcionar como antes: las conexiones que no son de producción solo preguntan donde ya preguntaban.
+borra nada). En una conexión de Producción (o de un entorno marcado en Seguridad) se muestra solo la
+confirmación con el nombre, nunca las dos. Es una ayuda de la interfaz: el proceso principal no la exige (la del
+nombre sí). Si la desactivas, todo vuelve a funcionar como antes: las conexiones que no piden el nombre solo
+preguntan donde ya preguntaban.
 
 ### Atajos de teclado
 
@@ -806,12 +823,14 @@ ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 
 `npm run screenshots` siembra un perfil de prueba y el MySQL desechable (tablas `shot_*` en `navidog_test`),
 compila y abre la app en una ventana de 1600×1000 que recorre las pantallas principales. Guarda `01-home.png` …
-`19c-settings-security.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
+`19f-tree-typed-lock.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
 («Restaurar todo en Local» y «Restaurar paquete en Local») usan también el MySQL 5.7 desechable como staging
 (`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (ventanas de actualización)
 responden con una versión ficticia de `tests/fixtures/updates/latest-release.json` en vez de consultar GitHub, y
 `18f-whats-new` simula una actualización de 0.1.2 a 0.1.4. Los pasos `19*` muestran las confirmaciones de borrado
-en Local (se cancelan: no se borra nada) y la sección Seguridad de Ajustes. Nunca usa tu perfil real y se niega a
+en Local (se cancelan: no se borra nada) y la sección Seguridad de Ajustes; `19d`-`19f`, con Staging marcado en
+Seguridad solo en memoria (no se guarda), los entornos que piden escribir el nombre, esa confirmación sobre
+«Staging Demo» (se cancela) y el candado del árbol. Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
 
@@ -891,5 +910,7 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
   hosts o usuarios reales. Los fixtures de `tests/` deben ser anónimos o sintéticos.
 - El registro no guarda datos de consultas, contraseñas ni contenido de copias. De los errores de MySQL solo
   guarda el canal y el código.
-- Las conexiones de Producción exigen confirmación para cualquier escritura, tanto en la interfaz como en el
-  proceso principal. La confirmación de borrado en las demás conexiones es solo de la interfaz.
+- Las conexiones de Producción (y las de los entornos marcados en **Ajustes › Seguridad**) exigen escribir su
+  nombre para cualquier escritura, tanto en la interfaz como en el proceso principal; Producción no se puede
+  quitar de la lista, ni editando `settings.json`. La confirmación de borrado en las demás conexiones es solo de
+  la interfaz.

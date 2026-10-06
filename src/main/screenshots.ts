@@ -860,6 +860,46 @@ const STEPS: Step[] = [
     cleanup: `S.ui.settingsDialog = false`
   },
   {
+    // Ajustes › Seguridad with Producción (locked) + Staging checked. In-memory only: nothing saved.
+    name: '19d-settings-typed-envs',
+    script: `
+      S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production', 'staging'] }
+      S.ui.openSettingsDialog()
+      const el = await H.waitFor('[data-test="settings-typed-envs"]', 5000)
+      el.scrollIntoView({ block: 'center' })
+      await H.settle(S, 600)
+      const prod = document.querySelector('[data-test="settings-typed-env-production"]')
+      prod.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))
+      await H.sleep(900)`,
+    cleanup: `
+      S.ui.settingsDialog = false
+      S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production'] }`
+  },
+  {
+    // Typed confirmation on a Staging connection listed in Seguridad (cancelled: nothing is dropped).
+    name: '19e-staging-typed-confirm',
+    script: `
+      S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production', 'staging'] }
+      const c = S.connections.items.find((x) => x.id === 'shot-staging')
+      if (!c) throw new Error('seeded staging connection not found')
+      void S.objectActions.dropObject({ id: 'shot-drop-stg', kind: 'object', label: 'shot_customers',
+        connectionId: c.id, schema: '${SCHEMA}', group: 'tables', name: 'shot_customers', parentId: null })
+      await H.waitFor('.v-dialog [data-test="confirm-typed"]', 5000)
+      await H.sleep(700)`,
+    cleanup: `
+      S.ui.answer(false)
+      S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production'] }`
+  },
+  {
+    // Lock next to the environment of connections that need the typed name (Staging listed).
+    name: '19f-tree-typed-lock',
+    script: `
+      S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production', 'staging'] }
+      await H.waitFor('[data-test="env-lock"]', 5000)
+      await H.settle(S, 600)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, typedConfirmEnvironments: ['production'] }`
+  },
+  {
     // Not packaged here, so main reports the source mode; the packaged view uses the same answer.
     name: '18b-update-dialog-packaged',
     script: `

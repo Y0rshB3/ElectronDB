@@ -21,7 +21,13 @@ export interface ConfirmRequest {
   color?: string
   /** When set, the user must type this text to enable the confirm button. */
   requireTyped?: string
+  /**
+   * Typed-name confirmation of a guarded connection (production or an
+   * environment chosen in Ajustes › Seguridad): red, persistent, with a banner.
+   */
   production?: boolean
+  /** Environment named in that banner (defaults to production). */
+  typedEnvironment?: Environment
   /** Information only: a single acknowledge button, no "Cancelar". */
   notice?: boolean
   /** Destructive operation: red confirm button and "Cancelar" focused by default. */

@@ -230,11 +230,15 @@ export interface QueryStatementResult {
 
 /**
  * Trailing options of the IPC channels that write to a connection. Main
- * rejects writes to a connection whose environment is 'production' (while
- * AppSettings.confirmProductionWrites is on) unless the UI sets
- * confirmProduction after the user confirmed.
+ * rejects writes to a connection that needs the typed-name confirmation
+ * (environment 'production', always, plus AppSettings.typedConfirmEnvironments)
+ * unless the UI sets confirmProduction after the user typed the name.
  */
 export interface WriteOptions {
+  /**
+   * The user typed the connection name. Historical name: it now covers every
+   * environment in AppSettings.typedConfirmEnvironments, not only production.
+   */
   confirmProduction?: boolean
 }
 
@@ -451,7 +455,7 @@ export interface RestoreOptions {
   replaceSchema?: boolean
   /** With replaceSchema: back up the current database first (default true). */
   safetyBackup?: boolean
-  /** Required when the target connection is flagged production. */
+  /** Required when the target connection needs the typed confirmation (see WriteOptions). */
   confirmProduction?: boolean
 }
 
@@ -712,7 +716,13 @@ export interface AppSettings {
   backupsRootDir: string
   defaultRowLimit: number
   theme: 'dark' | 'light'
-  confirmProductionWrites: boolean
+  /**
+   * Environments whose connections need the typed-name confirmation before
+   * any write (and `confirmProduction: true` on the IPC call). Always contains
+   * 'production' (it cannot be removed); defaults to ['production']. Replaces
+   * the old boolean `confirmProductionWrites`, which is no longer honoured.
+   */
+  typedConfirmEnvironments: Environment[]
   /**
    * Ask before DROP / TRUNCATE / DELETE (and deleting rows or objects) on any
    * connection, not only production. Renderer-only convenience: main does not

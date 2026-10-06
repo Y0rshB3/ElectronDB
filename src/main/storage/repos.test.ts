@@ -115,7 +115,9 @@ describe('repos', () => {
     )
     const old = new SettingsRepo(dir, '/home/test')
     expect(old.get().confirmDestructiveEverywhere).toBe(true)
-    expect(old.get().confirmProductionWrites).toBe(false)
+    // production can no longer be turned off: the old false maps to ['production']
+    expect(old.get().typedConfirmEnvironments).toEqual(['production'])
+    expect('confirmProductionWrites' in old.get()).toBe(false)
     expect(old.get().defaultRowLimit).toBe(50)
     // an invalid value is not taken as "off"
     writeFileSync(
@@ -126,6 +128,62 @@ describe('repos', () => {
     // an explicit false sticks across restarts
     new SettingsRepo(dir, '/home/test').update({ confirmDestructiveEverywhere: false })
     expect(new SettingsRepo(dir, '/home/test').get().confirmDestructiveEverywhere).toBe(false)
+  })
+
+  describe('typed-name confirmation environments', () => {
+    const write = (value: object) =>
+      writeFileSync(join(dir, 'settings.json'), JSON.stringify(value))
+    const read = () => new SettingsRepo(dir, '/home/test').get().typedConfirmEnvironments
+    const stored = () => JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))
+
+    it('defaults to production only (new profile and DEFAULT_SETTINGS)', () => {
+      expect(DEFAULT_SETTINGS('/data', '/home/test', 'linux').typedConfirmEnvironments).toEqual([
+        'production'
+      ])
+      expect(
+        new SettingsRepo(join(dir, 'fresh'), '/home/test').get().typedConfirmEnvironments
+      ).toEqual(['production'])
+    })
+
+    it('migrates the old boolean: true, false and missing all give production', () => {
+      write({ confirmProductionWrites: true })
+      expect(read()).toEqual(['production'])
+      write({ confirmProductionWrites: false })
+      expect(read()).toEqual(['production'])
+      write({ theme: 'light' })
+      expect(read()).toEqual(['production'])
+    })
+
+    it('keeps a new list, adds production back and drops unknown values', () => {
+      write({ typedConfirmEnvironments: ['staging', 'production'] })
+      expect(read()).toEqual(['production', 'staging'])
+      // hand-edited file without production
+      write({ typedConfirmEnvironments: ['other', 'local', 'local', 'bogus', 3] })
+      expect(read()).toEqual(['production', 'local', 'other'])
+      write({ typedConfirmEnvironments: 'staging' })
+      expect(read()).toEqual(['production'])
+      // the new key wins over the old one
+      write({ confirmProductionWrites: false, typedConfirmEnvironments: ['production', 'staging'] })
+      expect(read()).toEqual(['production', 'staging'])
+    })
+
+    it('settings:update stores the normalised list, never without production, and drops the old key', () => {
+      write({ confirmProductionWrites: false })
+      const repo = new SettingsRepo(dir, '/home/test')
+      expect(
+        repo.update({ typedConfirmEnvironments: ['staging'] as never }).typedConfirmEnvironments
+      ).toEqual(['production', 'staging'])
+      expect(stored().typedConfirmEnvironments).toEqual(['production', 'staging'])
+      expect('confirmProductionWrites' in stored()).toBe(false)
+      expect(repo.update({ typedConfirmEnvironments: [] }).typedConfirmEnvironments).toEqual([
+        'production'
+      ])
+      // an old renderer sending the boolean cannot turn production off either
+      repo.update({ confirmProductionWrites: false } as never)
+      expect(stored().typedConfirmEnvironments).toEqual(['production'])
+      expect('confirmProductionWrites' in stored()).toBe(false)
+      expect(read()).toEqual(['production'])
+    })
   })
 
   it('defaults the Navicat folder to the macOS path only on macOS', () => {

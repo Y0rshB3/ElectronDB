@@ -64,4 +64,15 @@ describe('restore steps in the job form', () => {
     }
     expect(validateDraft(self, lookup).join('\n')).toMatch(/sobre sí misma/)
   })
+
+  it('refuses a target in an environment listed in Ajustes › Seguridad and skips it as default', () => {
+    const tasks = stagingToLocal()
+    const draft = { ...emptyDraft(), name: 'X', tasks }
+    expect(validateDraft(draft, lookup, ['production'])).toEqual([])
+    expect(validateDraft(draft, lookup, ['production', 'local']).join('\n')).toMatch(
+      /«Local», una conexión de entorno Local/
+    )
+    const blocked = (c: ConnectionConfig) => c.environment === 'local'
+    expect(newRestoreTask([tasks[0]], conns, blocked).connectionId).toBe('')
+  })
 })

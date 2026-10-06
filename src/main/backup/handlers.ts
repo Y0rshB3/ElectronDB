@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import type { IpcArgs, IpcResult } from '@shared/ipc'
 import type { ConnectionConfig, ProgressEvent, RestoreOptions, RestoreResult } from '@shared/types'
 import type { AppContext } from '../context'
+import { assertProductionWriteConfirmed } from '../ipc/productionGuard'
 import type { BackupService, ProgressReporter } from './index'
 import { readBackupMeta } from './index'
 import { getIndexCache } from './indexCache'
@@ -228,10 +229,20 @@ export function createBackupHandlers(
         // flag them on the final event so progress-only listeners can tell it did not succeed.
         (r) =>
           r.errors.length > 0 ? r.errors.map((e) => `${e.object}: ${e.message}`).join('\n') : null,
-        (service, progress, signal) =>
-          options?.replaceSchema
+        (service, progress, signal) => {
+          // Production (always) and the environments of Ajustes › Seguridad need the typed
+          // name; restore.ts / replace.ts check production again as a last line of defence.
+          if (options?.connectionId)
+            assertProductionWriteConfirmed(
+              ctx,
+              options.connectionId,
+              options,
+              'Restaurar un backup'
+            )
+          return options?.replaceSchema
             ? replaceRestore(service, options, progress, signal)
             : service.restore(options, progress, signal)
+        }
       ),
     delete: (path) => deleteBackupFile(ctx.connections.list(), ctx.userDataPath, path),
     cancel: async (operationId) => {

@@ -1,4 +1,5 @@
-import type { ConnectionConfig, JobTask } from './types'
+import { environmentName, requiresTypedConfirm } from './typedConfirm'
+import type { ConnectionConfig, Environment, JobTask } from './types'
 
 /**
  * Rules of the 'restoreschema' job step, shared by main (jobs:save and the
@@ -36,6 +37,26 @@ export function restoreProductionRefusal(stepName: string, connectionName: strin
   )
 }
 
+/**
+ * Refusal of a restore step whose target needs the typed confirmation: the
+ * production text for production, and one naming the environment otherwise.
+ */
+export function restoreTypedRefusal(
+  stepName: string,
+  connectionName: string,
+  environment: Environment
+): string {
+  if (environment === 'production') return restoreProductionRefusal(stepName, connectionName)
+  const env = environmentName(environment)
+  return (
+    `El paso «${stepName}» restaura sobre «${connectionName}», una conexión de entorno ${env} ` +
+    'que pide escribir su nombre antes de cualquier escritura (Ajustes › Seguridad). Los pasos de ' +
+    'restauración de una tarea se ejecutan sin nadie que escriba ese nombre (al ejecutarla, ' +
+    `programada o con launchd), así que no pueden escribir en ella. Quita ${env} de la lista en ` +
+    'Ajustes › Seguridad o usa «Restaurar todo» desde el historial de ejecuciones, que pide confirmación.'
+  )
+}
+
 export interface RestoreSourceRef {
   connectionId: string | null
   schema: string
@@ -63,8 +84,13 @@ export function restoreTargetSchema(task: JobTask, tasks: JobTask[]): string {
 }
 
 export interface RestoreCheckOptions {
-  /** «Restaurar todo» after a typed confirmation: production targets and `file` sources are fine. */
+  /** «Restaurar todo» after a typed confirmation: guarded targets and `file` sources are fine. */
   rollback?: boolean
+  /**
+   * AppSettings.typedConfirmEnvironments: restore steps never target these
+   * (nobody types the name in a job run). Production is always refused.
+   */
+  typedEnvironments?: readonly Environment[]
 }
 
 /**
@@ -103,8 +129,12 @@ export function restoreTaskProblem(
   }
   if (!task.connectionId) return `El ${label} necesita una conexión de destino.`
   const target = lookup(task.connectionId)
-  if (target?.environment === 'production' && !options.rollback)
-    return restoreProductionRefusal(task.referenceName || label, target.name)
+  if (
+    target &&
+    requiresTypedConfirm(target.environment, options.typedEnvironments) &&
+    !options.rollback
+  )
+    return restoreTypedRefusal(task.referenceName || label, target.name, target.environment)
   const targetSchema = restoreTargetSchema(task, tasks)
   if (!targetSchema) return `El ${label} necesita la base de datos de destino.`
   if (isSystemSchema(targetSchema))

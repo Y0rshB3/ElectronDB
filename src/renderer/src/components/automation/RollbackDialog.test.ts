@@ -3,6 +3,7 @@ import type { Mock } from 'vitest'
 import type { JobRun, RollbackPlan } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useJobsStore } from '@renderer/stores/jobs'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import {
   calls,
@@ -227,6 +228,45 @@ describe('RollbackDialog', () => {
       { runId: 'run-1', targetConnectionId: 'prod', taskIds: ['b1', 'b2'], safetyBackup: true },
       { confirmProduction: true }
     ])
+  })
+
+  it('a staging target listed in Ajustes requires typing its name (one dialog) and sends confirmProduction', async () => {
+    const w = await mountDialog()
+    useSettingsStore().settings.typedConfirmEnvironments = ['production', 'staging']
+    const ui = useUiStore()
+    w.findComponent({ name: 'VSelect' }).vm.$emit('update:modelValue', 'staging')
+    await settle()
+    const warning = w.get('[data-test="rollback-production-warning"]')
+    expect(warning.text()).toContain(
+      '«Staging» es una conexión de entorno Staging que requiere confirmación'
+    )
+    await w.get('[data-test="rollback-submit"]').trigger('click')
+    await settle()
+    expect(ui.confirm).toMatchObject({
+      open: true,
+      production: true,
+      typedEnvironment: 'staging',
+      requireTyped: 'Staging'
+    })
+    ui.answer(true)
+    await settle()
+    expect(ui.confirm.open).toBe(false)
+    expect(calls(invoke, 'jobs:rollback')[0][1]).toEqual({ confirmProduction: true })
+  })
+
+  it('a staging target that is not listed asks a plain confirmation and sends no flag', async () => {
+    const w = await mountDialog()
+    const ui = useUiStore()
+    w.findComponent({ name: 'VSelect' }).vm.$emit('update:modelValue', 'staging')
+    await settle()
+    expect(w.find('[data-test="rollback-production-warning"]').exists()).toBe(false)
+    await w.get('[data-test="rollback-submit"]').trigger('click')
+    await settle()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.requireTyped).toBeFalsy()
+    ui.answer(true)
+    await settle()
+    expect(calls(invoke, 'jobs:rollback')[0][1]).toBeUndefined()
   })
 
   it('shows objects and rows of each copy, and leaves structure-only copies unchecked with a warning', async () => {

@@ -5,6 +5,7 @@ import { api } from '@renderer/api'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useJobsStore } from '@renderer/stores/jobs'
 import { formatBytes, formatDate } from '@renderer/utils/format'
 import DialogHeader from '@renderer/components/dialogs/DialogHeader.vue'
@@ -32,6 +33,7 @@ const open = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ started: [run: JobRun] }>()
 
 const connections = useConnectionsStore()
+const settings = useSettingsStore()
 const jobs = useJobsStore()
 const notify = useNotify()
 const { confirmDestructive } = useConfirm()
@@ -51,7 +53,13 @@ const effective = computed<RollbackDialogSource | null>(
 )
 const isFiles = computed(() => effective.value?.kind === 'files')
 const target = computed(() => (targetId.value ? connections.get(targetId.value) : undefined))
-const isProduction = computed(() => target.value?.environment === 'production')
+/** Production, and the environments chosen in Ajustes › Seguridad, need the typed name. */
+const needsTyped = computed(() => settings.needsTypedConfirm(target.value?.environment))
+const typedWarning = computed(() =>
+  target.value?.environment === 'production'
+    ? `«${target.value.name}» es una conexión de PRODUCCIÓN. Para continuar tendrás que escribir su nombre.`
+    : `«${target.value?.name}» es una conexión de entorno ${target.value ? environmentLabel(target.value.environment) : ''} que requiere confirmación (Ajustes › Seguridad). Para continuar tendrás que escribir su nombre.`
+)
 const connectionItems = computed(() =>
   connections.sorted.map((c) => ({
     title: c.name,
@@ -223,7 +231,7 @@ async function start(): Promise<void> {
             targetConnectionId: target.value.id,
             safetyBackup: safetyBackup.value
           },
-      isProduction.value ? { confirmProduction: true } : undefined
+      needsTyped.value ? { confirmProduction: true } : undefined
     )
     notify.info(`Restaurando ${chosen.value.length} base(s) de datos en «${target.value.name}»…`)
     open.value = false
@@ -241,13 +249,13 @@ async function start(): Promise<void> {
     <v-card
       data-test="rollback-dialog"
       class="rollback-dialog"
-      :class="{ 'nd-danger-card': isProduction }"
+      :class="{ 'nd-danger-card': needsTyped }"
     >
       <DialogHeader
         icon="mdi-backup-restore"
         :title="`${isFiles ? 'Restaurar paquete' : 'Restaurar todo'} en ${target?.name ?? 'Local'}`"
         :subtitle="subtitle"
-        :danger="isProduction"
+        :danger="needsTyped"
       >
         <span v-if="target" class="nd-pill" :class="environmentPillClass(target.environment)">{{
           environmentLabel(target.environment)
@@ -394,14 +402,13 @@ async function start(): Promise<void> {
           Sin copia previa, los datos actuales de {{ replacedCount }} base(s) de datos se perderán.
         </v-alert>
         <v-alert
-          v-if="isProduction"
+          v-if="needsTyped"
           type="error"
           icon="mdi-shield-alert-outline"
           class="mt-3"
           data-test="rollback-production-warning"
         >
-          «{{ target?.name }}» es una conexión de PRODUCCIÓN. Para continuar tendrás que escribir su
-          nombre.
+          {{ typedWarning }}
         </v-alert>
         <v-alert
           v-if="error"
@@ -419,9 +426,9 @@ async function start(): Promise<void> {
           >Cancelar</v-btn
         >
         <v-btn
-          :color="isProduction ? 'error' : 'primary'"
+          :color="needsTyped ? 'error' : 'primary'"
           variant="flat"
-          :prepend-icon="isProduction ? 'mdi-shield-alert-outline' : 'mdi-backup-restore'"
+          :prepend-icon="needsTyped ? 'mdi-shield-alert-outline' : 'mdi-backup-restore'"
           :disabled="!canStart"
           :loading="starting"
           data-test="rollback-submit"

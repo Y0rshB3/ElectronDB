@@ -8,6 +8,7 @@ import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useBackupsStore } from '@renderer/stores/backups'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
 import { formatBytes, formatDate, formatDuration, formatNumber } from '@renderer/utils/format'
@@ -23,6 +24,7 @@ import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 
 const ui = useUiStore()
 const connections = useConnectionsStore()
+const settings = useSettingsStore()
 const backups = useBackupsStore()
 const tree = useTreeStore()
 const notify = useNotify()
@@ -75,9 +77,15 @@ const connectionItems = computed(() =>
 const target = computed(() =>
   targetConnectionId.value ? connections.get(targetConnectionId.value) : undefined
 )
-const isProduction = computed(() => target.value?.environment === 'production')
+/** Production, and the environments chosen in Ajustes › Seguridad, need the typed name. */
+const needsTyped = computed(() => settings.needsTypedConfirm(target.value?.environment))
+const typedTitle = computed(() =>
+  target.value?.environment === 'production'
+    ? 'Destino de PRODUCCIÓN'
+    : `Destino de entorno ${target.value ? environmentLabel(target.value.environment).toUpperCase() : ''} · requiere confirmación`
+)
 const productionConfirmed = computed(
-  () => !isProduction.value || typedName.value.trim() === target.value?.name
+  () => !needsTyped.value || typedName.value.trim() === target.value?.name
 )
 const objectItems = computed(() =>
   (meta.value?.objects ?? []).map((o) => ({ title: o.name, value: o.name, subtitle: o.type }))
@@ -153,8 +161,8 @@ function onTargetChange(id: string | null): void {
 
 async function restore(): Promise<void> {
   if (!canRestore.value || !backup.value || !target.value) return
-  // Production already asked for the typed name inline; anything else confirms the DROP here.
-  if (replaceMode.value && !isProduction.value) {
+  // Guarded targets already asked for the typed name inline; anything else confirms the DROP here.
+  if (replaceMode.value && !needsTyped.value) {
     const ok = await ask({
       title: `Reemplazar «${targetSchema.value.trim()}»`,
       message: `«${targetSchema.value.trim()}» se borrará en «${target.value.name}» y se creará de nuevo con todo lo que contiene ${backup.value.fileName}. Lo que no esté en la copia desaparece.${safetyBackup.value ? '\n\nAntes se guarda una copia previa (etiqueta «previo-rollback»).' : '\n\nSIN copia previa: los datos actuales se perderán.'}`,
@@ -182,7 +190,7 @@ async function restore(): Promise<void> {
       objects: !replaceMode.value && objects.value.length ? [...objects.value] : undefined,
       continueOnError: continueOnError.value,
       ...(replaceMode.value ? { replaceSchema: true, safetyBackup: safetyBackup.value } : {}),
-      ...(isProduction.value ? { confirmProduction: true } : {})
+      ...(needsTyped.value ? { confirmProduction: true } : {})
     })
     const errors = result.value.errors.length
     if (errors) notify.warning(`Restauración terminada con ${errors} error(es)`)
@@ -221,13 +229,13 @@ async function cancel(): Promise<void> {
     <v-card
       data-test="restore-dialog"
       class="restore-dialog"
-      :class="{ 'nd-danger-card': isProduction && !result }"
+      :class="{ 'nd-danger-card': needsTyped && !result }"
     >
       <DialogHeader
         icon="mdi-backup-restore"
         title="Restaurar copia de seguridad"
         :subtitle="target ? `Destino: ${target.name}` : undefined"
-        :danger="isProduction"
+        :danger="needsTyped"
       >
         <span v-if="target" class="nd-pill" :class="environmentPillClass(target.environment)">{{
           environmentLabel(target.environment)
@@ -426,13 +434,13 @@ async function cancel(): Promise<void> {
           </v-alert>
 
           <v-alert
-            v-if="isProduction"
+            v-if="needsTyped"
             type="error"
             icon="mdi-shield-alert-outline"
             class="restore-dialog__danger mt-3"
             data-test="restore-production-warning"
           >
-            <div class="restore-dialog__danger-title">Destino de PRODUCCIÓN</div>
+            <div class="restore-dialog__danger-title">{{ typedTitle }}</div>
             <div class="text-body-2">
               Vas a sobrescribir objetos en «{{ target?.name }}». Esta acción no se puede deshacer.
               Escribe el nombre de la conexión para habilitar «Restaurar».
@@ -522,9 +530,9 @@ async function cancel(): Promise<void> {
         }}</v-btn>
         <v-btn
           v-if="!result"
-          :color="isProduction ? 'error' : 'primary'"
+          :color="needsTyped ? 'error' : 'primary'"
           variant="flat"
-          :prepend-icon="isProduction ? 'mdi-shield-alert-outline' : 'mdi-backup-restore'"
+          :prepend-icon="needsTyped ? 'mdi-shield-alert-outline' : 'mdi-backup-restore'"
           :disabled="!canRestore"
           :loading="running"
           data-test="restore-submit"

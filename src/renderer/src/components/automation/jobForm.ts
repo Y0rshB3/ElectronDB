@@ -1,5 +1,12 @@
 import { restoreSourceOf, restoreTaskProblem } from '@shared/restoreTask'
-import type { ConnectionConfig, Job, JobInput, JobTask, JobTaskType } from '@shared/types'
+import type {
+  ConnectionConfig,
+  Environment,
+  Job,
+  JobInput,
+  JobTask,
+  JobTaskType
+} from '@shared/types'
 import {
   cronFromForm,
   defaultScheduleForm,
@@ -51,7 +58,12 @@ export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobT
  * New restore step placed after `tasks`: restores the last backup step that no
  * restore uses yet, into the first local connection (never a production one).
  */
-export function newRestoreTask(tasks: JobTask[], connections: ConnectionConfig[]): JobTask {
+export function newRestoreTask(
+  tasks: JobTask[],
+  connections: ConnectionConfig[],
+  /** Targets a restore step may not use (connections that need the typed name). */
+  blocked: (connection: ConnectionConfig) => boolean = () => false
+): JobTask {
   const used = new Set(
     tasks.flatMap((t) =>
       t.type === 'restoreschema' && t.restoreSource?.kind === 'task' ? [t.restoreSource.taskId] : []
@@ -59,7 +71,7 @@ export function newRestoreTask(tasks: JobTask[], connections: ConnectionConfig[]
   )
   const backups = tasks.filter((t) => t.type === 'backupschema')
   const source = [...backups].reverse().find((t) => !used.has(t.id)) ?? backups[backups.length - 1]
-  const local = connections.find((c) => c.environment === 'local')
+  const local = connections.find((c) => c.environment === 'local' && !blocked(c))
   const task = newTask('restoreschema', local?.id ?? '', '')
   task.restoreSource = { kind: 'task', taskId: source?.id ?? '' }
   return task
@@ -100,7 +112,8 @@ export function draftFromJob(job: Job): JobDraft {
 /** Client-side checks; the main process validates again and its messages are shown too. */
 export function validateDraft(
   draft: JobDraft,
-  lookup: (id: string) => ConnectionConfig | null | undefined = () => null
+  lookup: (id: string) => ConnectionConfig | null | undefined = () => null,
+  typedEnvironments: readonly Environment[] = []
 ): string[] {
   const errors: string[] = []
   if (!draft.name.trim()) errors.push('El nombre de la tarea es obligatorio.')
@@ -115,12 +128,15 @@ export function validateDraft(
     if (task.type === 'runquery' && !task.sql?.trim())
       errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
     if (task.type === 'restoreschema' && task.connectionId) {
-      // Same rules as main (production targets and self-restores are refused).
+      // Same rules as main (production targets, targets in the typed-confirmation environments
+      // and self-restores are refused).
       const named = {
         ...task,
         referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
       }
-      const problem = restoreTaskProblem(named, draft.tasks, lookup, `paso ${n}`)
+      const problem = restoreTaskProblem(named, draft.tasks, lookup, `paso ${n}`, {
+        typedEnvironments
+      })
       if (problem) errors.push(problem)
     }
   })

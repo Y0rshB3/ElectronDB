@@ -18,6 +18,16 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.5',
+    date: '2026-10-06',
+    highlights: [
+      'Elige en Ajustes › Seguridad qué entornos piden escribir el nombre antes de escribir (Producción por defecto)',
+      'Las conexiones que piden escribir el nombre muestran un candado junto a su entorno',
+      'Las tareas automáticas no restauran sobre los entornos que piden escribir el nombre'
+    ],
+    important: ['Producción ahora siempre pide escribir el nombre; ya no se puede desactivar.']
+  },
+  {
     version: '0.1.4',
     date: '2026-10-06',
     highlights: [

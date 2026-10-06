@@ -10,7 +10,8 @@ import type { AppContext } from '../context'
 import {
   assertJobRunAllowed,
   assertJobSaveAllowed,
-  assertProductionWriteConfirmed
+  assertProductionWriteConfirmed,
+  typedConfirmEnvironments
 } from './productionGuard'
 import { assertRestoreStepsAllowed, validateJobInput } from './jobValidation'
 import { handle } from './typed'
@@ -31,7 +32,7 @@ export function registerJobsHandlers(ctx: AppContext): void {
   handle('jobs:list', () => ctx.jobs.list())
   handle('jobs:get', (id) => ctx.jobs.get(id))
   handle('jobs:save', async (input, options) => {
-    validateJobInput(input, lookup)
+    validateJobInput(input, lookup, typedConfirmEnvironments(ctx))
     assertJobSaveAllowed(ctx, input, input.id ? ctx.jobs.get(input.id) : null, options)
     const job = ctx.jobs.save({ ...input, name: input.name.trim() })
     await automation.resync?.(job.id)
@@ -46,9 +47,10 @@ export function registerJobsHandlers(ctx: AppContext): void {
     const job = ctx.jobs.get(id)
     if (job) {
       assertJobRunAllowed(ctx, job, options)
-      // Restore steps stay refused on production even when the user runs the job by hand
-      // (the runner refuses them again for scheduled and launchd runs).
-      assertRestoreStepsAllowed(job, lookup)
+      // Restore steps stay refused on production (and on the environments that need the typed
+      // name) even when the user runs the job by hand; the runner refuses them again for
+      // scheduled and launchd runs.
+      assertRestoreStepsAllowed(job, lookup, typedConfirmEnvironments(ctx))
     }
     return automation.run(id, 'manual')
   })
@@ -70,7 +72,7 @@ export function registerJobsHandlers(ctx: AppContext): void {
     if (!request || typeof request !== 'object') throw new Error('Restauración no válida.')
     const target = ctx.connections.get(request.targetConnectionId)
     if (!target) throw new Error('Selecciona la conexión de destino.')
-    // Replacing databases is a write: production needs the typed confirmation.
+    // Replacing databases is a write: guarded connections need the typed confirmation.
     assertProductionWriteConfirmed(
       ctx,
       target.id,
@@ -98,7 +100,7 @@ export function registerJobsHandlers(ctx: AppContext): void {
       plan,
       request,
       target,
-      options?.confirmProduction === true || ctx.settings.get().confirmProductionWrites === false
+      options?.confirmProduction === true
     )
     return automation.runPrepared(prepared.job, 'manual', prepared.options)
   })

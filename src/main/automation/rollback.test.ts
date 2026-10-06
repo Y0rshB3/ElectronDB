@@ -11,6 +11,7 @@ import {
   type RollbackInspector
 } from './rollback'
 import { markInterrupted } from './recovery'
+import { SettingsRepo } from '../storage/repos'
 import { runJob, startJobWith, type RunnerDeps } from './runner'
 import {
   backupTask,
@@ -362,6 +363,55 @@ describe('rollback of a run («Restaurar todo en Local»)', () => {
     )
   })
 
+  it('a listed staging target needs the typed confirmation; an unlisted one does not', async () => {
+    const run = await stagingRun()
+    const plan = await buildRollbackPlan(t.ctx, run.id, stagingId, inspector)
+    const staging = t.ctx.connections.get(stagingId)!
+    const request = {
+      runId: run.id,
+      targetConnectionId: stagingId,
+      taskIds: ['b1'],
+      safetyBackup: true
+    }
+    expect(
+      prepareRollback(t.ctx, plan, request, staging, false).options.allowProductionRestore
+    ).toBe(false)
+    t.ctx.settings.update({ typedConfirmEnvironments: ['production', 'staging'] })
+    expect(() => prepareRollback(t.ctx, plan, request, staging, false)).toThrow(
+      /«Staging» es una conexión de entorno Staging: confirma el reemplazo escribiendo su nombre/
+    )
+    const confirmed = prepareRollback(t.ctx, plan, request, staging, true)
+    expect(confirmed.options.allowProductionRestore).toBe(true)
+    timeline.length = 0
+    // Without the runner flag the listed target is never touched either.
+    const final = await startJobWith(t.ctx, deps, confirmed.job, 'manual', {
+      ...confirmed.options,
+      allowProductionRestore: false
+    }).done
+    expect(final.status).toBe('failed')
+    expect(final.tasks[0].message).toMatch(/entorno Staging/)
+    expect(timeline).toEqual([])
+  })
+
+  it('production stays guarded when the settings file leaves it out', async () => {
+    const run = await stagingRun()
+    const plan = await buildRollbackPlan(t.ctx, run.id, prodId, inspector)
+    writeFileSync(
+      join(t.dir, 'settings.json'),
+      JSON.stringify({ typedConfirmEnvironments: ['staging'] })
+    )
+    const ctx = { ...t.ctx, settings: new SettingsRepo(t.dir, t.dir) }
+    const request = {
+      runId: run.id,
+      targetConnectionId: prodId,
+      taskIds: ['b1'],
+      safetyBackup: true
+    }
+    expect(() => prepareRollback(ctx, plan, request, ctx.connections.get(prodId)!, false)).toThrow(
+      /producción/
+    )
+  })
+
   it('a rollback to production without the confirmation flag never touches the server', async () => {
     const run = await stagingRun()
     const plan = await buildRollbackPlan(t.ctx, run.id, prodId, inspector)
@@ -462,6 +512,40 @@ describe('restore steps inside a job', () => {
     expect(run.tasks.map((x) => x.status)).toEqual(['success', 'failed'])
     expect(run.tasks[1].message).toMatch(/no pueden escribir en producción/)
     expect(timeline).toEqual(['create:auth'])
+  })
+
+  it('refuses a scheduled restore step into an environment listed in Ajustes › Seguridad, naming it', async () => {
+    const local = t.ctx.connections.save(connectionInput('Local'))
+    const staging = t.ctx.connections.save({
+      ...connectionInput('Pre'),
+      environment: 'staging'
+    })
+    const job = t.ctx.jobs.save(
+      jobInput('Local -> Pre', [
+        backupTask('b1', local.id, 'auth'),
+        {
+          id: 'r1',
+          type: 'restoreschema',
+          connectionId: staging.id,
+          schema: '',
+          referenceName: 'Restaurar auth',
+          restoreSource: { kind: 'task', taskId: 'b1' }
+        }
+      ])
+    )
+    // Not listed: the restore runs as before.
+    const ok = await runJob(t.ctx, deps, job.id, 'schedule')
+    expect(ok.status).toBe('success')
+    t.ctx.settings.update({ typedConfirmEnvironments: ['production', 'staging'] })
+    timeline.length = 0
+    for (const kind of ['schedule', 'cli', 'manual'] as const) {
+      const run = await runJob(t.ctx, deps, job.id, kind)
+      expect(run.tasks.map((x) => x.status)).toEqual(['success', 'failed'])
+      expect(run.tasks[1].message).toMatch(/«Pre», una conexión de entorno Staging/)
+      expect(run.tasks[1].message).not.toMatch(/producción/)
+    }
+    // Only the backups ran: nothing was dropped or restored on «Pre».
+    expect(timeline.every((x) => x === 'create:auth')).toBe(true)
   })
 
   it('«latest» restores the newest COMPLETE job backup of that connection, never structure-only, other-connection or manual files', async () => {

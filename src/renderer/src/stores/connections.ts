@@ -8,6 +8,7 @@ import type {
 } from '@shared/types'
 import { api, invokeSilent } from '@renderer/api'
 import { useNotify } from '@renderer/composables/useNotify'
+import { useSettingsStore } from '@renderer/stores/settings'
 
 export const useConnectionsStore = defineStore('connections', () => {
   const items = ref<ConnectionConfig[]>([])
@@ -25,8 +26,16 @@ export const useConnectionsStore = defineStore('connections', () => {
   function isOpen(id: string): boolean {
     return id in serverInfo.value
   }
+  /** Visual cues (red line, pill, tree chip) stay tied to production only. */
   function isProduction(id: string): boolean {
     return get(id)?.environment === 'production'
+  }
+  /**
+   * Writes need the typed connection name: production, plus the environments
+   * chosen in Ajustes › Seguridad.
+   */
+  function needsTypedConfirm(id: string): boolean {
+    return useSettingsStore().needsTypedConfirm(get(id)?.environment)
   }
   function nameOf(id: string): string {
     return get(id)?.name ?? id
@@ -128,6 +137,7 @@ export const useConnectionsStore = defineStore('connections', () => {
     get,
     isOpen,
     isProduction,
+    needsTypedConfirm,
     nameOf,
     load,
     open,

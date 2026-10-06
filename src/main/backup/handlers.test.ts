@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
-import type { ProgressEvent } from '@shared/types'
+import type { Environment, ProgressEvent } from '@shared/types'
 import type { AppContext } from '../context'
 import {
   NAVICAT_DELETE_MESSAGE,
@@ -32,6 +32,7 @@ describe('backup handlers', () => {
   let navicat: string
   let ctx: AppContext
   let events: ProgressEvent[]
+  let typed: Environment[]
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'electrondb-handlers-'))
@@ -40,11 +41,14 @@ describe('backup handlers', () => {
     mkdirSync(join(own, 'demo'), { recursive: true })
     mkdirSync(join(navicat, 'demo'), { recursive: true })
     events = []
+    typed = ['production']
     ctx = {
+      settings: { get: () => ({ typedConfirmEnvironments: typed }) },
       userDataPath: join(root, 'userData'),
       connections: connectionsOf(
         connectionFixture({ backupDir: own, extraBackupDirs: [navicat] }),
-        connectionFixture({ id: 'prod', environment: 'production', backupDir: join(root, 'prod') })
+        connectionFixture({ id: 'prod', environment: 'production', backupDir: join(root, 'prod') }),
+        connectionFixture({ id: 'stg', name: 'Pre', environment: 'staging' })
       ),
       emit: <E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]) => {
         if (channel === 'event:progress') events.push(payload as ProgressEvent)
@@ -159,6 +163,56 @@ describe('backup handlers', () => {
         error: expect.stringMatching(/producción/)
       })
     ])
+  })
+
+  describe('typed confirmation of Ajustes › Seguridad', () => {
+    const restoreTo = (h: ReturnType<typeof handlersWith>, op: string, extra = {}) =>
+      h.restore(op, {
+        backupPath: FIXTURE,
+        connectionId: 'stg',
+        targetSchema: 'x',
+        createSchema: true,
+        dropObjectsFirst: false,
+        includeStructure: true,
+        includeData: true,
+        continueOnError: false,
+        ...extra
+      })
+    const okService = (calls: string[]) =>
+      ({
+        restore: async () => {
+          calls.push('restore')
+          return { objectsRestored: 1, rowsInserted: 0, errors: [], durationMs: 1 }
+        }
+      }) as unknown as BackupService
+
+    it('refuses an unconfirmed restore on a staging connection when staging is listed', async () => {
+      typed = ['production', 'staging']
+      const calls: string[] = []
+      await expect(restoreTo(handlersWith(okService(calls)), 'op-s1')).rejects.toThrow(
+        /«Pre» \(entorno Staging\) necesita confirmación explícita/
+      )
+      expect(calls).toEqual([])
+      expect(events.at(-1)).toMatchObject({ operationId: 'op-s1', done: true, phase: 'error' })
+    })
+
+    it('restores on staging once confirmed, or when staging is not listed', async () => {
+      typed = ['production', 'staging']
+      const calls: string[] = []
+      await restoreTo(handlersWith(okService(calls)), 'op-s2', { confirmProduction: true })
+      typed = ['production']
+      await restoreTo(handlersWith(okService(calls)), 'op-s3')
+      expect(calls).toEqual(['restore', 'restore'])
+    })
+
+    it('production stays guarded even when the settings file leaves it out', async () => {
+      typed = []
+      const calls: string[] = []
+      await expect(
+        restoreTo(handlersWith(okService(calls)), 'op-s4', { connectionId: 'prod' })
+      ).rejects.toThrow(/producción/)
+      expect(calls).toEqual([])
+    })
   })
 
   it('restore with replaceSchema replaces the whole database (undo of a rollback) through service.replace', async () => {

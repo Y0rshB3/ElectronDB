@@ -65,4 +65,15 @@ describe('validateJobInput (jobs:save)', () => {
       /producción/
     )
   })
+
+  it('refuses restore steps into an environment listed in Ajustes › Seguridad, naming it', () => {
+    const input = job([backup, restore('local')])
+    expect(() => validateJobInput(input, lookup, ['production'])).not.toThrow()
+    expect(() => validateJobInput(input, lookup, ['production', 'local'])).toThrow(
+      /«Local», una conexión de entorno Local/
+    )
+    expect(() => assertRestoreStepsAllowed(input, lookup, ['local'])).toThrow(/entorno Local/)
+    // An empty list never lets a restore step reach production.
+    expect(() => validateJobInput(job([backup, restore('prod')]), lookup, [])).toThrow(/producción/)
+  })
 })

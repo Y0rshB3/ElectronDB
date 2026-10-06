@@ -9,6 +9,12 @@ const typed = ref('')
 const cancelButton = ref<{ $el: HTMLElement } | null>(null)
 
 const request = computed(() => ui.confirm)
+const bannerText = computed(() => {
+  const env = request.value.typedEnvironment ?? 'production'
+  return env === 'production'
+    ? 'Conexión de PRODUCCIÓN'
+    : `Entorno ${environmentLabel(env).toUpperCase()} · requiere escribir el nombre`
+})
 const needsTyping = computed(() => !!request.value.requireTyped)
 const canConfirm = computed(
   () => !needsTyping.value || typed.value.trim() === request.value.requireTyped
@@ -78,8 +84,15 @@ function confirm(): void {
       </div>
       <div class="confirm-host__body">
         <div v-if="request.production" class="confirm-host__banner" data-test="confirm-production">
-          <v-icon icon="mdi-shield-alert-outline" size="16" />
-          <span>Conexión de PRODUCCIÓN</span>
+          <v-icon
+            :icon="
+              (request.typedEnvironment ?? 'production') === 'production'
+                ? 'mdi-shield-alert-outline'
+                : 'mdi-lock-outline'
+            "
+            size="16"
+          />
+          <span>{{ bannerText }}</span>
         </div>
         <div
           v-if="request.connection"

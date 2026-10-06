@@ -18,6 +18,7 @@ import {
   type StepInfo
 } from '@shared/jobLog'
 import { restoreSourceOf, restoreTargetSchema, restoreTaskProblem } from '@shared/restoreTask'
+import { environmentPhrase } from '@shared/typedConfirm'
 import type {
   BackupCreateResult,
   Job,
@@ -36,6 +37,7 @@ import {
   type SchemaCharset
 } from '../backup/replace'
 import type { AppContext } from '../context'
+import { needsTypedConfirm, typedConfirmEnvironments } from '../ipc/productionGuard'
 import type { SessionFactory } from '../mysql/types'
 import { newId, nowIso } from '../storage/ids'
 import { findLatestJobBackup } from './latestBackup'
@@ -58,9 +60,11 @@ export interface RunOptions {
   /** Source run of a rollback. */
   rollbackOf?: string
   /**
-   * Restore steps may write to a production connection: only «Restaurar todo»
-   * after the user typed the connection name (main checked confirmProduction).
-   * Saved jobs never set it: nobody confirms scheduled or launchd runs.
+   * Restore steps may write to a connection that needs the typed confirmation
+   * (production, or an environment listed in Ajustes › Seguridad): only
+   * «Restaurar todo» after the user typed the connection name (main checked
+   * confirmProduction). Saved jobs never set it: nobody confirms scheduled or
+   * launchd runs, so they can never write to production.
    */
   allowProductionRestore?: boolean
   /** continueOnError of the objects inside each restore (defaults to the job's). */
@@ -515,14 +519,18 @@ class RunExecution {
       this.job.tasks,
       (id) => this.ctx.connections.get(id),
       `paso "${task.referenceName}"`,
-      { rollback: this.options.allowProductionRestore === true || this.run.kind === 'rollback' }
+      {
+        rollback: this.options.allowProductionRestore === true || this.run.kind === 'rollback',
+        typedEnvironments: typedConfirmEnvironments(this.ctx)
+      }
     )
     if (problem) throw new Error(problem)
     const target = this.ctx.connections.get(task.connectionId)!
-    // Defence in depth: only a confirmed rollback may replace databases in production.
-    if (target.environment === 'production' && this.options.allowProductionRestore !== true) {
+    // Defence in depth: only a confirmed rollback may replace databases in production or in an
+    // environment that needs the typed name.
+    if (needsTypedConfirm(this.ctx, target) && this.options.allowProductionRestore !== true) {
       throw new Error(
-        `«${target.name}» es una conexión de producción: este paso no puede reemplazar sus bases de datos sin una confirmación explícita.`
+        `«${target.name}» es una conexión de ${environmentPhrase(target.environment)}: este paso no puede reemplazar sus bases de datos sin escribir antes el nombre de la conexión.`
       )
     }
     const source = await this.restoreSource(task)

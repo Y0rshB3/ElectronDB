@@ -1,11 +1,13 @@
+import { environmentName } from '@shared/typedConfirm'
+import type { ConnectionConfig } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore, type ConfirmItem, type ConfirmRequest } from '@renderer/stores/ui'
 
 /**
  * What a destructive operation (DROP, TRUNCATE, DELETE, deleting rows or
- * objects) removes. With `confirmDestructiveEverywhere` on, non-production
- * connections show a plain confirmation built from it.
+ * objects) removes. With `confirmDestructiveEverywhere` on, connections that
+ * do not need the typed name show a plain confirmation built from it.
  */
 export interface DestructiveDetails {
   /** Question title, e.g. "¿Eliminar la tabla «clientes»?". */
@@ -26,10 +28,31 @@ export interface DestructiveRequest {
   message: string
   details?: string
   confirmText?: string
-  /** Ask even when the connection is not production. Defaults to true. */
+  /** Ask even when the connection does not need the typed name. Defaults to true. */
   alwaysAsk?: boolean
   /** Set when the operation deletes something; see DestructiveDetails. */
   destructive?: DestructiveDetails
+}
+
+/**
+ * Where a typed-confirmation write lands, for titles and buttons:
+ * "producción" for production, «name» for the other guarded environments
+ * ("Ejecutar en producción", "Ejecutar en «Pre»").
+ */
+export function typedTarget(
+  connection: Pick<ConnectionConfig, 'name' | 'environment'> | null | undefined
+): string {
+  if (!connection || connection.environment === 'production') return 'producción'
+  return `«${connection.name}»`
+}
+
+/** Paragraph appended to the message of a typed confirmation. */
+export function typedConfirmNotice(
+  connection: Pick<ConnectionConfig, 'name' | 'environment'>
+): string {
+  if (connection.environment === 'production')
+    return 'Esta conexión está marcada como PRODUCCIÓN. Escribe el nombre de la conexión para continuar.'
+  return `La conexión «${connection.name}» (entorno ${environmentName(connection.environment)}) requiere confirmación: escribe su nombre para continuar.`
 }
 
 export function useConfirm() {
@@ -43,25 +66,26 @@ export function useConfirm() {
 
   /**
    * Guard for writes. Shows one dialog at most:
-   * - production connection (when enabled in settings): the user types the connection name;
+   * - connection that needs the typed name (production, always, and the environments chosen in
+   *   Ajustes › Seguridad): the user types the connection name. It replaces the destructive
+   *   confirmation, never both;
    * - destructive operation with `confirmDestructiveEverywhere` on: plain confirmation listing
    *   what is removed, with "Cancelar" focused;
    * - otherwise a plain confirmation, unless `alwaysAsk` is false.
    */
   async function confirmDestructive(request: DestructiveRequest): Promise<boolean> {
     const connection = connections.get(request.connectionId)
-    const production =
-      connection?.environment === 'production' && settingsStore.settings.confirmProductionWrites
-    if (production) {
+    if (connection && settingsStore.needsTypedConfirm(connection.environment)) {
       return ui.ask({
         title: request.title,
-        message: `${request.message}\n\nEsta conexión está marcada como PRODUCCIÓN. Escribe el nombre de la conexión para continuar.`,
+        message: `${request.message}\n\n${typedConfirmNotice(connection)}`,
         details: request.details,
         items: request.destructive?.items,
-        confirmText: request.confirmText ?? 'Ejecutar en producción',
+        confirmText: request.confirmText ?? `Ejecutar en ${typedTarget(connection)}`,
         color: 'error',
-        requireTyped: connection!.name,
-        production: true
+        requireTyped: connection.name,
+        production: true,
+        typedEnvironment: connection.environment
       })
     }
     const destructive = request.destructive

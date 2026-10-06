@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Mock } from 'vitest'
+import type { Environment } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import RestoreDialog from './RestoreDialog.vue'
 import {
@@ -45,12 +47,14 @@ describe('RestoreDialog', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  async function mountFor(targetId: string) {
+  async function mountFor(targetId: string, typed?: Environment[]) {
     const pinia = freshPinia()
+    if (typed) useSettingsStore().settings.typedConfirmEnvironments = typed
     const connections = useConnectionsStore()
     connections.items = [
       makeConnection({ id: 'prod', name: 'Production', environment: 'production' }),
-      makeConnection({ id: 'local', name: 'Local', environment: 'local' })
+      makeConnection({ id: 'local', name: 'Local', environment: 'local' }),
+      makeConnection({ id: 'stg', name: 'Pre', environment: 'staging' })
     ]
     connections.loaded = true
     useUiStore().restoreDialog = { open: true, backup, connectionId: targetId }
@@ -97,6 +101,33 @@ describe('RestoreDialog', () => {
     expect(options.connectionId).toBe('local')
     expect('confirmProduction' in options).toBe(false)
     expect('replaceSchema' in options).toBe(false)
+  })
+
+  it('a staging target listed in Ajustes asks for its name inline (naming the environment) and sends confirmProduction', async () => {
+    const w = await mountFor('stg', ['production', 'staging'])
+    const warning = w.get('[data-test="restore-production-warning"]')
+    expect(warning.text()).toContain('Destino de entorno STAGING · requiere confirmación')
+    expect(warning.text()).not.toContain('PRODUCCIÓN')
+    const submit = () => w.get('[data-test="restore-submit"]')
+    expect(submit().attributes('disabled')).toBeDefined()
+    await w.get('[data-test="restore-confirm-name"] input').setValue('Pre')
+    expect(submit().attributes('disabled')).toBeUndefined()
+    await submit().trigger('click')
+    await settle()
+    // Single dialog: no extra plain confirmation on top of the typed name.
+    expect(useUiStore().confirm.open).toBe(false)
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options).toMatchObject({ connectionId: 'stg', confirmProduction: true })
+  })
+
+  it('a staging target that is not listed restores without the typed name', async () => {
+    const w = await mountFor('stg')
+    expect(w.find('[data-test="restore-production-warning"]').exists()).toBe(false)
+    await w.get('[data-test="restore-submit"]').trigger('click')
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options.connectionId).toBe('stg')
+    expect('confirmProduction' in options).toBe(false)
   })
 
   it('a safety copy opens in «Reemplazar la base de datos completa» mode and undoes with a confirmed replace', async () => {

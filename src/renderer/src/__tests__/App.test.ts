@@ -42,7 +42,7 @@ const settings = {
   backupsRootDir: '',
   defaultRowLimit: 1000,
   theme: 'dark',
-  confirmProductionWrites: true
+  typedConfirmEnvironments: ['production']
 }
 
 function mountApp() {

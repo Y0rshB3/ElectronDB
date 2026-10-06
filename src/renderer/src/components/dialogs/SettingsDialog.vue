@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import type { AppSettings } from '@shared/types'
+import {
+  ALL_ENVIRONMENTS,
+  MANDATORY_TYPED_ENVIRONMENTS,
+  normalizeTypedConfirmEnvironments
+} from '@shared/typedConfirm'
+import type { AppSettings, Environment } from '@shared/types'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import PathPicker from '@renderer/components/common/PathPicker.vue'
+import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 import './pathField.css'
 import { vPathTail } from './pathTail'
 import DialogHeader from './DialogHeader.vue'
@@ -39,6 +45,22 @@ watch(
   { immediate: true }
 )
 
+const PRODUCTION_LOCKED_TOOLTIP = 'Producción siempre pide escribir el nombre'
+
+const isMandatory = (env: Environment): boolean => MANDATORY_TYPED_ENVIRONMENTS.includes(env)
+const typedEnvironments = computed(() =>
+  normalizeTypedConfirmEnvironments(form.value.typedConfirmEnvironments)
+)
+const isTyped = (env: Environment): boolean => typedEnvironments.value.includes(env)
+
+function toggleTyped(env: Environment, on: boolean): void {
+  if (isMandatory(env)) return
+  const current = typedEnvironments.value.filter((e) => e !== env)
+  form.value.typedConfirmEnvironments = normalizeTypedConfirmEnvironments(
+    on ? [...current, env] : current
+  )
+}
+
 async function save(): Promise<void> {
   const limit = Math.trunc(Number(form.value.defaultRowLimit))
   if (!Number.isFinite(limit) || limit < 1) {
@@ -48,7 +70,11 @@ async function save(): Promise<void> {
   saving.value = true
   error.value = ''
   try {
-    await settingsStore.update({ ...form.value, defaultRowLimit: limit })
+    await settingsStore.update({
+      ...form.value,
+      defaultRowLimit: limit,
+      typedConfirmEnvironments: typedEnvironments.value
+    })
     theme.change(settingsStore.themeName)
     notify.success('Ajustes guardados')
     open.value = false
@@ -161,14 +187,58 @@ async function save(): Promise<void> {
           <div class="settings-section__title">
             <v-icon icon="mdi-shield-alert-outline" size="15" aria-hidden="true" />Seguridad
           </div>
-          <v-switch
-            v-model="form.confirmProductionWrites"
-            color="error"
-            label="Pedir confirmación escribiendo el nombre antes de escribir en conexiones de producción"
-            density="compact"
-            hide-details
-            data-test="settings-confirm-production"
-          />
+          <fieldset class="typed-envs" data-test="settings-typed-envs">
+            <legend class="typed-envs__legend">
+              Pedir confirmación escribiendo el nombre antes de escribir en:
+            </legend>
+            <div class="typed-envs__chips">
+              <label
+                v-for="env in ALL_ENVIRONMENTS"
+                :key="env"
+                class="typed-env"
+                :class="{ 'typed-env--on': isTyped(env), 'typed-env--locked': isMandatory(env) }"
+                :data-test="`settings-typed-env-${env}`"
+              >
+                <input
+                  type="checkbox"
+                  class="typed-env__input"
+                  :checked="isTyped(env)"
+                  :disabled="isMandatory(env)"
+                  :aria-label="
+                    isMandatory(env)
+                      ? `${environmentLabel(env)} (${PRODUCTION_LOCKED_TOOLTIP.toLowerCase()})`
+                      : environmentLabel(env)
+                  "
+                  @change="toggleTyped(env, ($event.target as HTMLInputElement).checked)"
+                />
+                <v-icon
+                  class="typed-env__check"
+                  :icon="
+                    isMandatory(env)
+                      ? 'mdi-lock'
+                      : isTyped(env)
+                        ? 'mdi-checkbox-marked'
+                        : 'mdi-checkbox-blank-outline'
+                  "
+                  size="16"
+                  aria-hidden="true"
+                />
+                <span class="nd-pill" :class="environmentPillClass(env)">{{
+                  environmentLabel(env)
+                }}</span>
+                <v-tooltip
+                  v-if="isMandatory(env)"
+                  activator="parent"
+                  location="top"
+                  :text="PRODUCTION_LOCKED_TOOLTIP"
+                />
+              </label>
+            </div>
+            <p class="typed-envs__hint">
+              Producción siempre está incluida. Las tareas automáticas no pueden restaurar sobre
+              estas conexiones (nadie escribe el nombre).
+            </p>
+          </fieldset>
           <v-switch
             v-model="form.confirmDestructiveEverywhere"
             color="error"
@@ -249,6 +319,70 @@ async function save(): Promise<void> {
 .settings-version {
   margin-left: 6px;
   color: var(--nd-accent);
+}
+.typed-envs {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.typed-envs__legend {
+  padding: 0;
+  margin-bottom: 8px;
+  color: var(--nd-text);
+}
+.typed-envs__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.typed-env {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--nd-radius-control);
+  border: 1px solid var(--nd-border);
+  background: var(--nd-bg-input);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.12s,
+    background-color 0.12s;
+}
+.typed-env:hover:not(.typed-env--locked) {
+  border-color: var(--nd-border-strong);
+}
+.typed-env--on {
+  border-color: color-mix(in srgb, var(--nd-error) 40%, transparent);
+  background: color-mix(in srgb, var(--nd-error) 8%, var(--nd-bg-raised));
+}
+.typed-env--locked {
+  cursor: default;
+}
+.typed-env__input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: inherit;
+}
+.typed-env:focus-within {
+  outline: 2px solid var(--nd-accent);
+  outline-offset: 1px;
+}
+.typed-env__check {
+  color: var(--nd-text-muted);
+}
+.typed-env--on .typed-env__check {
+  color: var(--nd-error);
+}
+.typed-envs__hint {
+  margin: 8px 0 0;
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-muted);
 }
 .settings-section--danger {
   border-color: color-mix(in srgb, var(--nd-error) 22%, transparent);

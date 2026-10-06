@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { TableDataPage, TableStructure } from '@shared/types'
+import type { Environment, TableDataPage, TableStructure } from '@shared/types'
 import { useObjectActions } from '@renderer/composables/useObjectActions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import type { TreeNode } from '@renderer/stores/tree'
@@ -16,7 +16,7 @@ import { mockBridge, mountView, okExecute, openTab, seedConnection, setupDom } f
 // destructive operation on any connection: one plain dialog on non-production,
 // the typed production dialog (only) on production, and nothing is written on cancel.
 
-type Env = 'local' | 'production'
+type Env = 'local' | 'production' | 'staging'
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
 const page: TableDataPage = {
@@ -145,6 +145,8 @@ function bridge() {
 interface RunOptions {
   /** settings.confirmDestructiveEverywhere off. */
   off?: boolean
+  /** settings.typedConfirmEnvironments (Ajustes › Seguridad). */
+  typed?: Environment[]
 }
 
 /** Every ui.ask request of the current scenario. */
@@ -154,6 +156,7 @@ let asks: unknown[] = []
 function prepare(env: Env, options: RunOptions): void {
   seedConnection('c1', env, 'Servidor')
   if (options.off) useSettingsStore().settings.confirmDestructiveEverywhere = false
+  if (options.typed) useSettingsStore().settings.typedConfirmEnvironments = [...options.typed]
   asks = []
   const ui = useUiStore()
   const ask = ui.ask
@@ -506,5 +509,65 @@ describe.each(scenarios)('$name on a production connection', (scenario) => {
     expect(
       call?.some((a) => (a as { confirmProduction?: boolean } | null)?.confirmProduction)
     ).toBe(true)
+  })
+})
+
+describe.each(scenarios)(
+  '$name on a staging connection listed in Ajustes › Seguridad',
+  (scenario) => {
+    let wrapper: Wrapper | undefined
+    afterEach(() => {
+      wrapper?.unmount()
+      wrapper = undefined
+      localStorage.clear()
+    })
+
+    it('shows only the typed confirmation (naming Staging), once, and sends confirmProduction', async () => {
+      const mounted = await scenario.run('staging', { typed: ['production', 'staging'] })
+      wrapper = mounted.wrapper
+      const ui = useUiStore()
+      expect(ui.confirm.open).toBe(true)
+      expect(ui.confirm.production).toBe(true)
+      expect(ui.confirm.typedEnvironment).toBe('staging')
+      expect(ui.confirm.requireTyped).toBe('Servidor')
+      expect(ui.confirm.danger).toBeFalsy()
+      ui.answer(true)
+      await flushPromises()
+      expect(asks).toHaveLength(1)
+      const call = mounted.invoke.mock.calls.find(
+        (c) => c[0] === scenario.channel && !/^SELECT/i.test(String(c[2]))
+      )
+      expect(
+        call?.some((a) => (a as { confirmProduction?: boolean } | null)?.confirmProduction)
+      ).toBe(true)
+    })
+
+    it('does not write when the typed confirmation is cancelled', async () => {
+      const mounted = await scenario.run('staging', { typed: ['production', 'staging'] })
+      wrapper = mounted.wrapper
+      useUiStore().answer(false)
+      await flushPromises()
+      expect(asks).toHaveLength(1)
+      expect(wrote(mounted.invoke, scenario.channel)).toBe(false)
+    })
+  }
+)
+
+describe.each(scenarios)('$name on a staging connection not listed', (scenario) => {
+  let wrapper: Wrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+    localStorage.clear()
+  })
+
+  it('shows the plain destructive dialog, never the typed one', async () => {
+    const mounted = await scenario.run('staging')
+    wrapper = mounted.wrapper
+    const ui = useUiStore()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.danger).toBe(true)
+    expect(ui.confirm.requireTyped).toBeUndefined()
+    expect(ui.confirm.connection).toEqual({ name: 'Servidor', environment: 'staging' })
   })
 })

@@ -18,7 +18,7 @@ import {
   type JobDraft
 } from '@renderer/components/automation/jobForm'
 import {
-  productionRiskSignature,
+  guardedRiskSignature,
   useJobProductionGuard
 } from '@renderer/components/automation/jobGuard'
 import { isMac } from '@renderer/utils/platform'
@@ -50,12 +50,12 @@ const errors = ref<string[]>([])
 
 const serialized = computed(() => JSON.stringify(buildJobInput(draft.value)))
 const dirty = computed(() => !loading.value && serialized.value !== snapshot.value)
-// Production-risk signature of the last saved state; scheduling changes that touch
-// production SQL tasks are confirmed only when this changes.
+// Risk signature of the last saved state; scheduling changes that touch SQL tasks on guarded
+// connections (production, Ajustes › Seguridad) are confirmed only when this changes.
 let cleanRisk = ''
 
 function riskOf(input: JobInput): string {
-  return productionRiskSignature(input.tasks, input.schedule, guard.lookup)
+  return guardedRiskSignature(input.tasks, input.schedule, guard.lookup, guard.environments())
 }
 
 function markClean(): void {
@@ -87,7 +87,7 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<boolean> {
-  errors.value = validateDraft(draft.value, (id) => connections.get(id))
+  errors.value = validateDraft(draft.value, (id) => connections.get(id), guard.environments())
   if (errors.value.length) return false
   const input = buildJobInput(draft.value)
   const risk = riskOf(input)

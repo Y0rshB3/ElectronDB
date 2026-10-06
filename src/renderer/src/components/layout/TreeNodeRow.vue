@@ -17,6 +17,10 @@ const connections = useConnectionsStore()
 
 const connection = computed(() => connections.get(props.node.connectionId))
 const isOpen = computed(() => connections.isOpen(props.node.connectionId))
+/** Writes need the typed name (production, and the environments of Ajustes › Seguridad). */
+const typedConfirm = computed(
+  () => props.node.kind === 'connection' && connections.needsTypedConfirm(props.node.connectionId)
+)
 const expanded = computed(() => tree.isExpanded(props.node.id))
 const loading = computed(
   () =>
@@ -77,7 +81,8 @@ const envPill = computed(() =>
         'tree-node__row--closed': node.kind === 'connection' && !isOpen,
         'tree-node__row--connection': node.kind === 'connection',
         'tree-node__row--production':
-          node.kind === 'connection' && connection?.environment === 'production'
+          node.kind === 'connection' && connection?.environment === 'production',
+        'tree-node__row--typed': typedConfirm
       }"
       :style="{ paddingLeft: `${6 + depth * 14}px` }"
       role="treeitem"
@@ -120,8 +125,19 @@ const envPill = computed(() =>
         v-if="node.kind === 'connection' && connection"
         class="nd-pill tree-node__env"
         :class="envPill"
+        :title="
+          typedConfirm
+            ? `${envLabel}: requiere confirmación (escribir el nombre) antes de escribir`
+            : undefined
+        "
         data-test="env-chip"
-        >{{ envLabel }}</span
+        ><v-icon
+          v-if="typedConfirm"
+          icon="mdi-lock-outline"
+          size="10"
+          aria-hidden="true"
+          data-test="env-lock"
+        />{{ envLabel }}</span
       >
       <span v-else-if="countBadge !== null" class="tree-node__count">{{ countBadge }}</span>
       <v-icon
@@ -272,6 +288,11 @@ const envPill = computed(() =>
 .tree-node__row--selected .tree-node__env,
 .tree-node__row--production .tree-node__env {
   opacity: 1;
+}
+/* Environments that need the typed name keep their pill (with the lock) visible, dimmed. */
+.tree-node__row--typed:not(:hover):not(.tree-node__row--selected):not(.tree-node__row--production)
+  .tree-node__env {
+  opacity: 0.8;
 }
 .tree-node__row--production .tree-node__env {
   box-shadow: 0 0 10px color-mix(in srgb, var(--nd-error) 25%, transparent);
