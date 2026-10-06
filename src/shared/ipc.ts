@@ -1,0 +1,274 @@
+import type {
+  AppInfo,
+  AppSettings,
+  ApplyRowChangesResult,
+  BackupCreateOptions,
+  BackupCreateResult,
+  BackupFile,
+  BackupMeta,
+  ColumnInfo,
+  ConnectionConfig,
+  ConnectionInput,
+  ConnectionTestResult,
+  DatabaseInfo,
+  EventInfo,
+  Job,
+  JobInput,
+  JobLogEvent,
+  JobRun,
+  KeychainRecoveryResult,
+  LogEvent,
+  NavicatConnectionPreview,
+  NavicatDetection,
+  NavicatImportRequest,
+  NavicatImportResult,
+  NavicatJobPreview,
+  ObjectType,
+  ProgressEvent,
+  QueryExecuteOptions,
+  QueryStatementResult,
+  RestoreOptions,
+  RestoreResult,
+  RoutineInfo,
+  RowChange,
+  ServerInfo,
+  StartupNotice,
+  TableDataPage,
+  TableDataRequest,
+  TableInfo,
+  TableStructure,
+  TriggerInfo,
+  UserInfo,
+  ViewInfo,
+  WriteOptions
+} from './types'
+
+/**
+ * Request/response channels (ipcRenderer.invoke / ipcMain.handle).
+ * Each key maps to { args, result }. Adding a channel here is enough for
+ * preload and renderer typing.
+ */
+export interface IpcInvokeMap {
+  'app:info': { args: []; result: AppInfo }
+  'app:openPath': { args: [path: string]; result: void }
+  'app:showInFolder': { args: [path: string]; result: void }
+  'app:pickDirectory': { args: [title: string]; result: string | null }
+  'app:pickFile': {
+    args: [title: string, filters?: { name: string; extensions: string[] }[]]
+    result: string | null
+  }
+  /** One-off messages for the user after start (e.g. passwords to type again after the rename). */
+  'app:startupNotices': { args: []; result: StartupNotice[] }
+  'app:dismissStartupNotice': { args: [id: string]; result: void }
+
+  'settings:get': { args: []; result: AppSettings }
+  'settings:update': { args: [patch: Partial<AppSettings>]; result: AppSettings }
+
+  'connections:list': { args: []; result: ConnectionConfig[] }
+  'connections:get': { args: [id: string]; result: ConnectionConfig | null }
+  'connections:save': { args: [input: ConnectionInput]; result: ConnectionConfig }
+  'connections:delete': { args: [id: string]; result: void }
+  'connections:test': {
+    args: [input: ConnectionInput, password: string | null, sshPassword: string | null]
+    result: ConnectionTestResult
+  }
+  'connections:setPassword': { args: [id: string, password: string | null]; result: void }
+  'connections:hasPassword': { args: [id: string]; result: boolean }
+  'connections:setSshPassword': { args: [id: string, password: string | null]; result: void }
+  'connections:hasSshPassword': { args: [id: string]; result: boolean }
+  'connections:open': { args: [id: string]; result: ServerInfo }
+  'connections:close': { args: [id: string]; result: void }
+  'connections:isOpen': { args: [id: string]; result: boolean }
+
+  'db:databases': { args: [connectionId: string]; result: DatabaseInfo[] }
+  'db:tables': { args: [connectionId: string, schema: string]; result: TableInfo[] }
+  'db:views': { args: [connectionId: string, schema: string]; result: ViewInfo[] }
+  'db:routines': { args: [connectionId: string, schema: string]; result: RoutineInfo[] }
+  'db:events': { args: [connectionId: string, schema: string]; result: EventInfo[] }
+  'db:triggers': { args: [connectionId: string, schema: string]; result: TriggerInfo[] }
+  'db:columns': {
+    args: [connectionId: string, schema: string, table: string]
+    result: ColumnInfo[]
+  }
+  'db:tableStructure': {
+    args: [connectionId: string, schema: string, table: string]
+    result: TableStructure
+  }
+  'db:showCreate': {
+    args: [connectionId: string, schema: string, type: ObjectType, name: string]
+    result: string
+  }
+  'db:tableData': { args: [connectionId: string, request: TableDataRequest]; result: TableDataPage }
+  'db:applyRowChanges': {
+    args: [
+      connectionId: string,
+      schema: string,
+      table: string,
+      changes: RowChange[],
+      options?: WriteOptions
+    ]
+    result: ApplyRowChangesResult
+  }
+  'db:execute': {
+    args: [connectionId: string, sql: string, options?: QueryExecuteOptions]
+    result: QueryStatementResult[]
+  }
+  'db:users': { args: [connectionId: string]; result: UserInfo[] }
+  'db:dropObject': {
+    args: [
+      connectionId: string,
+      schema: string,
+      type: ObjectType,
+      name: string,
+      options?: WriteOptions
+    ]
+    result: void
+  }
+  'db:createDatabase': {
+    args: [
+      connectionId: string,
+      name: string,
+      charset: string,
+      collation: string,
+      options?: WriteOptions
+    ]
+    result: void
+  }
+  'db:dropDatabase': {
+    args: [connectionId: string, name: string, options?: WriteOptions]
+    result: void
+  }
+  'db:charsets': {
+    args: [connectionId: string]
+    result: { charset: string; defaultCollation: string; collations: string[] }[]
+  }
+
+  'backups:list': { args: [connectionId: string, schema?: string | null]; result: BackupFile[] }
+  'backups:meta': { args: [path: string]; result: BackupMeta }
+  'backups:objectDdl': { args: [path: string, uuid: string]; result: string }
+  'backups:create': {
+    args: [operationId: string, options: BackupCreateOptions]
+    result: BackupCreateResult
+  }
+  'backups:restore': { args: [operationId: string, options: RestoreOptions]; result: RestoreResult }
+  'backups:delete': { args: [path: string]; result: void }
+  'backups:cancel': { args: [operationId: string]; result: void }
+
+  'jobs:list': { args: []; result: Job[] }
+  'jobs:get': { args: [id: string]; result: Job | null }
+  'jobs:save': { args: [input: JobInput, options?: WriteOptions]; result: Job }
+  'jobs:delete': { args: [id: string]; result: void }
+  'jobs:run': { args: [id: string, options?: WriteOptions]; result: JobRun }
+  'jobs:cancel': { args: [runId: string]; result: void }
+  'jobs:runs': { args: [jobId: string | null, limit?: number]; result: JobRun[] }
+  'jobs:runLog': { args: [runId: string]; result: string }
+  'jobs:scheduleStatus': {
+    args: [id: string]
+    result: { inApp: boolean; launchAgent: boolean; nextRun: string | null }
+  }
+
+  'navicat:detect': { args: [rootPath?: string | null]; result: NavicatDetection }
+  'navicat:previewConnections': {
+    args: [rootPath?: string | null]
+    result: NavicatConnectionPreview[]
+  }
+  'navicat:previewJobs': { args: [rootPath?: string | null]; result: NavicatJobPreview[] }
+  'navicat:import': {
+    args: [request: NavicatImportRequest, rootPath?: string | null]
+    result: NavicatImportResult
+  }
+  'navicat:recoverPasswords': { args: []; result: KeychainRecoveryResult }
+}
+
+export type IpcChannel = keyof IpcInvokeMap
+export type IpcArgs<C extends IpcChannel> = IpcInvokeMap[C]['args']
+export type IpcResult<C extends IpcChannel> = IpcInvokeMap[C]['result']
+
+/** Push channels (main -> renderer). */
+export interface IpcEventMap {
+  'event:progress': ProgressEvent
+  'event:jobRun': JobRun
+  'event:log': LogEvent
+  'event:connectionClosed': { connectionId: string; reason: string }
+  'event:jobLog': JobLogEvent
+}
+
+export type IpcEventChannel = keyof IpcEventMap
+
+export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
+  'app:info',
+  'app:openPath',
+  'app:showInFolder',
+  'app:pickDirectory',
+  'app:pickFile',
+  'app:startupNotices',
+  'app:dismissStartupNotice',
+  'settings:get',
+  'settings:update',
+  'connections:list',
+  'connections:get',
+  'connections:save',
+  'connections:delete',
+  'connections:test',
+  'connections:setPassword',
+  'connections:hasPassword',
+  'connections:setSshPassword',
+  'connections:hasSshPassword',
+  'connections:open',
+  'connections:close',
+  'connections:isOpen',
+  'db:databases',
+  'db:tables',
+  'db:views',
+  'db:routines',
+  'db:events',
+  'db:triggers',
+  'db:columns',
+  'db:tableStructure',
+  'db:showCreate',
+  'db:tableData',
+  'db:applyRowChanges',
+  'db:execute',
+  'db:users',
+  'db:dropObject',
+  'db:createDatabase',
+  'db:dropDatabase',
+  'db:charsets',
+  'backups:list',
+  'backups:meta',
+  'backups:objectDdl',
+  'backups:create',
+  'backups:restore',
+  'backups:delete',
+  'backups:cancel',
+  'jobs:list',
+  'jobs:get',
+  'jobs:save',
+  'jobs:delete',
+  'jobs:run',
+  'jobs:cancel',
+  'jobs:runs',
+  'jobs:runLog',
+  'jobs:scheduleStatus',
+  'navicat:detect',
+  'navicat:previewConnections',
+  'navicat:previewJobs',
+  'navicat:import',
+  'navicat:recoverPasswords'
+] as const
+
+export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
+  'event:progress',
+  'event:jobRun',
+  'event:log',
+  'event:connectionClosed',
+  'event:jobLog'
+] as const
+
+/** Typed API surface exposed on window.electronDB by the preload script. */
+export interface ElectronDBApi {
+  /** Host OS (process.platform: 'darwin', 'win32', 'linux'…), for OS-specific UI. */
+  readonly platform: string
+  invoke<C extends IpcChannel>(channel: C, ...args: IpcArgs<C>): Promise<IpcResult<C>>
+  on<E extends IpcEventChannel>(channel: E, listener: (payload: IpcEventMap[E]) => void): () => void
+}

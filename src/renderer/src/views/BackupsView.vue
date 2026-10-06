@@ -1,0 +1,570 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import type { BackupFile } from '@shared/types'
+import { errorMessage, useNotify } from '@renderer/composables/useNotify'
+import { useBackupsStore } from '@renderer/stores/backups'
+import { useConnectionsStore } from '@renderer/stores/connections'
+import type { WorkspaceTab } from '@renderer/stores/tabs'
+import { useUiStore } from '@renderer/stores/ui'
+import { formatBytes, formatDate, formatNumber } from '@renderer/utils/format'
+import EmptyState from '@renderer/components/common/EmptyState.vue'
+import BackupDetailsPanel from '@renderer/components/backups/BackupDetailsPanel.vue'
+import SourcePill from '@renderer/components/backups/SourcePill.vue'
+import { revealInFinder } from '@renderer/components/backups/reveal'
+import {
+  NAVICAT_DELETE_TOOLTIP,
+  canDeleteBackup,
+  findLocalConnection
+} from '@renderer/components/backups/backupHelpers'
+
+const props = defineProps<{ tab: WorkspaceTab }>()
+
+const backups = useBackupsStore()
+const connections = useConnectionsStore()
+const ui = useUiStore()
+const notify = useNotify()
+
+const schemaFilter = ref<string | null>(props.tab.schema ?? null)
+const search = ref('')
+const selectedPath = ref<string | null>(null)
+const error = ref('')
+const deleting = ref(false)
+
+const connectionId = computed(() => props.tab.connectionId ?? null)
+const connection = computed(() =>
+  connectionId.value ? connections.get(connectionId.value) : undefined
+)
+const allFiles = computed(() =>
+  connectionId.value ? backups.listOf(connectionId.value, null) : []
+)
+const loading = computed(() =>
+  connectionId.value ? backups.isLoading(connectionId.value, null) : false
+)
+const files = computed(() =>
+  schemaFilter.value
+    ? allFiles.value.filter((f) => f.schema === schemaFilter.value)
+    : allFiles.value
+)
+const schemaOptions = computed(() => {
+  const set = new Set(allFiles.value.map((f) => f.schema).filter((s): s is string => !!s))
+  if (props.tab.schema) set.add(props.tab.schema)
+  return [...set].sort((a, b) => a.localeCompare(b, 'es'))
+})
+const selected = computed<BackupFile | null>(
+  () => files.value.find((f) => f.path === selectedPath.value) ?? null
+)
+const localConnection = computed(() => findLocalConnection(connections.sorted))
+const isLocalSource = computed(() => connection.value?.environment === 'local')
+
+// Name takes the remaining width and truncates; the rest never wrap. With the details
+// drawer open the schema and label columns are dropped (the drawer shows both) so names
+// stay readable.
+const headers = computed(() => [
+  {
+    title: 'Nombre',
+    key: 'fileName',
+    minWidth: '180px',
+    cellProps: { class: 'backups-view__name-cell' }
+  },
+  ...(selected.value ? [] : [{ title: 'Esquema', key: 'schema', width: 150, nowrap: true }]),
+  { title: 'Tamaño', key: 'sizeBytes', align: 'end' as const, width: 92, nowrap: true },
+  { title: 'Fecha', key: 'createdAt', width: 168, nowrap: true },
+  { title: 'Origen', key: 'source', width: 104, nowrap: true },
+  ...(selected.value
+    ? []
+    : [
+        {
+          title: 'Etiqueta',
+          key: 'label',
+          width: 130,
+          cellProps: { class: 'backups-view__label-cell' }
+        }
+      ])
+])
+/** Most recent copy in the current list, highlighted in the table. */
+const newestPath = computed(() => {
+  let best: BackupFile | null = null
+  for (const f of files.value) if (!best || f.createdAt > best.createdAt) best = f
+  return best?.path ?? null
+})
+const sortBy = ref([{ key: 'createdAt', order: 'desc' as const }])
+const PAGE_SIZE = 100
+const page = ref(1)
+watch([search, schemaFilter], () => (page.value = 1))
+
+async function reload(): Promise<void> {
+  if (!connectionId.value) return
+  error.value = ''
+  try {
+    await backups.load(connectionId.value, null)
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
+}
+
+function onRowClick(_e: unknown, row: { item: BackupFile }): void {
+  selectedPath.value = row.item.path === selectedPath.value ? null : row.item.path
+}
+
+function newBackup(): void {
+  if (!connectionId.value) return
+  ui.openBackupDialog(connectionId.value, schemaFilter.value ?? selected.value?.schema ?? null)
+}
+
+function restore(): void {
+  if (selected.value) ui.openRestoreDialog(selected.value, connectionId.value)
+}
+
+function restoreToLocal(): void {
+  if (!selected.value) return
+  if (!localConnection.value) {
+    notify.warning(
+      'No hay ninguna conexión marcada como «Local». Edita una conexión y cambia su entorno a Local.'
+    )
+    return
+  }
+  ui.openRestoreDialog(selected.value, localConnection.value.id)
+}
+
+async function remove(): Promise<void> {
+  const file = selected.value
+  if (!file || !canDeleteBackup(file)) return
+  const ok = await ui.ask({
+    title: 'Eliminar copia de seguridad',
+    message: `Se eliminará el archivo de copia de seguridad de forma permanente.`,
+    details: file.path,
+    confirmText: 'Eliminar',
+    color: 'error'
+  })
+  if (!ok) return
+  deleting.value = true
+  try {
+    await backups.remove(file)
+    selectedPath.value = null
+    notify.success('Copia de seguridad eliminada')
+  } catch {
+    // invoke() already reported the error to the user.
+  } finally {
+    deleting.value = false
+  }
+}
+
+function showInFinder(): void {
+  revealInFinder(selected.value?.path)
+}
+
+onMounted(reload)
+
+// Reload when another component (e.g. BackupDialog) invalidates this connection's lists.
+watch(
+  () => (connectionId.value ? backups.lists[`${connectionId.value}:*`] : null),
+  (list) => {
+    if (list === undefined && !loading.value) void reload()
+  }
+)
+watch(connectionId, reload)
+</script>
+
+<template>
+  <div class="backups-view d-flex flex-column" data-test="backups-view">
+    <v-toolbar
+      density="compact"
+      class="nd-viewbar"
+      role="toolbar"
+      aria-label="Acciones de copias de seguridad"
+    >
+      <v-btn
+        size="small"
+        prepend-icon="mdi-archive-plus-outline"
+        color="primary"
+        variant="flat"
+        :disabled="!connectionId"
+        data-test="backups-new"
+        @click="newBackup"
+        >Nueva copia</v-btn
+      >
+      <span class="nd-viewbar__sep" aria-hidden="true" />
+      <v-btn
+        size="small"
+        prepend-icon="mdi-backup-restore"
+        :disabled="!selected"
+        data-test="backups-restore"
+        @click="restore"
+        >Restaurar</v-btn
+      >
+      <v-btn
+        size="small"
+        prepend-icon="mdi-laptop"
+        :disabled="!selected"
+        :title="localConnection ? `Restaurar en ${localConnection.name}` : 'No hay conexión Local'"
+        data-test="backups-restore-local"
+        @click="restoreToLocal"
+      >
+        Restaurar en Local
+      </v-btn>
+      <v-btn
+        icon="mdi-folder-open-outline"
+        size="small"
+        variant="text"
+        :disabled="!selected"
+        aria-label="Mostrar en Finder"
+        title="Mostrar en Finder"
+        @click="showInFinder"
+      />
+      <v-tooltip
+        v-if="selected && !canDeleteBackup(selected)"
+        :text="NAVICAT_DELETE_TOOLTIP"
+        location="bottom"
+      >
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps">
+            <v-btn
+              size="small"
+              prepend-icon="mdi-delete-outline"
+              disabled
+              data-test="backups-delete"
+              >Eliminar</v-btn
+            >
+          </span>
+        </template>
+      </v-tooltip>
+      <v-btn
+        v-else
+        size="small"
+        prepend-icon="mdi-delete-outline"
+        :disabled="!selected"
+        :loading="deleting"
+        class="backups-view__delete"
+        data-test="backups-delete"
+        @click="remove"
+      >
+        Eliminar
+      </v-btn>
+      <v-spacer />
+      <v-select
+        v-model="schemaFilter"
+        :items="schemaOptions"
+        label="Esquema"
+        clearable
+        hide-details
+        density="compact"
+        class="backups-view__filter"
+        placeholder="Todos"
+      />
+      <v-text-field
+        v-model="search"
+        prepend-inner-icon="mdi-magnify"
+        placeholder="Buscar"
+        hide-details
+        density="compact"
+        class="backups-view__filter"
+        aria-label="Buscar copias"
+      />
+      <v-btn
+        icon="mdi-refresh"
+        size="small"
+        variant="text"
+        :loading="loading"
+        aria-label="Actualizar"
+        title="Actualizar"
+        data-test="backups-refresh"
+        @click="reload"
+      />
+    </v-toolbar>
+
+    <v-alert
+      v-if="connection && !isLocalSource"
+      type="info"
+      icon="mdi-lifebuoy"
+      class="backups-view__notice"
+      closable
+    >
+      <strong>Rollback a Local:</strong> 1) «Nueva copia» crea una copia de «{{ connection.name }}»;
+      2) selecciónala y pulsa «Restaurar en Local» para cargarla en
+      {{ localConnection?.name ?? 'tu conexión Local' }}.
+    </v-alert>
+    <v-alert v-if="error" type="error" class="backups-view__notice">{{ error }}</v-alert>
+
+    <div class="backups-view__body d-flex">
+      <div class="backups-view__table">
+        <EmptyState
+          v-if="!connectionId"
+          icon="mdi-archive-off-outline"
+          title="Sin conexión"
+          description="Abre esta vista desde una conexión."
+        />
+        <EmptyState
+          v-else-if="!loading && !files.length"
+          icon="mdi-archive-outline"
+          title="No hay copias de seguridad"
+          :description="`No se encontraron archivos .nb3 en ${connection?.backupDir || 'la carpeta de copias'}${schemaFilter ? ` para ${schemaFilter}` : ''}.`"
+        >
+          <v-btn
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-archive-plus-outline"
+            @click="newBackup"
+            >Nueva copia</v-btn
+          >
+        </EmptyState>
+        <v-data-table
+          v-else
+          v-model:sort-by="sortBy"
+          v-model:page="page"
+          :headers="headers"
+          :items="files"
+          :search="search"
+          :loading="loading"
+          item-value="path"
+          density="compact"
+          :items-per-page="PAGE_SIZE"
+          hover
+          fixed-header
+          class="backups-view__grid"
+          loading-text="Buscando copias…"
+          no-data-text="Sin resultados"
+          :row-props="
+            ({ item }) => ({
+              class: item.path === selectedPath ? 'bg-surface-variant' : '',
+              'data-test': 'backup-row'
+            })
+          "
+          @click:row="onRowClick"
+        >
+          <template #[`item.fileName`]="{ item }">
+            <div class="backups-view__name">
+              <v-icon
+                icon="mdi-archive-outline"
+                size="16"
+                class="backups-view__file-icon"
+                aria-hidden="true"
+              />
+              <span class="nd-ellipsis" :title="item.path">{{ item.fileName }}</span>
+              <span
+                v-if="item.path === newestPath"
+                class="backups-view__newest"
+                title="Copia más reciente"
+                >Última</span
+              >
+            </div>
+          </template>
+          <template #[`item.schema`]="{ item }">
+            <span class="nd-mono backups-view__schema">{{ item.schema ?? '—' }}</span>
+          </template>
+          <template #[`item.sizeBytes`]="{ item }">
+            <span class="nd-num">{{ formatBytes(item.sizeBytes) }}</span>
+          </template>
+          <template #[`item.createdAt`]="{ item }">
+            <span class="nd-mono backups-view__date">{{ formatDate(item.createdAt) }}</span>
+          </template>
+          <template #[`item.source`]="{ item }">
+            <SourcePill :source="item.source" />
+          </template>
+          <template #[`item.label`]="{ item }">
+            <span v-if="item.label" class="nd-ellipsis backups-view__label" :title="item.label">{{
+              item.label
+            }}</span>
+          </template>
+          <template #bottom="{ items, pageCount }">
+            <div class="backups-view__footer" data-test="backups-footer">
+              <span class="nd-ellipsis">
+                {{ formatNumber(items.length) }} copia(s) en esta página ·
+                {{ formatNumber(files.length) }} en total
+                <template v-if="search"> · filtrado</template>
+              </span>
+              <span class="backups-view__footer-spacer" />
+              <div
+                v-if="pageCount > 1"
+                class="backups-view__pager"
+                role="navigation"
+                aria-label="Paginación"
+              >
+                <v-btn
+                  icon="mdi-page-first"
+                  size="x-small"
+                  variant="text"
+                  aria-label="Primera página"
+                  :disabled="page <= 1"
+                  @click="page = 1"
+                />
+                <v-btn
+                  icon="mdi-chevron-left"
+                  size="x-small"
+                  variant="text"
+                  aria-label="Página anterior"
+                  :disabled="page <= 1"
+                  @click="page--"
+                />
+                <span class="backups-view__page">Página {{ page }} de {{ pageCount }}</span>
+                <v-btn
+                  icon="mdi-chevron-right"
+                  size="x-small"
+                  variant="text"
+                  aria-label="Página siguiente"
+                  :disabled="page >= pageCount"
+                  @click="page++"
+                />
+                <v-btn
+                  icon="mdi-page-last"
+                  size="x-small"
+                  variant="text"
+                  aria-label="Última página"
+                  :disabled="page >= pageCount"
+                  @click="page = pageCount"
+                />
+              </div>
+            </div>
+          </template>
+        </v-data-table>
+      </div>
+      <div v-if="selected" class="backups-view__details">
+        <BackupDetailsPanel :file="selected" @close="selectedPath = null" />
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.backups-view {
+  height: 100%;
+  min-height: 0;
+}
+.nd-viewbar {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--nd-border);
+  overflow-x: auto;
+}
+.nd-viewbar :deep(.v-toolbar__content) {
+  gap: 2px;
+  height: 46px !important;
+}
+.nd-viewbar :deep(.v-toolbar__content > .v-btn) {
+  flex: none;
+}
+/* Destructive action: neutral until hovered (red only on hover). */
+.backups-view__delete.v-btn:not(.v-btn--disabled):hover,
+.backups-view__delete.v-btn:not(.v-btn--disabled):focus-visible {
+  color: var(--nd-error) !important;
+  background: var(--nd-error-soft);
+}
+.nd-viewbar__sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--nd-border-strong);
+}
+.backups-view__filter {
+  flex: 0 1 160px;
+  min-width: 120px;
+  margin-left: 4px;
+}
+.backups-view__filter :deep(.v-field__input) {
+  min-height: 30px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: var(--nd-fs-dense);
+}
+.backups-view__filter :deep(.v-field__append-inner),
+.backups-view__filter :deep(.v-field__clearable),
+.backups-view__filter :deep(.v-field__prepend-inner) {
+  padding-top: 0;
+  align-items: center;
+}
+.backups-view__notice {
+  margin: 10px 12px 0;
+  flex: 0 0 auto;
+}
+.backups-view__body {
+  flex: 1;
+  min-height: 0;
+}
+.backups-view__table {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+.backups-view__grid {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.backups-view__grid :deep(.v-table__wrapper) {
+  flex: 1 1 auto;
+}
+.backups-view__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 6px 0 12px;
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--nd-text-2);
+  border-top: 1px solid var(--nd-border);
+  background: var(--nd-bg-raised);
+}
+.backups-view__footer-spacer {
+  flex: 1 1 auto;
+}
+.backups-view__pager {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.backups-view__page {
+  margin: 0 8px;
+  color: var(--nd-text);
+  white-space: nowrap;
+}
+.backups-view__grid :deep(.backups-view__name-cell) {
+  max-width: 0;
+  width: 100%;
+}
+.backups-view__grid :deep(.backups-view__label-cell) {
+  max-width: 130px;
+}
+.backups-view__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.backups-view__file-icon {
+  flex: none;
+  color: var(--nd-text-muted);
+}
+.backups-view__newest {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 7px;
+  border-radius: var(--nd-radius-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--nd-text);
+  background: var(--nd-accent-gradient-soft);
+  box-shadow: inset 0 0 0 1px rgba(var(--nd-accent-rgb), 0.35);
+}
+.backups-view__schema,
+.backups-view__date {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+  white-space: nowrap;
+}
+.backups-view__label {
+  display: block;
+  color: var(--nd-text-2);
+}
+.backups-view__details {
+  width: 350px;
+  flex: 0 0 350px;
+  overflow: hidden;
+  border-left: 1px solid var(--nd-border);
+  background: var(--nd-bg-panel);
+}
+</style>

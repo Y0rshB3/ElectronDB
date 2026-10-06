@@ -1,0 +1,99 @@
+/*
+ * Shared Nebula chrome for the data / query / designer workspace views:
+ * an action bar on top and the content framed in a rounded panel.
+ * Imported with <style scoped src="..."> so each view keeps it scoped.
+ */
+.nd-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Action bar: ghost buttons grouped with thin separators. */
+.nd-viewbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  min-height: 46px;
+  padding: 6px 12px;
+}
+/*
+ * Bars that host RowEditActions: a size container (its secondary buttons
+ * collapse to icons when narrow) that wraps as a last resort instead of
+ * clipping Aplicar.
+ */
+.nd-viewbar--rowedit {
+  container: rowedit / inline-size;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.nd-viewbar__sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--nd-border-strong);
+}
+.nd-viewbar__spacer {
+  flex: 1 1 auto;
+}
+
+/* Framed content panel. */
+.nd-viewpanel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 12px 12px;
+  overflow: hidden;
+  background: var(--nd-bg-panel);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card);
+  box-shadow: var(--nd-shadow-inset);
+}
+.nd-viewpanel__loader {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 3;
+}
+
+/* Status pills used in the bars. */
+.nd-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--nd-radius-pill);
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--nd-text-2);
+  background: var(--nd-hover);
+  border: 1px solid var(--nd-border);
+}
+.nd-status-pill--warning {
+  color: var(--nd-warning);
+  background: var(--nd-warning-soft);
+  border-color: color-mix(in srgb, var(--nd-warning) 35%, transparent);
+}
+.nd-status-pill--info {
+  color: var(--nd-info);
+  background: var(--nd-info-soft);
+  border-color: color-mix(in srgb, var(--nd-info) 32%, transparent);
+}
+.nd-status-pill--accent {
+  color: var(--nd-accent);
+  background: var(--nd-accent-gradient-soft);
+  border-color: rgba(var(--nd-accent-rgb), 0.28);
+}
+.nd-status-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}

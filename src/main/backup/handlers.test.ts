@@ -1,0 +1,221 @@
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
+import type { ProgressEvent } from '@shared/types'
+import type { AppContext } from '../context'
+import {
+  NAVICAT_DELETE_MESSAGE,
+  OUTSIDE_DELETE_MESSAGE,
+  createBackupHandlers,
+  deleteBackupFile
+} from './handlers'
+import { createBackupService, readBackupMeta, type BackupService } from './index'
+import { getIndexCache } from './indexCache'
+import { FakeSessionFactory, connectionFixture, connectionsOf } from './testing/fakeSession'
+
+const FIXTURE = resolve('tests/fixtures/navicat/backups/demo/20260317144801-fixture.nb3')
+
+describe('backup handlers', () => {
+  let root: string
+  let own: string
+  let navicat: string
+  let ctx: AppContext
+  let events: ProgressEvent[]
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'electrondb-handlers-'))
+    own = join(root, 'own')
+    navicat = join(root, 'navicat')
+    mkdirSync(join(own, 'demo'), { recursive: true })
+    mkdirSync(join(navicat, 'demo'), { recursive: true })
+    events = []
+    ctx = {
+      userDataPath: join(root, 'userData'),
+      connections: connectionsOf(
+        connectionFixture({ backupDir: own, extraBackupDirs: [navicat] }),
+        connectionFixture({ id: 'prod', environment: 'production', backupDir: join(root, 'prod') })
+      ),
+      emit: <E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]) => {
+        if (channel === 'event:progress') events.push(payload as ProgressEvent)
+      }
+    } as unknown as AppContext
+  })
+  afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+  const handlersWith = (service: BackupService) => createBackupHandlers(ctx, async () => service)
+
+  describe('delete guard', () => {
+    it('deletes files inside a connection backupDir and forgets the cache entry', async () => {
+      const path = join(own, 'demo', '20260101000000.nb3')
+      copyFileSync(FIXTURE, path)
+      await readBackupMeta(ctx.userDataPath, path)
+      const s = statSync(path)
+      expect(
+        getIndexCache(ctx.userDataPath).get(path, { size: s.size, mtimeMs: s.mtimeMs })
+      ).not.toBeNull()
+      await deleteBackupFile(ctx.connections.list(), ctx.userDataPath, path)
+      expect(existsSync(path)).toBe(false)
+      expect(
+        getIndexCache(ctx.userDataPath).get(path, { size: s.size, mtimeMs: s.mtimeMs })
+      ).toBeNull()
+    })
+
+    it("refuses Navicat's own files, even through a symlink inside backupDir", async () => {
+      const path = join(navicat, 'demo', '20260101000000.nb3')
+      writeFileSync(path, 'x')
+      const h = handlersWith({} as BackupService)
+      await expect(h.delete(path)).rejects.toThrow(NAVICAT_DELETE_MESSAGE)
+      symlinkSync(path, join(own, 'demo', 'link.nb3'))
+      await expect(h.delete(join(own, 'demo', 'link.nb3'))).rejects.toThrow(NAVICAT_DELETE_MESSAGE)
+      expect(existsSync(path)).toBe(true)
+    })
+
+    it('refuses paths outside every backupDir, traversal and non-.nb3 files', async () => {
+      const outside = join(root, 'elsewhere.nb3')
+      writeFileSync(outside, 'x')
+      const h = handlersWith({} as BackupService)
+      await expect(h.delete(outside)).rejects.toThrow(OUTSIDE_DELETE_MESSAGE)
+      await expect(h.delete(join(own, '..', 'elsewhere.nb3'))).rejects.toThrow(
+        OUTSIDE_DELETE_MESSAGE
+      )
+      await expect(h.delete(join(own, 'demo', 'x.sql'))).rejects.toThrow(/no es un backup/)
+      await expect(h.delete('relative/x.nb3')).rejects.toThrow(/absoluta/)
+      expect(existsSync(outside)).toBe(true)
+    })
+  })
+
+  it('objectDdl joins DDL, index and trigger DDL', async () => {
+    const h = handlersWith({} as BackupService)
+    const ddl = await h.objectDdl(FIXTURE, '11111111-1111-4111-8111-111111111111')
+    expect(ddl).toMatch(/^CREATE TABLE `account`/)
+  })
+
+  it('meta is cached by path|size|mtime', async () => {
+    const path = join(own, 'demo', '20260101000000.nb3')
+    copyFileSync(FIXTURE, path)
+    const h = handlersWith({} as BackupService)
+    const first = await h.meta(path)
+    expect(first.objects).toHaveLength(3)
+    const s = statSync(path)
+    getIndexCache(ctx.userDataPath).set(
+      path,
+      { size: s.size, mtimeMs: s.mtimeMs },
+      { ...first, comment: 'desde caché' }
+    )
+    expect((await h.meta(path)).comment).toBe('desde caché')
+  })
+
+  it('create forwards progress with operationId and a final done event', async () => {
+    const service = createBackupService(
+      ctx,
+      new FakeSessionFactory({
+        tables: [{ name: 't', columns: [{ name: 'id', columnType: 'int' }], rows: [[1]] }]
+      })
+    )
+    const h = handlersWith(service)
+    const result = await h.create('op-1', {
+      connectionId: 'conn-1',
+      schema: 'demo',
+      includeData: true
+    })
+    expect(result.rows).toBe(1)
+    expect(events.every((e) => e.operationId === 'op-1' && e.kind === 'backup')).toBe(true)
+    expect(events.filter((e) => e.done)).toHaveLength(1)
+    expect(events[events.length - 1]).toMatchObject({ done: true, phase: 'done' })
+    expect(h.running()).toEqual([])
+  })
+
+  it('restore emits done:true with the error when it fails (production guard)', async () => {
+    const service = createBackupService(ctx, new FakeSessionFactory())
+    const h = handlersWith(service)
+    await expect(
+      h.restore('op-2', {
+        backupPath: FIXTURE,
+        connectionId: 'prod',
+        targetSchema: 'x',
+        createSchema: true,
+        dropObjectsFirst: false,
+        includeStructure: true,
+        includeData: true,
+        continueOnError: false
+      })
+    ).rejects.toThrow(/producción/)
+    expect(events).toEqual([
+      expect.objectContaining({
+        operationId: 'op-2',
+        kind: 'restore',
+        done: true,
+        error: expect.stringMatching(/producción/)
+      })
+    ])
+  })
+
+  it('restore that resolves with object errors flags the final event as an error', async () => {
+    const service = {
+      restore: async () => ({
+        objectsRestored: 0,
+        rowsInserted: 0,
+        errors: [{ object: 'items', message: 'boom' }],
+        durationMs: 1
+      })
+    } as unknown as BackupService
+    const h = handlersWith(service)
+    const result = await h.restore('op-4', {
+      backupPath: FIXTURE,
+      connectionId: 'conn-1',
+      targetSchema: 'x',
+      createSchema: true,
+      dropObjectsFirst: false,
+      includeStructure: true,
+      includeData: true,
+      continueOnError: false
+    })
+    expect(result.errors).toHaveLength(1)
+    expect(events[events.length - 1]).toMatchObject({
+      operationId: 'op-4',
+      done: true,
+      phase: 'error',
+      error: 'items: boom'
+    })
+  })
+
+  it('cancel aborts the running operation and rejects duplicate ids', async () => {
+    const service = {
+      create: (
+        _o: unknown,
+        progress: (e: Omit<ProgressEvent, 'operationId' | 'kind'>) => void,
+        signal: AbortSignal
+      ) =>
+        new Promise((_resolve, reject) => {
+          progress({ phase: 'object', current: 0, total: 1, message: 'x', done: false })
+          signal.addEventListener('abort', () => reject(new Error('Backup cancelado')))
+        })
+    } as unknown as BackupService
+    const h = handlersWith(service)
+    const pending = h.create('op-3', { connectionId: 'conn-1', schema: 'demo', includeData: true })
+    await new Promise((r) => setTimeout(r, 0))
+    await expect(
+      h.create('op-3', { connectionId: 'conn-1', schema: 'demo', includeData: true })
+    ).rejects.toThrow(/en curso/)
+    expect(h.running()).toEqual(['op-3'])
+    await h.cancel('op-3')
+    await expect(pending).rejects.toThrow('Backup cancelado')
+    expect(events[events.length - 1]).toMatchObject({
+      operationId: 'op-3',
+      done: true,
+      phase: 'cancelled'
+    })
+    await h.cancel('unknown')
+  })
+})

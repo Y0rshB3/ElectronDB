@@ -1,0 +1,48 @@
+appId: dev.y0rshb3.electrondb
+productName: ElectronDB
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  # ssh2's optional native bindings are built for the local Node ABI (and OS), never for
+  # Electron. They cannot load in the packaged app and ssh2 falls back to pure JS, so they
+  # are left out to keep cross-platform builds free of foreign binaries.
+  - '!**/node_modules/cpu-features/**'
+  - '!**/node_modules/ssh2/lib/protocol/crypto/build/**'
+asarUnpack:
+  - node_modules/ssh2/**
+# Do not rebuild native modules for Electron: the only ones (ssh2 accelerators) are optional,
+# and rebuilding them would require compilers (Visual Studio Build Tools, Xcode CLT, make).
+npmRebuild: false
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Ad-hoc signature ('-'): no Apple certificate, but the whole bundle gets a valid signature.
+  # With `null` the bundle keeps Electron's linker-only signature, fails `codesign --verify`
+  # and a downloaded copy is reported as "damaged" on Apple Silicon. Ad-hoc signing needs
+  # hardenedRuntime off (library validation would reject Electron's pre-signed frameworks).
+  identity: '-'
+  hardenedRuntime: false
+  extendInfo:
+    NSAppleEventsUsageDescription: ElectronDB schedules backup jobs through launchd.
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  maintainer: Y0rshB3 <Y0rshB3@users.noreply.github.com>
+  synopsis: Cliente MySQL de escritorio compatible con datos de Navicat

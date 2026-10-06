@@ -1,0 +1,767 @@
+/*
+ * Nebula skin for Vuetify components. Selectors are prefixed with `html` so
+ * they beat Vuetify's own rules even when a lazily loaded view chunk injects
+ * component CSS later, while any scoped/area rule with one more class still
+ * wins. Use tokens only.
+ */
+
+/* ---------- Typography helpers ---------- */
+html .text-h1,
+html .text-h2,
+html .text-h3,
+html .text-h4,
+html .text-h5,
+html .text-h6,
+html .text-subtitle-1,
+html .text-subtitle-2,
+html .text-body-1,
+html .text-body-2,
+html .text-caption,
+html .text-overline,
+html .text-button {
+  font-family: var(--nd-font-ui) !important;
+  letter-spacing: normal !important;
+}
+html .text-h5,
+html .text-h6,
+html .text-subtitle-1,
+html .text-subtitle-2 {
+  font-weight: var(--nd-fw-heading) !important;
+}
+html .text-h6 {
+  font-size: var(--nd-fs-title) !important;
+}
+html .text-overline,
+html .text-button {
+  text-transform: none !important;
+}
+html .text-medium-emphasis {
+  color: var(--nd-text-2) !important;
+  opacity: 1;
+}
+html .text-disabled {
+  color: var(--nd-text-muted) !important;
+  opacity: 1;
+}
+
+/* ---------- Buttons ---------- */
+html .v-btn {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  font-size: var(--nd-fs-base);
+  border-radius: var(--nd-radius-control);
+  transition:
+    background-color var(--nd-dur) var(--nd-ease),
+    box-shadow var(--nd-dur) var(--nd-ease),
+    color var(--nd-dur) var(--nd-ease),
+    opacity var(--nd-dur) var(--nd-ease),
+    transform var(--nd-dur) var(--nd-ease);
+}
+html .v-btn--size-small {
+  font-size: var(--nd-fs-dense);
+}
+html .v-btn--size-x-small {
+  font-size: var(--nd-fs-xs);
+}
+html .v-btn--icon {
+  border-radius: var(--nd-radius-control);
+}
+html .v-btn--icon.v-btn--density-default,
+html .v-btn--icon.v-btn--density-comfortable {
+  border-radius: var(--nd-radius-control);
+}
+html .v-btn--rounded,
+html .v-btn--icon.v-btn--rounded {
+  border-radius: var(--nd-radius-pill);
+}
+html .v-btn .v-btn__overlay {
+  background: currentColor;
+}
+html .v-btn:hover > .v-btn__overlay {
+  opacity: 0.08;
+}
+html .v-btn--variant-text,
+html .v-btn--variant-plain {
+  color: var(--nd-text);
+}
+html .v-btn--variant-outlined {
+  border-color: var(--nd-border-strong);
+}
+html .v-btn--variant-tonal {
+  background: var(--nd-hover);
+}
+html .v-btn--variant-tonal > .v-btn__underlay {
+  opacity: 0;
+}
+html .v-btn--variant-tonal.text-primary {
+  background: var(--nd-accent-gradient-soft);
+  color: var(--nd-text) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--nd-accent-rgb), 0.22);
+}
+
+/* Filled primary = the single gradient call to action of a view. */
+html .v-btn.bg-primary:not(.v-btn--disabled) {
+  background-color: transparent !important;
+  background-image: var(--nd-accent-gradient) !important;
+  color: var(--nd-on-accent) !important;
+  font-weight: 600;
+  box-shadow:
+    var(--nd-shadow-inset),
+    0 4px 14px rgba(var(--nd-violet-rgb), 0.22);
+}
+html .v-btn.bg-primary:not(.v-btn--disabled):hover {
+  box-shadow: var(--nd-glow);
+  transform: translateY(-1px);
+}
+html .v-btn.bg-primary:not(.v-btn--disabled):focus-visible {
+  box-shadow: var(--nd-glow);
+}
+
+/* Filled destructive buttons only appear inside confirmations: give them a red glass look. */
+html .v-btn.bg-error:not(.v-btn--disabled) {
+  background: color-mix(in srgb, var(--nd-error) 88%, black) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(248, 113, 113, 0.25);
+}
+html .v-btn.bg-error:not(.v-btn--disabled):hover {
+  box-shadow: var(--nd-glow-error);
+}
+html .v-btn.bg-warning:not(.v-btn--disabled) {
+  color: #1a1203 !important;
+}
+
+/* Ghost destructive actions turn red on hover only. */
+html .v-btn--variant-text.text-error:not(:hover):not(:focus-visible) {
+  color: var(--nd-text) !important;
+}
+
+html .v-btn--disabled {
+  opacity: 1;
+}
+html .v-btn--disabled.v-btn--variant-text,
+html .v-btn--disabled.v-btn--variant-plain,
+html .v-btn--disabled.v-btn--variant-outlined,
+html .v-btn--disabled.v-btn--variant-tonal {
+  color: var(--nd-text-disabled) !important;
+}
+html .v-btn--disabled.v-btn--variant-flat,
+html .v-btn--disabled.v-btn--variant-elevated {
+  background: var(--nd-hover) !important;
+  color: var(--nd-text-disabled) !important;
+  box-shadow: none !important;
+}
+html .v-btn--disabled > .v-btn__overlay {
+  opacity: 0 !important;
+}
+
+html .v-btn-toggle,
+html .v-btn-group {
+  border-radius: var(--nd-radius-control);
+  background: var(--nd-bg-sunken);
+  border: 1px solid var(--nd-border);
+  padding: 2px;
+  gap: 2px;
+  height: auto;
+}
+html .v-btn-group .v-btn {
+  border-radius: var(--nd-radius-sm) !important;
+  height: 28px;
+}
+html .v-btn-group .v-btn.v-btn--active {
+  background: var(--nd-bg-raised);
+  box-shadow:
+    var(--nd-shadow-1),
+    inset 0 0 0 1px var(--nd-border-strong);
+}
+html .v-btn-group .v-btn.v-btn--active > .v-btn__overlay {
+  opacity: 0;
+}
+
+/* ---------- Inputs ---------- */
+html .v-input--density-compact {
+  --v-input-control-height: 34px;
+  --v-input-padding-top: 6px;
+}
+html .v-input--density-compact .v-field--variant-outlined,
+html .v-input--density-compact .v-field--single-line,
+html .v-input--density-compact .v-field--no-label {
+  --v-field-padding-bottom: 6px;
+}
+html .v-field {
+  font-size: var(--nd-fs-base);
+  border-radius: var(--nd-radius-control);
+  transition:
+    box-shadow var(--nd-dur) var(--nd-ease),
+    background-color var(--nd-dur) var(--nd-ease);
+}
+html .v-field__input {
+  letter-spacing: normal;
+}
+html .v-field--variant-outlined {
+  background: var(--nd-bg-input);
+}
+html .v-field--variant-outlined .v-field__outline {
+  --v-field-border-opacity: 1;
+  color: var(--nd-border-strong);
+}
+html .v-field--variant-outlined:hover .v-field__outline {
+  color: rgba(148, 163, 184, 0.32);
+}
+html .v-field--variant-outlined.v-field--focused .v-field__outline {
+  color: var(--nd-accent);
+  --v-field-border-width: 1px;
+}
+html .v-field--variant-outlined.v-field--focused {
+  box-shadow: var(--nd-glow);
+}
+html .v-field--variant-outlined .v-field__outline__start {
+  border-radius: var(--nd-radius-control) 0 0 var(--nd-radius-control);
+}
+html .v-field--variant-outlined .v-field__outline__end {
+  border-radius: 0 var(--nd-radius-control) var(--nd-radius-control) 0;
+}
+html .v-field--error.v-field--variant-outlined .v-field__outline {
+  color: var(--nd-error);
+}
+html .v-field--error.v-field--focused {
+  box-shadow: var(--nd-glow-error);
+}
+html .v-field--variant-solo,
+html .v-field--variant-solo-filled,
+html .v-field--variant-filled {
+  background: var(--nd-bg-input);
+  box-shadow: inset 0 0 0 1px var(--nd-border);
+}
+html .v-field--variant-filled .v-field__overlay,
+html .v-field--variant-solo-filled .v-field__overlay {
+  opacity: 0 !important;
+}
+html .v-field-label {
+  color: var(--nd-text-2);
+  letter-spacing: normal;
+  opacity: 1;
+}
+html .v-field--focused .v-field-label {
+  color: var(--nd-accent);
+}
+/* Floating labels default to 0.75em (~9.75px); keep them readable and in
+   secondary text so they clearly belong to their own field. */
+html .v-label.v-field-label--floating {
+  --v-field-label-scale: var(--nd-fs-label);
+  font-size: var(--nd-fs-label);
+  font-weight: 500;
+  color: var(--nd-text-2);
+}
+html .v-field--focused .v-label.v-field-label--floating {
+  color: var(--nd-accent);
+}
+html .v-field--error:not(.v-field--disabled) .v-label.v-field-label--floating {
+  color: var(--nd-error);
+}
+
+/* Stacked form rows (<v-row dense>): Vuetify's 8px gap is swallowed by the
+   floating label of the next row, so use the form row-gap token instead. */
+html .v-row--dense {
+  margin-top: calc(var(--nd-form-row-gap) / -2);
+  margin-bottom: calc(var(--nd-form-row-gap) / -2);
+}
+html .v-row--dense > .v-col,
+html .v-row--dense > [class*='v-col-'] {
+  padding-top: calc(var(--nd-form-row-gap) / 2);
+  padding-bottom: calc(var(--nd-form-row-gap) / 2);
+}
+/* Utility for CSS-grid forms owned by components. */
+html .nd-form-grid {
+  display: grid;
+  row-gap: var(--nd-form-row-gap);
+  column-gap: 10px;
+}
+html .v-field__prepend-inner > .v-icon,
+html .v-field__append-inner > .v-icon,
+html .v-field__clearable > .v-icon {
+  color: var(--nd-text-muted);
+  opacity: 1;
+}
+html .v-input__details,
+html .v-messages {
+  font-size: var(--nd-fs-xs);
+  letter-spacing: normal;
+}
+html .v-messages {
+  color: var(--nd-text-muted);
+  opacity: 1;
+}
+html .v-label {
+  letter-spacing: normal;
+  font-size: var(--nd-fs-base);
+  color: var(--nd-text-2);
+  opacity: 1;
+}
+html textarea,
+html .v-textarea .v-field__input {
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-dense);
+}
+html .v-textarea.nd-ui-font .v-field__input {
+  font-family: var(--nd-font-ui);
+}
+
+/* Checkboxes, radios, switches */
+html .v-selection-control .v-label {
+  color: var(--nd-text);
+}
+html .v-checkbox .v-selection-control__input > .v-icon,
+html .v-checkbox-btn .v-selection-control__input > .v-icon {
+  color: var(--nd-text-muted);
+}
+html .v-selection-control--dirty .v-selection-control__input > .v-icon {
+  color: var(--nd-accent);
+}
+html .v-switch .v-switch__track {
+  background: var(--nd-pressed);
+  opacity: 1;
+  border: 1px solid var(--nd-border);
+}
+html .v-switch .v-selection-control--dirty .v-switch__track {
+  background: var(--nd-accent-gradient);
+  border-color: transparent;
+}
+html .v-switch .v-switch__thumb {
+  background: #f1f5f9;
+  color: #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* ---------- Menus, lists, autocompletes ---------- */
+html .v-overlay__content > .v-list,
+html .v-overlay__content > .v-card.v-menu-card,
+html .v-menu > .v-overlay__content,
+html .v-autocomplete__content,
+html .v-select__content,
+html .v-combobox__content {
+  border-radius: var(--nd-radius-card);
+}
+html .v-menu > .v-overlay__content > .v-list,
+html .v-menu > .v-overlay__content > .v-card,
+html .v-select__content > .v-list,
+html .v-autocomplete__content > .v-list,
+html .v-combobox__content > .v-list {
+  background: var(--nd-glass-strong);
+  -webkit-backdrop-filter: var(--nd-glass-blur);
+  backdrop-filter: var(--nd-glass-blur);
+  border: 1px solid var(--nd-border-strong);
+  border-radius: var(--nd-radius-card);
+  box-shadow: var(--nd-shadow-2);
+  padding: 4px;
+  color: var(--nd-text);
+}
+html .v-list {
+  background: transparent;
+  color: var(--nd-text);
+}
+html .v-list-item {
+  border-radius: var(--nd-radius-control);
+  min-height: 32px;
+  padding-inline: 10px;
+  transition: background-color var(--nd-dur-fast) var(--nd-ease);
+}
+html .v-list-item--density-compact.v-list-item--one-line {
+  min-height: 30px;
+}
+html .v-list-item-title {
+  font-size: var(--nd-fs-base);
+  font-weight: 450;
+  letter-spacing: normal;
+}
+html .v-list-item-subtitle {
+  font-size: var(--nd-fs-xs);
+  letter-spacing: normal;
+  color: var(--nd-text-2);
+  opacity: 1;
+}
+html .v-list-item:hover > .v-list-item__overlay {
+  opacity: 0.06;
+}
+html .v-list-item--active > .v-list-item__overlay {
+  opacity: 0 !important;
+}
+html .v-list-item--active {
+  background: var(--nd-selected);
+  color: var(--nd-text);
+}
+html .v-list-item__prepend > .v-icon {
+  color: var(--nd-text-2);
+  opacity: 1;
+}
+html .v-list-item__prepend > .v-icon ~ .v-list-item__spacer {
+  width: 10px;
+}
+html .v-list-subheader {
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  color: var(--nd-text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* ---------- Tooltips ---------- */
+html .v-tooltip > .v-overlay__content {
+  background: var(--nd-glass-strong);
+  -webkit-backdrop-filter: var(--nd-glass-blur);
+  backdrop-filter: var(--nd-glass-blur);
+  color: var(--nd-text);
+  border: 1px solid var(--nd-border-strong);
+  border-radius: var(--nd-radius-control);
+  box-shadow: var(--nd-shadow-1);
+  font-size: var(--nd-fs-dense);
+  padding: 5px 10px;
+}
+
+/* ---------- Cards & sheets ---------- */
+html .v-card {
+  border-radius: var(--nd-radius-card);
+  color: var(--nd-text);
+}
+html .v-card--variant-elevated,
+html .v-card--variant-flat {
+  background: var(--nd-bg-panel);
+  border: 1px solid var(--nd-border);
+  box-shadow: var(--nd-shadow-1);
+}
+html .v-card--variant-outlined {
+  border-color: var(--nd-border);
+  background: transparent;
+}
+html .v-card--variant-tonal {
+  background: var(--nd-hover);
+}
+html .v-card-title {
+  font-size: var(--nd-fs-title);
+  font-weight: var(--nd-fw-heading);
+  letter-spacing: normal;
+  line-height: 1.35;
+  padding: 16px 20px 8px;
+}
+html .v-card-subtitle {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+  opacity: 1;
+  letter-spacing: normal;
+}
+html .v-card-text {
+  font-size: var(--nd-fs-base);
+  letter-spacing: normal;
+  padding: 12px 20px;
+}
+html .v-card-actions {
+  padding: 12px 16px;
+  gap: 8px;
+  min-height: 56px;
+}
+html .v-sheet {
+  color: var(--nd-text);
+}
+html .v-sheet.bg-surface-variant {
+  background: var(--nd-bg-raised) !important;
+  border: 1px solid var(--nd-border);
+  color: var(--nd-text) !important;
+}
+html .v-divider {
+  border-color: var(--nd-border);
+  opacity: 1;
+}
+html .v-toolbar {
+  background: transparent;
+  color: var(--nd-text);
+}
+html .v-toolbar-title {
+  font-size: var(--nd-fs-title);
+  font-weight: var(--nd-fw-heading);
+}
+
+/* ---------- Dialogs ---------- */
+html .v-overlay__scrim {
+  background: var(--nd-scrim);
+  opacity: 1;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+html .v-dialog > .v-overlay__content > .v-card,
+html .v-dialog > .v-overlay__content > form > .v-card,
+html .v-dialog > .v-overlay__content > .v-sheet {
+  background: var(--nd-glass-strong);
+  -webkit-backdrop-filter: blur(22px) saturate(1.1);
+  backdrop-filter: blur(22px) saturate(1.1);
+  border: 1px solid var(--nd-border-strong);
+  border-radius: var(--nd-radius-card);
+  box-shadow: var(--nd-shadow-2), var(--nd-shadow-inset);
+}
+html .v-dialog > .v-overlay__content > .v-card > .v-card-title {
+  padding: 18px 20px 6px;
+}
+html .v-dialog > .v-overlay__content > .v-card > .v-card-actions {
+  border-top: 1px solid var(--nd-hairline);
+  padding: 12px 20px;
+}
+
+/* ---------- Tabs (pill / segmented) ---------- */
+html .v-tabs {
+  --v-tabs-height: 34px;
+}
+html .v-tab.v-tab.v-btn {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  font-size: var(--nd-fs-base);
+  min-width: 0;
+  padding: 0 14px;
+  color: var(--nd-text-2);
+  border-radius: var(--nd-radius-control);
+}
+html .v-tab.v-tab--selected {
+  color: var(--nd-text);
+}
+html .v-tab.v-tab--selected > .v-btn__overlay,
+html .v-tab.v-tab--selected > .v-btn__underlay {
+  opacity: 0;
+}
+html .v-tab .v-tab__slider {
+  background: var(--nd-accent-gradient-h);
+  height: 2px;
+  border-radius: 2px;
+}
+html .v-tab.v-tab--selected .v-tab__slider {
+  box-shadow: 0 0 10px rgba(var(--nd-accent-rgb), 0.45);
+}
+html .v-tabs .v-slide-group__container {
+  contain: none;
+}
+html .v-window {
+  color: var(--nd-text);
+}
+
+/* ---------- Chips ---------- */
+html .v-chip {
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  letter-spacing: normal;
+  border-radius: var(--nd-radius-pill);
+}
+html .v-chip.v-chip--size-small {
+  --v-chip-height: 22px;
+  font-size: var(--nd-fs-xs);
+}
+html .v-chip.v-chip--size-x-small {
+  --v-chip-height: 18px;
+  font-size: 10.5px;
+}
+html .v-chip--variant-tonal > .v-chip__underlay {
+  opacity: 0.14;
+}
+html .v-chip--variant-tonal {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 22%, transparent);
+}
+html .v-chip--variant-outlined {
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+/* ---------- Data tables ---------- */
+html .v-table {
+  background: transparent;
+  color: var(--nd-text);
+  font-size: var(--nd-fs-dense);
+  --v-table-header-height: 32px;
+  --v-table-row-height: var(--nd-row-h);
+}
+html .v-table.v-table--density-compact {
+  --v-table-header-height: 32px;
+  --v-table-row-height: var(--nd-row-h);
+}
+html .v-table > .v-table__wrapper > table > thead > tr > th,
+html .v-table > .v-table__wrapper > table > tbody > tr > th,
+html .v-table > .v-table__wrapper > table > tfoot > tr > th {
+  font-size: var(--nd-fs-small);
+  font-weight: 600;
+  color: var(--nd-text-2);
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  background: var(--nd-bg-panel);
+  border-bottom: 1px solid var(--nd-border) !important;
+}
+html .v-table > .v-table__wrapper > table > tbody > tr > td,
+html .v-table > .v-table__wrapper > table > thead > tr > td,
+html .v-table > .v-table__wrapper > table > tfoot > tr > td,
+html .v-table > .v-table__wrapper > table > tbody > tr > th,
+html .v-table > .v-table__wrapper > table > thead > tr > th,
+html .v-table > .v-table__wrapper > table > tfoot > tr > th {
+  padding: 0 12px;
+  transition: background-color var(--nd-dur-fast) var(--nd-ease);
+}
+html .v-table > .v-table__wrapper > table > tbody > tr:not(:last-child) > td,
+html .v-table > .v-table__wrapper > table > tbody > tr:not(:last-child) > th {
+  border-bottom: 1px solid var(--nd-hairline) !important;
+}
+html .v-table > .v-table__wrapper > table > tbody > tr:hover > td {
+  background: var(--nd-hover);
+}
+html .v-table.v-table--fixed-header > .v-table__wrapper > table > thead > tr > th {
+  background: var(--nd-bg-panel);
+  box-shadow: inset 0 -1px 0 var(--nd-border);
+}
+html .v-data-table-header__content {
+  font-weight: 600;
+}
+html .v-data-table-header__sort-icon {
+  color: var(--nd-text-muted);
+}
+html .v-data-table__tr--clickable {
+  cursor: default;
+}
+html .v-data-table-footer {
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+  padding: 4px 8px;
+}
+html .v-data-table .bg-surface-variant > td,
+html .v-table tr.bg-surface-variant > td {
+  background: var(--nd-selected) !important;
+}
+html .v-data-table tr.bg-surface-variant > td:first-child,
+html .v-table tr.bg-surface-variant > td:first-child {
+  box-shadow: inset 2px 0 0 var(--nd-cyan);
+}
+html .v-data-table .v-data-table__td.v-data-table-column--align-end,
+html .v-data-table .v-data-table__td.v-data-table-column--align-end * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Progress ---------- */
+html .v-progress-linear {
+  border-radius: var(--nd-radius-pill);
+}
+html .v-progress-linear .v-progress-linear__background {
+  opacity: 0.12 !important;
+}
+html .v-progress-linear .v-progress-linear__determinate.bg-primary,
+html .v-progress-linear .v-progress-linear__indeterminate .bg-primary,
+html
+  .v-progress-linear
+  .v-progress-linear__indeterminate.bg-primary
+  .v-progress-linear__indeterminate,
+html .v-progress-linear.text-primary .v-progress-linear__determinate,
+html .v-progress-linear.text-primary .v-progress-linear__indeterminate > * {
+  background: var(--nd-accent-gradient-h) !important;
+}
+html .v-progress-circular.text-primary {
+  color: var(--nd-cyan) !important;
+}
+
+/* ---------- Alerts ---------- */
+html .v-alert {
+  border-radius: var(--nd-radius-card);
+  font-size: var(--nd-fs-base);
+  letter-spacing: normal;
+}
+html .v-alert--variant-tonal {
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+html .v-alert--variant-tonal > .v-alert__underlay {
+  opacity: 0.1;
+}
+html .v-alert-title {
+  font-size: var(--nd-fs-base);
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+/* ---------- Snackbars ---------- */
+html .v-snackbar__wrapper {
+  background: var(--nd-glass-strong) !important;
+  -webkit-backdrop-filter: var(--nd-glass-blur);
+  backdrop-filter: var(--nd-glass-blur);
+  border: 1px solid var(--nd-border-strong);
+  border-radius: var(--nd-radius-card);
+  box-shadow: var(--nd-shadow-2);
+  color: var(--nd-text) !important;
+}
+html .v-snackbar__content {
+  font-size: var(--nd-fs-base);
+  letter-spacing: normal;
+}
+
+/* ---------- Expansion panels ---------- */
+html .v-expansion-panels {
+  gap: 6px;
+}
+html .v-expansion-panel {
+  background: var(--nd-bg-panel);
+  color: var(--nd-text);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card) !important;
+}
+html .v-expansion-panel::after {
+  display: none;
+}
+html .v-expansion-panel__shadow {
+  box-shadow: none;
+}
+html .v-expansion-panel-title {
+  font-size: var(--nd-fs-base);
+  font-weight: 600;
+  min-height: 40px;
+  padding: 8px 14px;
+}
+html .v-expansion-panel-title--active {
+  min-height: 40px;
+}
+html .v-expansion-panel-text__wrapper {
+  padding: 4px 14px 14px;
+}
+
+/* ---------- Badges & icons ---------- */
+html .v-badge__badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: normal;
+}
+html .v-icon.text-primary {
+  color: var(--nd-cyan) !important;
+}
+
+/* ---------- Segmented tabs (opt-in .nd-segmented, automatic inside dialogs) ---------- */
+html .v-tabs.nd-segmented,
+html .v-dialog .v-tabs {
+  --v-tabs-height: 30px;
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  margin: 4px 20px 8px;
+  padding: 2px;
+  gap: 2px;
+  background: var(--nd-bg-sunken);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-control);
+}
+html .v-tabs.nd-segmented .v-tab.v-btn,
+html .v-dialog .v-tabs .v-tab.v-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--nd-radius-sm);
+}
+html .v-tabs.nd-segmented .v-tab.v-tab--selected,
+html .v-dialog .v-tabs .v-tab.v-tab--selected {
+  background: var(--nd-bg-raised);
+  box-shadow:
+    var(--nd-shadow-1),
+    inset 0 0 0 1px var(--nd-border-strong);
+}
+html .v-tabs.nd-segmented .v-tab__slider,
+html .v-dialog .v-tabs .v-tab__slider {
+  display: none;
+}
+
+/* Floating labels of the first row would be clipped by the window's overflow. */
+html .v-dialog .v-window-item {
+  padding-top: 6px;
+}

@@ -1,0 +1,175 @@
+import type { IpcArgs, IpcChannel, IpcEventChannel, IpcEventMap, IpcResult } from '@shared/ipc'
+import type {
+  BackupCreateOptions,
+  ConnectionInput,
+  JobInput,
+  NavicatImportRequest,
+  ObjectType,
+  QueryExecuteOptions,
+  RestoreOptions,
+  RowChange,
+  TableDataRequest,
+  WriteOptions
+} from '@shared/types'
+import { errorMessage, useNotify } from './composables/useNotify'
+import { toPlain } from './utils/toPlain'
+
+export class ApiError extends Error {
+  channel: string
+  /** True once the error has been shown to the user (see `invoke`). */
+  notified = false
+  constructor(channel: string, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.channel = channel
+  }
+}
+
+function bridge() {
+  if (!window.electronDB) throw new Error('El puente IPC no está disponible (window.electronDB)')
+  return window.electronDB
+}
+
+/** Invoke without reporting errors to the global snackbar. */
+export async function invokeSilent<C extends IpcChannel>(
+  channel: C,
+  ...args: IpcArgs<C>
+): Promise<IpcResult<C>> {
+  try {
+    return await bridge().invoke(channel, ...(args.map((a) => toPlain(a)) as IpcArgs<C>))
+  } catch (err) {
+    throw new ApiError(channel, errorMessage(err))
+  }
+}
+
+/** Invoke and surface failures in the global snackbar before rethrowing. */
+export async function invoke<C extends IpcChannel>(
+  channel: C,
+  ...args: IpcArgs<C>
+): Promise<IpcResult<C>> {
+  try {
+    return await invokeSilent(channel, ...args)
+  } catch (err) {
+    useNotify().error(errorMessage(err))
+    if (err instanceof ApiError) err.notified = true
+    throw err
+  }
+}
+
+export function on<E extends IpcEventChannel>(
+  channel: E,
+  listener: (payload: IpcEventMap[E]) => void
+): () => void {
+  return bridge().on(channel, listener)
+}
+
+export function newOperationId(prefix = 'op'): string {
+  const rnd = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : Math.random().toString(36).slice(2)
+  return `${prefix}-${rnd}`
+}
+
+export const api = {
+  invoke,
+  invokeSilent,
+  on,
+  app: {
+    info: () => invoke('app:info'),
+    openPath: (path: string) => invoke('app:openPath', path),
+    showInFolder: (path: string) => invoke('app:showInFolder', path),
+    pickDirectory: (title: string) => invoke('app:pickDirectory', title),
+    pickFile: (title: string, filters?: { name: string; extensions: string[] }[]) =>
+      invoke('app:pickFile', title, filters),
+    startupNotices: () => invokeSilent('app:startupNotices'),
+    dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id)
+  },
+  settings: {
+    get: () => invoke('settings:get'),
+    update: (patch: Parameters<typeof invoke<'settings:update'>>[1]) =>
+      invoke('settings:update', patch)
+  },
+  connections: {
+    list: () => invoke('connections:list'),
+    get: (id: string) => invoke('connections:get', id),
+    save: (input: ConnectionInput) => invoke('connections:save', input),
+    delete: (id: string) => invoke('connections:delete', id),
+    test: (input: ConnectionInput, password: string | null, sshPassword: string | null) =>
+      invoke('connections:test', input, password, sshPassword),
+    setPassword: (id: string, password: string | null) =>
+      invoke('connections:setPassword', id, password),
+    hasPassword: (id: string) => invokeSilent('connections:hasPassword', id),
+    setSshPassword: (id: string, password: string | null) =>
+      invoke('connections:setSshPassword', id, password),
+    hasSshPassword: (id: string) => invokeSilent('connections:hasSshPassword', id),
+    open: (id: string) => invoke('connections:open', id),
+    close: (id: string) => invoke('connections:close', id),
+    isOpen: (id: string) => invokeSilent('connections:isOpen', id)
+  },
+  db: {
+    databases: (c: string) => invokeSilent('db:databases', c),
+    tables: (c: string, s: string) => invokeSilent('db:tables', c, s),
+    views: (c: string, s: string) => invokeSilent('db:views', c, s),
+    routines: (c: string, s: string) => invokeSilent('db:routines', c, s),
+    events: (c: string, s: string) => invokeSilent('db:events', c, s),
+    triggers: (c: string, s: string) => invokeSilent('db:triggers', c, s),
+    columns: (c: string, s: string, t: string) => invoke('db:columns', c, s, t),
+    tableStructure: (c: string, s: string, t: string) => invoke('db:tableStructure', c, s, t),
+    showCreate: (c: string, s: string, type: ObjectType, name: string) =>
+      invoke('db:showCreate', c, s, type, name),
+    tableData: (c: string, req: TableDataRequest) => invokeSilent('db:tableData', c, req),
+    applyRowChanges: (
+      c: string,
+      s: string,
+      t: string,
+      changes: RowChange[],
+      options?: WriteOptions
+    ) => invoke('db:applyRowChanges', c, s, t, changes, options),
+    execute: (c: string, sql: string, options?: QueryExecuteOptions) =>
+      invoke('db:execute', c, sql, options),
+    users: (c: string) => invoke('db:users', c),
+    dropObject: (c: string, s: string, type: ObjectType, name: string, options?: WriteOptions) =>
+      invoke('db:dropObject', c, s, type, name, options),
+    createDatabase: (
+      c: string,
+      name: string,
+      charset: string,
+      collation: string,
+      options?: WriteOptions
+    ) => invoke('db:createDatabase', c, name, charset, collation, options),
+    dropDatabase: (c: string, name: string, options?: WriteOptions) =>
+      invoke('db:dropDatabase', c, name, options),
+    charsets: (c: string) => invoke('db:charsets', c)
+  },
+  backups: {
+    list: (c: string, schema?: string | null) => invokeSilent('backups:list', c, schema),
+    meta: (path: string) => invoke('backups:meta', path),
+    objectDdl: (path: string, uuid: string) => invoke('backups:objectDdl', path, uuid),
+    create: (operationId: string, options: BackupCreateOptions) =>
+      invoke('backups:create', operationId, options),
+    restore: (operationId: string, options: RestoreOptions) =>
+      invoke('backups:restore', operationId, options),
+    delete: (path: string) => invoke('backups:delete', path),
+    cancel: (operationId: string) => invoke('backups:cancel', operationId)
+  },
+  jobs: {
+    list: () => invoke('jobs:list'),
+    get: (id: string) => invoke('jobs:get', id),
+    save: (input: JobInput, options?: WriteOptions) => invoke('jobs:save', input, options),
+    delete: (id: string) => invoke('jobs:delete', id),
+    run: (id: string, options?: WriteOptions) => invoke('jobs:run', id, options),
+    cancel: (runId: string) => invoke('jobs:cancel', runId),
+    runs: (jobId: string | null, limit?: number) => invoke('jobs:runs', jobId, limit),
+    runLog: (runId: string) => invoke('jobs:runLog', runId),
+    scheduleStatus: (id: string) => invokeSilent('jobs:scheduleStatus', id)
+  },
+  navicat: {
+    detect: (rootPath?: string | null) => invoke('navicat:detect', rootPath),
+    previewConnections: (rootPath?: string | null) =>
+      invoke('navicat:previewConnections', rootPath),
+    previewJobs: (rootPath?: string | null) => invoke('navicat:previewJobs', rootPath),
+    import: (request: NavicatImportRequest, rootPath?: string | null) =>
+      invoke('navicat:import', request, rootPath),
+    recoverPasswords: () => invoke('navicat:recoverPasswords')
+  }
+}

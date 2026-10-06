@@ -1,0 +1,39 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+release/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Local tooling, editors and OS files
+.claude/
+CLAUDE.local.md
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.*
+
+# Logs, scratch output, screenshots and test profiles
+*.log
+logs/
+tests/tmp/
+screenshots/
+shots/
+electrondb-shots/
+*.png
+*.jpg
+# App icons live in build/ and are meant to be committed
+!build/**
+
+# Real data that must never be committed: backups, keychains, keys, profile secrets
+*.nb3
+!tests/fixtures/navicat/**/*.nb3
+*.keychain
+*.keychain-db
+*.pem
+*.key
+*.p12
+credentials.json

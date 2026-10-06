@@ -1,0 +1,23 @@
+/*
+ * Path fields inside dialogs (PathPicker with the `nd-path-field` class and the
+ * `v-path-tail` directive). The directive scrolls long paths to their end while
+ * the field is unfocused; when the start is hidden the field gets
+ * `nd-path-field--clipped` and the left edge fades out so the truncation is
+ * visible. Text stops before the trailing folder icon, and the full path is
+ * exposed as a native tooltip through the `title` attribute set by each dialog.
+ */
+.nd-path-field input {
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-dense);
+  text-overflow: clip;
+  white-space: nowrap;
+  min-width: 0;
+  padding-inline-end: 8px;
+}
+.nd-path-field.nd-path-field--clipped input {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, transparent 4px, #000 40px);
+  mask-image: linear-gradient(90deg, transparent 0, transparent 4px, #000 40px);
+}
+.nd-path-field .v-field__append-inner {
+  padding-inline-start: 6px;
+}

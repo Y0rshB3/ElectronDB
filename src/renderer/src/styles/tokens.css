@@ -1,0 +1,211 @@
+/*
+ * Nebula design tokens: the only place where raw colours, radii, fonts and
+ * motion values live. Every area styles itself with var(--nd-*).
+ * The nd- prefix (tokens, utility classes) dates from the app's former name,
+ * Navidog; it is internal and intentionally kept after the ElectronDB rename.
+ *
+ * Dark is the default (declared on :root so teleported overlays inherit it);
+ * the light theme re-declares the same names under .v-theme--electrondbLight,
+ * a class Vuetify puts on v-app and on every overlay (menus, dialogs...).
+ */
+:root,
+.v-theme--electrondbDark {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --nd-bg-app: #090c13;
+  --nd-bg-panel: #0e131c;
+  --nd-bg-raised: #131a26;
+  --nd-bg-sunken: #070a10;
+  --nd-bg-input: rgba(9, 12, 19, 0.55);
+  --nd-glass: rgba(19, 26, 38, 0.72);
+  --nd-glass-strong: rgba(19, 26, 38, 0.9);
+  --nd-glass-blur: blur(14px);
+  --nd-scrim: rgba(3, 5, 10, 0.62);
+
+  /* Lines */
+  --nd-border: rgba(148, 163, 184, 0.1);
+  --nd-border-strong: rgba(148, 163, 184, 0.18);
+  --nd-hairline: rgba(148, 163, 184, 0.07);
+
+  /* Interaction fills (idle elements never glow) */
+  --nd-hover: rgba(148, 163, 184, 0.07);
+  --nd-pressed: rgba(148, 163, 184, 0.12);
+  --nd-selected: rgba(34, 211, 238, 0.09);
+  --nd-selected-strong: rgba(139, 92, 246, 0.16);
+
+  /* Accent */
+  --nd-cyan: #22d3ee;
+  --nd-violet: #8b5cf6;
+  --nd-accent: var(--nd-cyan);
+  --nd-accent-rgb: 34, 211, 238;
+  --nd-violet-rgb: 139, 92, 246;
+  --nd-accent-gradient: linear-gradient(135deg, #22d3ee 0%, #8b5cf6 100%);
+  --nd-accent-gradient-h: linear-gradient(90deg, #22d3ee 0%, #8b5cf6 100%);
+  --nd-accent-gradient-v: linear-gradient(180deg, #22d3ee 0%, #8b5cf6 100%);
+  --nd-accent-gradient-soft: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.16) 0%,
+    rgba(139, 92, 246, 0.16) 100%
+  );
+  --nd-on-accent: #061018;
+  --nd-glow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 18px rgba(34, 211, 238, 0.25);
+  --nd-glow-violet: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 0 18px rgba(139, 92, 246, 0.25);
+  --nd-glow-error: 0 0 0 1px rgba(248, 113, 113, 0.45), 0 0 22px rgba(248, 113, 113, 0.28);
+
+  /* Status */
+  --nd-success: #34d399;
+  --nd-warning: #fbbf24;
+  --nd-error: #f87171;
+  --nd-info: #38bdf8;
+  --nd-success-soft: rgba(52, 211, 153, 0.14);
+  --nd-warning-soft: rgba(251, 191, 36, 0.14);
+  --nd-error-soft: rgba(248, 113, 113, 0.14);
+  --nd-info-soft: rgba(56, 189, 248, 0.14);
+
+  /* Text */
+  --nd-text: #e6edf7;
+  --nd-text-2: #94a3b8;
+  /* Muted carries real info (helpers, counts, row numbers): >= 4.5:1 on every panel. */
+  --nd-text-muted: #7d8ba1;
+  /* Ornamental glyphs only (separators, decorative icons); never for readable text. */
+  --nd-text-decorative: #64748b;
+  /*
+   * Disabled foreground shared by every disabled control (v-btn, dock, toolbars):
+   * secondary text dimmed to ~4:1 against the panels, "clearly dimmed but legible".
+   * Icon and label share it.
+   */
+  --nd-text-disabled: color-mix(in srgb, var(--nd-text-2) 72%, transparent);
+  --nd-selection: rgba(34, 211, 238, 0.28);
+
+  /* Elevation */
+  --nd-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
+  --nd-shadow-2: 0 10px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --nd-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* Nebula background glow (<= 6% opacity) */
+  --nd-nebula-cyan: rgba(34, 211, 238, 0.06);
+  --nd-nebula-violet: rgba(139, 92, 246, 0.06);
+
+  /* Scrollbars */
+  --nd-scrollbar: rgba(148, 163, 184, 0.22);
+  --nd-scrollbar-hover: rgba(148, 163, 184, 0.38);
+
+  /* Shape */
+  --nd-radius-card: 12px;
+  --nd-radius-control: 8px;
+  --nd-radius-sm: 6px;
+  --nd-radius-pill: 999px;
+
+  /* Typography */
+  --nd-font-ui:
+    'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --nd-font-mono:
+    'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --nd-fs-base: 13px;
+  --nd-fs-dense: 12px;
+  --nd-fs-small: 11.5px;
+  --nd-fs-xs: 11px;
+  --nd-fs-title: 15px;
+  --nd-fs-heading: 18px;
+  --nd-fs-label: 11.5px; /* floating labels of outlined fields */
+  --nd-fw-heading: 600;
+
+  /* Metrics */
+  --nd-row-h: 32px;
+  --nd-control-h: 32px;
+  --nd-form-row-gap: 14px; /* vertical gap between stacked form field rows */
+  --nd-statusbar-h: 26px;
+  --nd-toolbar-h: 70px; /* keep in sync with TOOLBAR_HEIGHT (src/main/windowOptions.ts) */
+  /* Title-bar gutters: macOS traffic lights on the left (default). */
+  --nd-drag-region: 80px;
+  --nd-window-controls: 0px;
+
+  /* Motion */
+  --nd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --nd-dur-fast: 120ms;
+  --nd-dur: 150ms;
+  --nd-dur-slow: 180ms;
+}
+
+/*
+ * Windows/Linux (class set by utils/platform.ts): no traffic lights; the native
+ * window-controls overlay (min/max/close) covers one end of the toolbar, the
+ * right one on Windows. The titlebar-area-* env variables give its exact
+ * position (some Linux desktops put the buttons on the left); 140px on the
+ * right is the fallback.
+ * Also re-declared on the dark theme root, which repeats the :root metrics.
+ */
+:root.nd-window-controls,
+.nd-window-controls .v-theme--electrondbDark {
+  --nd-drag-region: max(12px, env(titlebar-area-x, 0px));
+  --nd-window-controls: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))
+  );
+}
+
+.v-theme--electrondbLight {
+  color-scheme: light;
+
+  --nd-bg-app: #f3f5fa;
+  --nd-bg-panel: #f9fafc;
+  --nd-bg-raised: #ffffff;
+  --nd-bg-sunken: #eceff5;
+  --nd-bg-input: rgba(255, 255, 255, 0.85);
+  --nd-glass: rgba(255, 255, 255, 0.72);
+  --nd-glass-strong: rgba(255, 255, 255, 0.92);
+  --nd-scrim: rgba(15, 23, 42, 0.28);
+
+  --nd-border: rgba(15, 23, 42, 0.1);
+  --nd-border-strong: rgba(15, 23, 42, 0.16);
+  --nd-hairline: rgba(15, 23, 42, 0.07);
+
+  --nd-hover: rgba(15, 23, 42, 0.045);
+  --nd-pressed: rgba(15, 23, 42, 0.08);
+  --nd-selected: rgba(8, 145, 178, 0.09);
+  --nd-selected-strong: rgba(124, 58, 237, 0.12);
+
+  --nd-cyan: #0891b2;
+  --nd-violet: #7c3aed;
+  --nd-accent: var(--nd-cyan);
+  --nd-accent-rgb: 8, 145, 178;
+  --nd-violet-rgb: 124, 58, 237;
+  --nd-accent-gradient: linear-gradient(135deg, #06b6d4 0%, #7c3aed 100%);
+  --nd-accent-gradient-h: linear-gradient(90deg, #06b6d4 0%, #7c3aed 100%);
+  --nd-accent-gradient-v: linear-gradient(180deg, #06b6d4 0%, #7c3aed 100%);
+  --nd-accent-gradient-soft: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.12) 0%,
+    rgba(124, 58, 237, 0.12) 100%
+  );
+  --nd-on-accent: #ffffff;
+  --nd-glow: 0 0 0 1px rgba(8, 145, 178, 0.35), 0 0 16px rgba(8, 145, 178, 0.18);
+  --nd-glow-violet: 0 0 0 1px rgba(124, 58, 237, 0.3), 0 0 16px rgba(124, 58, 237, 0.16);
+  --nd-glow-error: 0 0 0 1px rgba(220, 38, 38, 0.4), 0 0 18px rgba(220, 38, 38, 0.18);
+
+  --nd-success: #059669;
+  --nd-warning: #d97706;
+  --nd-error: #dc2626;
+  --nd-info: #0284c7;
+  --nd-success-soft: rgba(5, 150, 105, 0.1);
+  --nd-warning-soft: rgba(217, 119, 6, 0.1);
+  --nd-error-soft: rgba(220, 38, 38, 0.1);
+  --nd-info-soft: rgba(2, 132, 199, 0.1);
+
+  --nd-text: #0f172a;
+  --nd-text-2: #475569;
+  --nd-text-muted: #5b6a80;
+  --nd-text-decorative: #94a3b8;
+  --nd-text-disabled: color-mix(in srgb, var(--nd-text-2) 80%, transparent);
+  --nd-selection: rgba(8, 145, 178, 0.2);
+
+  --nd-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.06);
+  --nd-shadow-2: 0 12px 40px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
+  --nd-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  --nd-nebula-cyan: rgba(6, 182, 212, 0.05);
+  --nd-nebula-violet: rgba(124, 58, 237, 0.05);
+
+  --nd-scrollbar: rgba(15, 23, 42, 0.18);
+  --nd-scrollbar-hover: rgba(15, 23, 42, 0.32);
+}

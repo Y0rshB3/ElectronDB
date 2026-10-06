@@ -1,0 +1,244 @@
+/*
+ * Shared Nebula styling for the table designer grids (fields, indexes, foreign
+ * keys). Inputs look like plain text until hovered or focused.
+ */
+.designer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--nd-hairline);
+  background: var(--nd-bg-raised);
+}
+.designer-toolbar__sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 6px;
+  background: var(--nd-border-strong);
+}
+.designer-toolbar__count {
+  margin-left: auto;
+  padding-right: 6px;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-muted);
+}
+
+.designer-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text);
+}
+.designer-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 32px;
+  padding: 0 10px;
+  text-align: left;
+  font-size: var(--nd-fs-small);
+  font-weight: 600;
+  color: var(--nd-text-2);
+  white-space: nowrap;
+  background: var(--nd-bg-panel);
+  box-shadow: inset 0 -1px 0 var(--nd-border);
+}
+/*
+ * Header text lines up with the text inside the cell controls: td padding (6px)
+ * + control border (1px) + control inner padding (8px) = 15px; the first column
+ * has 10px of td padding, so 19px.
+ */
+.designer-table th:not(.text-center) {
+  padding-left: calc(6px + var(--nd-cell-text-inset));
+}
+.designer-table th:first-child:not(.text-center) {
+  padding-left: calc(10px + var(--nd-cell-text-inset));
+}
+.designer-table {
+  --nd-cell-text-inset: 9px;
+}
+.designer-table th.text-center {
+  text-align: center;
+}
+.designer-table td {
+  height: 36px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--nd-hairline);
+  transition: background-color var(--nd-dur-fast) var(--nd-ease);
+}
+.designer-table tbody tr {
+  cursor: default;
+}
+.designer-table tbody tr:hover td {
+  background: var(--nd-hover);
+}
+.designer-table tr.is-selected td {
+  background: var(--nd-selected);
+}
+.designer-table tr td:first-child {
+  padding-left: 10px;
+}
+.designer-table tr.is-selected td:first-child {
+  background-image: linear-gradient(var(--nd-cyan), var(--nd-violet));
+  background-size: 2px 100%;
+  background-repeat: no-repeat;
+  background-color: var(--nd-selected);
+}
+.designer-table tr.is-new td:first-child {
+  box-shadow: inset 2px 0 0 var(--nd-success);
+}
+.designer-table tr.is-new.is-selected td:first-child {
+  box-shadow: inset 2px 0 0 var(--nd-success);
+  background-image: none;
+}
+
+/* Inline inputs: transparent until hover / focus. */
+.designer-input {
+  width: 100%;
+  min-width: 90px;
+  height: 26px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--nd-text);
+  font: inherit;
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-dense);
+  border: 1px solid transparent;
+  border-radius: var(--nd-radius-sm);
+  outline: none;
+  transition:
+    border-color var(--nd-dur-fast) var(--nd-ease),
+    background-color var(--nd-dur-fast) var(--nd-ease),
+    box-shadow var(--nd-dur-fast) var(--nd-ease);
+}
+.designer-input::placeholder {
+  color: var(--nd-text-muted);
+  font-style: italic;
+  font-weight: 500;
+  opacity: 1;
+}
+/* An explicit NULL default is meaningful: show it in secondary text. */
+.designer-input--null-hint::placeholder {
+  color: var(--nd-text-2);
+}
+.designer-input:hover:not(:disabled) {
+  border-color: var(--nd-border-strong);
+  background: var(--nd-bg-input);
+}
+.designer-input:focus,
+.designer-input:focus-visible {
+  border-color: rgba(var(--nd-accent-rgb), 0.7);
+  background: var(--nd-bg-input);
+  box-shadow: var(--nd-glow);
+}
+.designer-input:disabled {
+  /* Dim the value but keep placeholders legible (no whole-element opacity). */
+  color: var(--nd-text-muted);
+  cursor: not-allowed;
+}
+.designer-input--short {
+  min-width: 60px;
+  width: 84px;
+}
+.designer-input--ui {
+  font-family: var(--nd-font-ui);
+}
+
+/* Native checkboxes in the accent colour. */
+.designer-table input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--nd-cyan);
+  cursor: pointer;
+}
+.designer-table input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Vuetify plain selects / comboboxes inside cells. */
+.designer-combo {
+  /* Sized to the longest type name so the chevron stays next to the value. */
+  width: 118px;
+  max-width: 100%;
+  min-width: 104px;
+  flex: 0 0 auto;
+  font-size: var(--nd-fs-dense);
+}
+.designer-select {
+  min-width: 140px;
+  font-size: var(--nd-fs-dense);
+}
+.designer-combo :deep(.v-field),
+.designer-select :deep(.v-field) {
+  --v-field-padding-start: 8px;
+  --v-field-padding-end: 4px;
+  --v-field-input-padding-top: 0;
+  --v-field-input-padding-bottom: 0;
+  --v-input-control-height: 26px;
+  min-height: 26px;
+  border-radius: var(--nd-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: var(--nd-fs-dense);
+  transition:
+    border-color var(--nd-dur-fast) var(--nd-ease),
+    background-color var(--nd-dur-fast) var(--nd-ease);
+}
+.designer-combo :deep(.v-field:hover),
+.designer-select :deep(.v-field:hover) {
+  border-color: var(--nd-border-strong);
+  background: var(--nd-bg-input);
+}
+.designer-combo :deep(.v-field--focused),
+.designer-select :deep(.v-field--focused) {
+  border-color: rgba(var(--nd-accent-rgb), 0.7);
+  background: var(--nd-bg-input);
+  box-shadow: var(--nd-glow);
+}
+.designer-combo :deep(.v-field__input),
+.designer-select :deep(.v-field__input) {
+  min-height: 26px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-dense);
+}
+.designer-combo :deep(.v-field__append-inner),
+.designer-select :deep(.v-field__append-inner) {
+  padding-top: 0;
+  padding-bottom: 0;
+  align-self: stretch;
+  align-items: center;
+}
+.designer-combo :deep(.v-field__append-inner > .v-icon),
+.designer-select :deep(.v-field__append-inner > .v-icon) {
+  margin: 0;
+  font-size: 16px;
+  color: var(--nd-text-muted);
+  opacity: 1;
+}
+.designer-select :deep(.v-chip) {
+  font-family: var(--nd-font-mono);
+  font-weight: 500;
+}
+
+.designer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px;
+  text-align: center;
+  font-size: var(--nd-fs-base);
+  color: var(--nd-text-2);
+}
+.designer-empty .v-icon {
+  color: var(--nd-accent);
+  opacity: 0.8;
+}

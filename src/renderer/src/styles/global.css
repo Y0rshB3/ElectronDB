@@ -1,0 +1,323 @@
+/*
+ * Nebula global styles: base typography, page background, scrollbars, focus,
+ * selection, reduced motion and the shared nd-* utility classes.
+ * Colours come from tokens.css only.
+ */
+
+html,
+body {
+  background: var(--nd-bg-app);
+  color: var(--nd-text);
+}
+
+body {
+  font-family: var(--nd-font-ui);
+  font-size: var(--nd-fs-base);
+  line-height: 1.45;
+  letter-spacing: normal;
+  font-feature-settings:
+    'cv11' 1,
+    'ss01' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html .v-application,
+html .v-overlay-container {
+  font-family: var(--nd-font-ui);
+  letter-spacing: normal;
+}
+
+html .v-application {
+  background: var(--nd-bg-app);
+  color: var(--nd-text);
+}
+
+/* Very subtle nebula: cyan top-left, violet bottom-right. Never intercepts input. */
+html .v-application::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 720px at -6% -12%, var(--nd-nebula-cyan), transparent 62%),
+    radial-gradient(1000px 760px at 106% 112%, var(--nd-nebula-violet), transparent 60%);
+  mix-blend-mode: screen;
+}
+html .v-theme--electrondbLight.v-application::after {
+  mix-blend-mode: multiply;
+  opacity: 0.7;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--nd-fw-heading);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+code,
+kbd,
+pre,
+samp,
+.cm-editor,
+.cm-content,
+.cm-gutters {
+  font-family: var(--nd-font-mono);
+}
+
+::selection {
+  background: var(--nd-selection);
+}
+
+/* Focus: keyboard only, accent ring with the soft glow. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: none;
+  box-shadow: var(--nd-glow);
+}
+
+/* Thin, rounded, translucent scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nd-scrollbar) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--nd-scrollbar);
+  border: 3px solid transparent;
+  border-radius: var(--nd-radius-pill);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--nd-scrollbar-hover);
+}
+
+a {
+  color: var(--nd-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Utilities ---------- */
+
+/** Translucent glass panel (cards, docks, floating bars). */
+.nd-glass {
+  background: var(--nd-glass);
+  -webkit-backdrop-filter: var(--nd-glass-blur);
+  backdrop-filter: var(--nd-glass-blur);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card);
+  box-shadow: var(--nd-shadow-inset);
+}
+
+/** Opaque raised panel when blur is not wanted (big scrolling areas). */
+.nd-panel {
+  background: var(--nd-bg-panel);
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card);
+}
+
+/** Monospace for SQL, DDL, numbers, hosts and ports. */
+.nd-mono {
+  font-family: var(--nd-font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: 'zero' 1;
+}
+
+/** Right-aligned tabular number cell. */
+.nd-num {
+  font-family: var(--nd-font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/** Text filled with the accent gradient. */
+.nd-gradient-text {
+  background: var(--nd-accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/** Accent glow for focused / active elements only. */
+.nd-glow {
+  box-shadow: var(--nd-glow);
+}
+.nd-glow-error {
+  box-shadow: var(--nd-glow-error);
+}
+
+/** 1px gradient border on any element (keeps its own background). */
+.nd-gradient-border {
+  position: relative;
+}
+.nd-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--nd-accent-gradient);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/** Single-line text with ellipsis (pair it with a title/tooltip). */
+.nd-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nd-text-2 {
+  color: var(--nd-text-2);
+}
+.nd-muted {
+  color: var(--nd-text-muted);
+}
+
+/** Small section heading inside panels (sentence case, never uppercase). */
+.nd-section-title {
+  font-size: var(--nd-fs-small);
+  font-weight: 600;
+  color: var(--nd-text-2);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/** Glowing 8px colour dot (connection colour: style="--nd-dot: #34d399"). */
+.nd-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--nd-dot, var(--nd-text-muted));
+  box-shadow: 0 0 8px var(--nd-dot, transparent);
+}
+
+/** Small environment / status pill. Modifiers: --production, --staging, --local, --info. */
+.nd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--nd-radius-pill);
+  font-size: var(--nd-fs-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--nd-text-2);
+  background: var(--nd-hover);
+  border: 1px solid var(--nd-border);
+}
+.nd-pill--production {
+  color: var(--nd-error);
+  background: var(--nd-error-soft);
+  border-color: color-mix(in srgb, var(--nd-error) 35%, transparent);
+}
+.nd-pill--staging {
+  color: var(--nd-warning);
+  background: var(--nd-warning-soft);
+  border-color: color-mix(in srgb, var(--nd-warning) 30%, transparent);
+}
+.nd-pill--local {
+  color: var(--nd-success);
+  background: var(--nd-success-soft);
+  border-color: color-mix(in srgb, var(--nd-success) 30%, transparent);
+}
+.nd-pill--info {
+  color: var(--nd-info);
+  background: var(--nd-info-soft);
+  border-color: color-mix(in srgb, var(--nd-info) 30%, transparent);
+}
+
+/** Header icon inside a gradient-tinted circle (dialogs, empty states). */
+.nd-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--nd-accent);
+  background: var(--nd-accent-gradient-soft);
+  border: 1px solid rgba(var(--nd-accent-rgb), 0.25);
+}
+.nd-icon-badge--danger {
+  color: var(--nd-error);
+  background: var(--nd-error-soft);
+  border-color: color-mix(in srgb, var(--nd-error) 40%, transparent);
+}
+
+/** Thin gradient progress bar: <div class="nd-progress"><span style="width:40%"/></div>. */
+.nd-progress {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: var(--nd-hairline);
+  border-radius: var(--nd-radius-pill);
+}
+.nd-progress > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--nd-accent-gradient-h);
+  border-radius: inherit;
+  transition: width var(--nd-dur) var(--nd-ease);
+}
+
+/** Standard hover/active transition. */
+.nd-transition {
+  transition:
+    background-color var(--nd-dur) var(--nd-ease),
+    border-color var(--nd-dur) var(--nd-ease),
+    box-shadow var(--nd-dur) var(--nd-ease),
+    color var(--nd-dur) var(--nd-ease),
+    opacity var(--nd-dur) var(--nd-ease),
+    transform var(--nd-dur) var(--nd-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/** Production / destructive confirmation card: red glass border with glow. */
+.nd-danger-card {
+  border: 1px solid color-mix(in srgb, var(--nd-error) 55%, transparent) !important;
+  box-shadow: var(--nd-glow-error), var(--nd-shadow-2) !important;
+}
