@@ -310,6 +310,23 @@ export interface BackupFile {
   source: 'navicat' | 'electrondb' | 'unknown'
   /** Free-text suffix parsed from Navicat names like 20260317145120-staging.nb3 */
   label: string | null
+  /**
+   * The automation run whose backup step wrote this file (matched by path in
+   * the run history; no archive is opened). Absent/null: not written by a job.
+   */
+  run?: BackupRunRef | null
+}
+
+/** Backup step of a job run that produced a file. */
+export interface BackupRunRef {
+  runId: string
+  jobId: string
+  jobName: string
+  /** When the run started (ISO). */
+  startedAt: string
+  taskId: string
+  /** False when the step copied the structure only. */
+  includeData: boolean
 }
 
 export interface BackupCreateOptions {
@@ -343,6 +360,14 @@ export interface RestoreOptions {
   /** Object names to restore; empty = all. */
   objects?: string[]
   continueOnError: boolean
+  /**
+   * REPLACE the whole database (DROP + CREATE DATABASE, then every object
+   * with its data): it ends up exactly like the backup. Ignores objects,
+   * createSchema, dropObjectsFirst, includeStructure and includeData.
+   */
+  replaceSchema?: boolean
+  /** With replaceSchema: back up the current database first (default true). */
+  safetyBackup?: boolean
   /** Required when the target connection is flagged production. */
   confirmProduction?: boolean
 }
@@ -352,21 +377,43 @@ export interface RestoreResult {
   rowsInserted: number
   errors: { object: string; message: string }[]
   durationMs: number
+  /** replaceSchema: safety copy of the database that was replaced (null = none taken). */
+  safetyBackupPath?: string | null
 }
 
 /* ---------- Automation ---------- */
 
-export type JobTaskType = 'backupschema' | 'runquery'
+export type JobTaskType = 'backupschema' | 'runquery' | 'restoreschema'
+
+/**
+ * Where a restore step ('restoreschema') takes its .nb3 from:
+ * - `task`: the file produced in the same run by an earlier backup step of the job;
+ * - `latest`: the newest backup of `schema` from `connectionId` found on disk;
+ * - `file`: one explicit file (used by «Restaurar todo» from the run history, never saved in jobs).
+ */
+export type RestoreTaskSource =
+  | { kind: 'task'; taskId: string }
+  | { kind: 'latest'; connectionId: string; schema: string }
+  | { kind: 'file'; path: string; schema: string; connectionId: string | null }
 
 export interface JobTask {
   id: string
   type: JobTaskType
+  /** Connection the step works on (for restoreschema: the TARGET connection). */
   connectionId: string
+  /**
+   * Schema the step works on. For restoreschema: the target schema, empty =
+   * same name as the source schema.
+   */
   schema: string
   referenceName: string
   /** For runquery: SQL to execute. */
   sql?: string
   includeData?: boolean
+  /** For restoreschema: backup to restore. */
+  restoreSource?: RestoreTaskSource
+  /** For restoreschema: back up the target schema before replacing it (default true). */
+  safetyBackup?: boolean
 }
 
 export interface JobSchedule {
@@ -400,7 +447,14 @@ export interface JobTaskRun {
   startedAt: string | null
   finishedAt: string | null
   message: string | null
+  /** backupschema: the .nb3 written; restoreschema: the safety backup of the target (if any). */
   outputPath: string | null
+  /** Step type, connection and schema when the run started (absent in older runs). */
+  type?: JobTaskType
+  connectionId?: string
+  schema?: string
+  /** backupschema: the copy includes rows (false = structure only). */
+  includeData?: boolean
 }
 
 export interface JobRun {
@@ -415,7 +469,86 @@ export interface JobRun {
   logPath: string
   /** Process executing the run (stale `running` runs are recovered when it no longer exists). */
   pid?: number
+  /** 'rollback': restore of the backups of another run («Restaurar todo»). Absent = job run. */
+  kind?: 'job' | 'rollback'
+  /** For rollback runs: the run whose backups were restored. */
+  rollbackOf?: string
 }
+
+/* ---------- Rollback of a run («Restaurar todo en Local») ---------- */
+
+export interface RollbackPlanItem {
+  /** Backup step of the source run. */
+  taskId: string
+  referenceName: string
+  sourceConnectionId: string | null
+  sourceConnectionName: string
+  /** Schema stored in the backup (the database that was backed up). */
+  schema: string
+  /** Database replaced on the target connection (same name as the source). */
+  targetSchema: string
+  backupPath: string
+  sizeBytes: number | null
+  /** True: exists on the target and will be REPLACED; null: unknown (target not reachable). */
+  targetExists: boolean | null
+  /** Why this database cannot be restored (missing file, other schema, encrypted...). */
+  problem: string | null
+  /** Objects and rows stored in the backup (from its manifest; null = unknown). */
+  objects: number | null
+  rows: number | null
+  /** The backup step copied the structure only: the target tables would end up empty. */
+  structureOnly: boolean
+  /** Something the user must know before restoring it (no rows...); null = nothing. */
+  warning: string | null
+}
+
+export interface RollbackPlan {
+  /** 'run': the backups of one run; 'files': backup files picked in the backups list. */
+  source?: 'run' | 'files'
+  /** Source run ('' for a file plan whose files do not all come from one run). */
+  runId: string
+  /** Job the restore is recorded under (MANUAL_ROLLBACKS_JOB_ID of shared/backupPackages for mixed files). */
+  jobId: string
+  /** Run: the job name. Files: the title of the selection («staging · 2026-10-05 23:16»). */
+  jobName: string
+  /** Run start; files: the newest file date. */
+  runStartedAt: string
+  targetConnectionId: string | null
+  items: RollbackPlanItem[]
+  /** The target connection could not be inspected; `targetExists` is then null. */
+  targetError: string | null
+}
+
+export interface RollbackRunRequest {
+  source?: 'run'
+  runId: string
+  targetConnectionId: string
+  /** Backup steps of the run to restore (subset of the plan items). */
+  taskIds: string[]
+  /** Back up each existing target database before replacing it. */
+  safetyBackup: boolean
+}
+
+/**
+ * Backup files to restore (a package or files picked by hand in the backups
+ * list). Each one must live in a backup folder of a known connection.
+ */
+export interface RollbackFilesSource {
+  source: 'files'
+  backupPaths: string[]
+  /** Connection whose backups list the files were picked from. */
+  sourceConnectionId: string
+  /** What the user selected, for the dialog and the run name (package title). */
+  title?: string
+}
+
+export interface RollbackFilesRequest extends RollbackFilesSource {
+  targetConnectionId: string
+  /** Back up each existing target database before replacing it. */
+  safetyBackup: boolean
+}
+
+export type RollbackRequest = RollbackRunRequest | RollbackFilesRequest
 
 /* ---------- Navicat import ---------- */
 

@@ -161,6 +161,88 @@ describe('backup handlers', () => {
     ])
   })
 
+  it('restore with replaceSchema replaces the whole database (undo of a rollback) through service.replace', async () => {
+    const replaced: unknown[] = []
+    const service = {
+      readMeta: async () => ({ schema: 'demo' }),
+      restore: async () => {
+        throw new Error('objects restore must not be used')
+      },
+      replace: async (request: unknown, hooks: { progress?: (s: string, e: unknown) => void }) => {
+        replaced.push(request)
+        hooks.progress?.('safety', {
+          phase: 'object',
+          current: 0,
+          total: 1,
+          message: 'demo',
+          done: false
+        })
+        return {
+          existed: true,
+          connectionName: 'Local',
+          safetyBackup: {
+            path: '/b/demo/x-previo-rollback.nb3',
+            sizeBytes: 1,
+            objects: 1,
+            rows: 1,
+            durationMs: 1
+          },
+          charset: null,
+          restore: { objectsRestored: 2, rowsInserted: 5, errors: [], durationMs: 3 }
+        }
+      }
+    } as unknown as BackupService
+    const h = handlersWith(service)
+    const result = await h.restore('op-r', {
+      backupPath: FIXTURE,
+      connectionId: 'conn-1',
+      targetSchema: 'demo',
+      createSchema: true,
+      dropObjectsFirst: true,
+      includeStructure: true,
+      includeData: false,
+      objects: ['ignored'],
+      continueOnError: false,
+      replaceSchema: true,
+      safetyBackup: true
+    })
+    expect(replaced).toEqual([
+      {
+        backupPath: FIXTURE,
+        expectedSchema: 'demo',
+        connectionId: 'conn-1',
+        targetSchema: 'demo',
+        safetyBackup: true,
+        continueOnError: false
+      }
+    ])
+    expect(result).toMatchObject({
+      objectsRestored: 2,
+      safetyBackupPath: '/b/demo/x-previo-rollback.nb3'
+    })
+    expect(events[0]).toMatchObject({ operationId: 'op-r', message: 'Copia previa · demo' })
+    expect(events.at(-1)).toMatchObject({ done: true, phase: 'done' })
+  })
+
+  it('replaceSchema on production still needs confirmProduction (real service, nothing touched)', async () => {
+    const sessions = new FakeSessionFactory()
+    const service = createBackupService(ctx, sessions)
+    const h = handlersWith(service)
+    await expect(
+      h.restore('op-rp', {
+        backupPath: FIXTURE,
+        connectionId: 'prod',
+        targetSchema: 'demo',
+        createSchema: false,
+        dropObjectsFirst: false,
+        includeStructure: true,
+        includeData: true,
+        continueOnError: false,
+        replaceSchema: true
+      })
+    ).rejects.toThrow(/producción/)
+  })
+
   it('restore that resolves with object errors flags the final event as an error', async () => {
     const service = {
       restore: async () => ({

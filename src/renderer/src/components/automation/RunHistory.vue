@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { JobRun } from '@shared/types'
-import { errorMessage } from '@renderer/composables/useNotify'
+import type { JobRun, JobTaskRun } from '@shared/types'
+import { api } from '@renderer/api'
+import { useConfirm } from '@renderer/composables/useConfirm'
+import { errorMessage, useNotify } from '@renderer/composables/useNotify'
+import { useUiStore } from '@renderer/stores/ui'
 import { useJobsStore } from '@renderer/stores/jobs'
 import { useProgressStore } from '@renderer/stores/progress'
 import { describeProgress } from '@renderer/stores/progressText'
@@ -9,8 +12,10 @@ import { formatDate, formatDuration } from '@renderer/utils/format'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { revealInFinder } from '@renderer/components/backups/reveal'
 import { TRIGGER_LABELS } from './runStatus'
+import RollbackDialog from './RollbackDialog.vue'
 import RunLogPanel from './RunLogPanel.vue'
 import StatusPill from './StatusPill.vue'
+import { cancelRestorePrompt, canRollback, isSafetyCopyStep } from './rollback'
 
 const props = defineProps<{
   jobId: string | null
@@ -24,12 +29,18 @@ const emit = defineEmits<{ openLog: [run: JobRun] }>()
 
 const jobs = useJobsStore()
 const progress = useProgressStore()
+const ui = useUiStore()
+const notify = useNotify()
+const { ask } = useConfirm()
 const loading = ref(false)
 const error = ref('')
 const expanded = ref<string | null>(null)
 const logOpen = ref(false)
 const logRunId = ref<string | null>(null)
 const cancelling = ref<Record<string, boolean>>({})
+/** Run whose backups «Restaurar todo en Local» restores. */
+const rollbackRun = ref<JobRun | null>(null)
+const rollbackOpen = ref(false)
 
 const runs = computed<JobRun[]>(() => (props.jobId ? jobs.runsOf(props.jobId) : []))
 const dialogRun = computed(() =>
@@ -81,6 +92,9 @@ function openLog(run: JobRun): void {
 }
 
 async function cancelRun(run: JobRun): Promise<void> {
+  // Cancelling a restore may leave its database dropped or half restored: ask first.
+  const prompt = cancelRestorePrompt(run)
+  if (prompt && !(await ask(prompt))) return
   cancelling.value = { ...cancelling.value, [run.id]: true }
   try {
     await jobs.cancel(run.id)
@@ -88,6 +102,35 @@ async function cancelRun(run: JobRun): Promise<void> {
     // api.invoke already reported the failure in the snackbar.
   } finally {
     cancelling.value = { ...cancelling.value, [run.id]: false }
+  }
+}
+
+function openRollback(run: JobRun): void {
+  rollbackRun.value = run
+  rollbackOpen.value = true
+}
+
+/** The rollback is a run of its own: show its live log like «Ejecutar ahora» does. */
+function onRollbackStarted(run: JobRun): void {
+  openLog(run)
+}
+
+/**
+ * «Deshacer»: opens the safety copy of a replaced database in the restore
+ * dialog, in «Reemplazar la base de datos completa» mode, on its connection.
+ */
+async function undoRestore(task: JobTaskRun): Promise<void> {
+  if (!task.outputPath || !task.connectionId) return
+  try {
+    const files = await api.backups.list(task.connectionId, task.schema ?? null)
+    const file = files.find((f) => f.path === task.outputPath)
+    if (!file) {
+      notify.error(`La copia previa ya no está en la carpeta de backups: ${task.outputPath}`)
+      return
+    }
+    ui.openRestoreDialog(file, task.connectionId, { replace: true })
+  } catch (err) {
+    notify.error(`No se pudo abrir la copia previa: ${errorMessage(err)}`)
   }
 }
 
@@ -173,6 +216,13 @@ watch(() => props.jobId, reload, { immediate: true })
                 </template>
                 <span class="timeline__sep">·</span>
                 <span>{{ run.tasks.length }} paso(s)</span>
+                <span
+                  v-if="run.kind === 'rollback'"
+                  class="nd-pill nd-pill--info timeline__kind"
+                  :title="run.jobName"
+                  data-test="run-kind-rollback"
+                  >Restauración</span
+                >
               </div>
               <div v-if="isLive(run)" class="timeline__live" data-test="run-live">
                 <div class="timeline__live-info">
@@ -205,6 +255,16 @@ watch(() => props.jobId, reload, { immediate: true })
             </div>
             <div class="timeline__actions">
               <v-btn
+                v-if="canRollback(run)"
+                icon="mdi-backup-restore"
+                size="x-small"
+                variant="text"
+                aria-label="Restaurar todo en Local"
+                title="Restaurar todo en Local: reemplaza las bases de datos de esta ejecución con sus copias"
+                data-test="run-rollback"
+                @click.stop="openRollback(run)"
+              />
+              <v-btn
                 icon="mdi-text-box-outline"
                 size="x-small"
                 variant="text"
@@ -233,17 +293,58 @@ watch(() => props.jobId, reload, { immediate: true })
                   v-if="task.outputPath"
                   icon="mdi-folder-open-outline"
                   size="x-small"
-                  :title="`Mostrar en Finder: ${task.outputPath}`"
-                  aria-label="Mostrar en Finder"
+                  :title="
+                    isSafetyCopyStep(task)
+                      ? `Mostrar la copia previa en Finder: ${task.outputPath}`
+                      : `Mostrar en Finder: ${task.outputPath}`
+                  "
+                  :aria-label="
+                    isSafetyCopyStep(task)
+                      ? 'Mostrar la copia previa en Finder'
+                      : 'Mostrar en Finder'
+                  "
                   @click="revealInFinder(task.outputPath)"
                 />
               </div>
               <div v-if="task.message" class="timeline__step-message">{{ task.message }}</div>
+              <div
+                v-if="isSafetyCopyStep(task)"
+                class="timeline__safety"
+                data-test="run-safety-copy"
+              >
+                <v-icon icon="mdi-shield-check-outline" size="13" aria-hidden="true" />
+                <span class="nd-ellipsis" :title="task.outputPath ?? undefined"
+                  >Copia previa: {{ task.outputPath?.split(/[\\/]/).pop() }}</span
+                >
+                <v-btn
+                  size="x-small"
+                  variant="tonal"
+                  prepend-icon="mdi-undo-variant"
+                  class="timeline__undo"
+                  title="Deja la base de datos como estaba antes de esta restauración"
+                  data-test="run-undo-restore"
+                  @click.stop="undoRestore(task)"
+                  >Deshacer</v-btn
+                >
+              </div>
+            </li>
+            <li v-if="canRollback(run)" class="timeline__step timeline__step--action">
+              <v-btn
+                size="x-small"
+                variant="tonal"
+                color="primary"
+                prepend-icon="mdi-backup-restore"
+                data-test="run-rollback-text"
+                @click.stop="openRollback(run)"
+                >Restaurar todo en Local</v-btn
+              >
             </li>
           </ul>
         </li>
       </ol>
     </div>
+
+    <RollbackDialog v-model="rollbackOpen" :run="rollbackRun" @started="onRollbackStarted" />
 
     <v-dialog v-model="logOpen" max-width="980" scrollable>
       <v-card class="run-log-card">
@@ -475,6 +576,25 @@ watch(() => props.jobId, reload, { immediate: true })
 .timeline__step-name {
   flex: 1;
   font-size: var(--nd-fs-dense);
+}
+.timeline__step--action {
+  padding-top: 6px;
+}
+.timeline__kind {
+  height: 16px;
+  font-size: 10.5px;
+}
+.timeline__safety {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+}
+.timeline__undo {
+  flex: none;
 }
 .timeline__step-message {
   margin-top: 2px;

@@ -64,6 +64,61 @@ describe('automation service', () => {
     await expect(service.wait!('missing')).rejects.toThrow(/no existe/)
   })
 
+  it("a running rollback of a job's copies does not block the job, and is reported as an active restore", async () => {
+    const local = t.ctx.connections.get(connectionId)!
+    const job = t.ctx.jobs.save(jobInput('Backup', [backupTask('t1', connectionId, 'shop')]))
+    // A rollback whose safety copy hangs: it stays active.
+    backups.hangOn = 'shop'
+    backups.files.set('/b/shop.nb3', 'shop')
+    const sessions = fakeSessionFactory()
+    sessions.schemas.set(local.id, new Set(['shop']))
+    service = createAutomationService(t.ctx, {
+      deps: { backups, sessions, backupCharset: async () => null },
+      platform,
+      log: silentLogger
+    })
+    const rollbackJob = {
+      ...job,
+      name: 'Rollback a Local · Backup',
+      tasks: [
+        {
+          id: 'rollback-t1',
+          type: 'restoreschema' as const,
+          connectionId: local.id,
+          schema: 'shop',
+          referenceName: 'Base de datos shop: Local -> Local',
+          restoreSource: {
+            kind: 'file' as const,
+            path: '/b/shop.nb3',
+            schema: 'shop',
+            connectionId: null
+          },
+          safetyBackup: true
+        }
+      ]
+    }
+    const rb = await service.runPrepared!(rollbackJob, 'manual', {
+      kind: 'rollback',
+      rollbackOf: 'x'
+    })
+    expect(service.activeRestores!()).toEqual([
+      { runId: rb.id, jobName: 'Rollback a Local · Backup' }
+    ])
+    await expect(
+      service.runPrepared!(rollbackJob, 'manual', { kind: 'rollback', rollbackOf: 'x' })
+    ).rejects.toThrow(/Ya hay una restauración en curso/)
+    // Wait until the rollback hangs in its safety copy, then run the backup job itself.
+    for (let i = 0; i < 100 && backups.calls.length === 0; i++)
+      await new Promise((r) => setTimeout(r, 5))
+    expect(backups.calls).toHaveLength(1)
+    backups.hangOn = null
+    const own = await service.run(job.id, 'manual')
+    expect((await service.wait!(own.id)).status).toBe('success')
+    service.cancel(rb.id)
+    expect((await service.wait!(rb.id)).status).toBe('cancelled')
+    expect(service.activeRestores!()).toEqual([])
+  })
+
   it('rejects a second concurrent run of the same job and supports cancel', async () => {
     backups.hangOn = 'shop'
     const job = t.ctx.jobs.save(jobInput('Long', [backupTask('t1', connectionId, 'shop')]))

@@ -12,7 +12,13 @@ import type { AppContext } from '../context'
 import type { SessionFactory } from '../mysql/types'
 import { createBackup } from './create'
 import { getIndexCache } from './indexCache'
-import { readManifest } from './nb3/reader'
+import { readManifest, verifyBackupFile, type Nb3VerifyResult } from './nb3/reader'
+import {
+  replaceSchemaFromBackup,
+  type ReplaceHooks,
+  type ReplaceRequest,
+  type ReplaceResult
+} from './replace'
 import { restoreBackup } from './restore'
 import { listBackups } from './scan'
 
@@ -31,6 +37,14 @@ export interface BackupService {
     progress?: ProgressReporter,
     signal?: AbortSignal
   ): Promise<RestoreResult>
+  /** Full read of the archive: every checksum and gzip stream (throws when damaged). */
+  verify(path: string, signal?: AbortSignal): Promise<Nb3VerifyResult>
+  /** REPLACE restore: the database ends up equal to the backup (see replace.ts). */
+  replace(
+    request: ReplaceRequest,
+    hooks?: ReplaceHooks,
+    signal?: AbortSignal
+  ): Promise<ReplaceResult>
 }
 
 /** Reads a backup manifest, served from the persistent index cache while size and mtime are unchanged. */
@@ -58,12 +72,21 @@ export async function readBackupMeta(userDataPath: string, path: string): Promis
 }
 
 export function createBackupService(ctx: AppContext, sessions: SessionFactory): BackupService {
-  return {
+  const service: BackupService = {
     list: (connectionId, schema) => listBackups(ctx, connectionId, schema),
     readMeta: (path) => readBackupMeta(ctx.userDataPath, path),
     create: (options, progress, signal) =>
       createBackup({ connections: ctx.connections, sessions }, options, progress, signal),
     restore: (options, progress, signal) =>
-      restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal)
+      restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+    verify: (path, signal) => verifyBackupFile(path, signal),
+    replace: (request, hooks, signal) =>
+      replaceSchemaFromBackup(
+        { connections: ctx.connections, sessions, backups: service },
+        request,
+        hooks,
+        signal
+      )
   }
+  return service
 }

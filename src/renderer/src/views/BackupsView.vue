@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { BackupFile } from '@shared/types'
+import type { BackupFile, JobRun } from '@shared/types'
+import {
+  groupBackupPackages,
+  packageDate,
+  packageRestoreSource,
+  type BackupPackage
+} from '@shared/backupPackages'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useBackupsStore } from '@renderer/stores/backups'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useJobsStore } from '@renderer/stores/jobs'
 import type { WorkspaceTab } from '@renderer/stores/tabs'
 import { useUiStore } from '@renderer/stores/ui'
 import { formatBytes, formatDate, formatNumber } from '@renderer/utils/format'
@@ -11,6 +18,10 @@ import EmptyState from '@renderer/components/common/EmptyState.vue'
 import BackupDetailsPanel from '@renderer/components/backups/BackupDetailsPanel.vue'
 import SourcePill from '@renderer/components/backups/SourcePill.vue'
 import { revealInFinder } from '@renderer/components/backups/reveal'
+import GroupAutoOpen, { type TableGroup } from '@renderer/components/backups/GroupAutoOpen'
+import RollbackDialog from '@renderer/components/automation/RollbackDialog.vue'
+import RunLogPanel from '@renderer/components/automation/RunLogPanel.vue'
+import type { RollbackDialogSource } from '@renderer/components/automation/rollback'
 import {
   NAVICAT_DELETE_TOOLTIP,
   canDeleteBackup,
@@ -21,6 +32,7 @@ const props = defineProps<{ tab: WorkspaceTab }>()
 
 const backups = useBackupsStore()
 const connections = useConnectionsStore()
+const jobs = useJobsStore()
 const ui = useUiStore()
 const notify = useNotify()
 
@@ -54,12 +66,126 @@ const selected = computed<BackupFile | null>(
   () => files.value.find((f) => f.path === selectedPath.value) ?? null
 )
 const localConnection = computed(() => findLocalConnection(connections.sorted))
+
+/* ---------- Packages (files one batch produced together) ---------- */
+
+const GROUP_KEY = 'electrondb.backups.groupByPackage'
+function readGroupPreference(): boolean {
+  try {
+    return localStorage.getItem(GROUP_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+/** «Agrupar por paquete», remembered per user (default on). */
+const groupByPackage = ref(readGroupPreference())
+watch(groupByPackage, (value) => {
+  try {
+    localStorage.setItem(GROUP_KEY, value ? '1' : '0')
+  } catch {
+    /* storage unavailable: the choice lasts for this session */
+  }
+})
+/** Packages of every listed file (the schema filter does not split them). */
+const packages = computed(() => groupBackupPackages(allFiles.value))
+type BackupRow = BackupFile & { groupKey: string }
+/**
+ * Group of each row: its package, or a group of its own for single files (no
+ * header, opened automatically). Keys start with the newest date so groups
+ * sort newest first with packages and single files interleaved.
+ */
+const packageByKey = computed(() => {
+  const map = new Map<string, BackupPackage>()
+  for (const pkg of packages.value.packages) map.set(`${pkg.lastAt}|${pkg.id}`, pkg)
+  return map
+})
+const rows = computed<BackupRow[]>(() =>
+  files.value.map((f) => {
+    const pkg = packages.value.byPath.get(f.path)
+    return { ...f, groupKey: pkg ? `${pkg.lastAt}|${pkg.id}` : `${f.createdAt}|file:${f.path}` }
+  })
+)
+const groupBy = computed(() =>
+  groupByPackage.value ? [{ key: 'groupKey', order: 'desc' as const }] : []
+)
+const packageOfGroup = (group: { value: unknown }): BackupPackage | null =>
+  packageByKey.value.get(String(group.value)) ?? null
+const isSingleGroup = (group: TableGroup): boolean => !packageOfGroup(group)
+/** « · hasta 23:20» when the package spans more than one minute. */
+function untilText(pkg: BackupPackage): string {
+  const first = packageDate(pkg.firstAt)
+  const last = packageDate(pkg.lastAt)
+  if (first === last) return ''
+  return ` · hasta ${first.slice(0, 10) === last.slice(0, 10) ? last.slice(11) : last}`
+}
+
+/** Files checked for «Restaurar paquete en Local». */
+const checked = ref<string[]>([])
+const checkedSet = computed(() => new Set(checked.value))
+watch(allFiles, (list) => {
+  // Drop checks of files that are no longer listed (deleted, folder changed).
+  const present = new Set(list.map((f) => f.path))
+  if (checked.value.some((p) => !present.has(p)))
+    checked.value = checked.value.filter((p) => present.has(p))
+})
+
+/** Visible files of a package group (search and schema filter applied). */
+function groupPaths(group: { items: readonly unknown[] }): string[] {
+  return group.items
+    .map((i) => (i as { raw?: BackupRow }).raw?.path)
+    .filter((p): p is string => !!p)
+}
+function groupState(group: { items: readonly unknown[] }): 'all' | 'some' | 'none' {
+  const paths = groupPaths(group)
+  const n = paths.filter((p) => checkedSet.value.has(p)).length
+  return n === 0 ? 'none' : n === paths.length ? 'all' : 'some'
+}
+/** Checks every visible file of the package (or unchecks them when all were checked). */
+function selectPackage(group: { items: readonly unknown[] }, value?: boolean | null): void {
+  const paths = groupPaths(group)
+  const on = value ?? groupState(group) !== 'all'
+  const set = new Set(checked.value)
+  for (const p of paths) {
+    if (on) set.add(p)
+    else set.delete(p)
+  }
+  checked.value = [...set]
+}
+
+/**
+ * What «Restaurar paquete en Local» restores: the checked files, or else the
+ * package of the selected row.
+ */
+const packageSelection = computed<BackupFile[]>(() => {
+  if (checked.value.length) return allFiles.value.filter((f) => checkedSet.value.has(f.path))
+  const pkg = selected.value ? packages.value.byPath.get(selected.value.path) : null
+  return pkg ? pkg.files : []
+})
+const packageRestoreTip = computed(() => {
+  const n = packageSelection.value.length
+  const where = localConnection.value?.name ?? 'Local'
+  if (!n)
+    return `Marca las copias de un paquete (o pulsa la cabecera del paquete) para restaurarlas todas juntas en ${where}.`
+  return `Restaura en ${where} ${n === 1 ? 'la copia marcada' : `las ${n} copias`} en un solo paso: cada base de datos se reemplaza, con copia previa opcional.`
+})
+
+const rollbackOpen = ref(false)
+const rollbackSource = ref<RollbackDialogSource | null>(null)
+const logRunId = ref<string | null>(null)
+const logOpen = ref(false)
+const logRun = computed<JobRun | null>(() =>
+  logRunId.value ? (jobs.runs.find((r) => r.id === logRunId.value) ?? null) : null
+)
 const isLocalSource = computed(() => connection.value?.environment === 'local')
 
 // Name takes the remaining width and truncates; the rest never wrap. With the details
 // drawer open the schema and label columns are dropped (the drawer shows both) so names
 // stay readable.
 const headers = computed(() => [
+  // Vuetify adds a «Group» column when grouping: keep it empty and zero-width.
+  ...(groupByPackage.value
+    ? [{ title: '', key: 'data-table-group', width: 0, sortable: false }]
+    : []),
   {
     title: 'Nombre',
     key: 'fileName',
@@ -115,15 +241,44 @@ function restore(): void {
   if (selected.value) ui.openRestoreDialog(selected.value, connectionId.value)
 }
 
+const NO_LOCAL_WARNING =
+  'No hay ninguna conexión marcada como «Local». Edita una conexión y cambia su entorno a Local.'
+
 function restoreToLocal(): void {
   if (!selected.value) return
   if (!localConnection.value) {
-    notify.warning(
-      'No hay ninguna conexión marcada como «Local». Edita una conexión y cambia su entorno a Local.'
-    )
+    notify.warning(NO_LOCAL_WARNING)
     return
   }
   ui.openRestoreDialog(selected.value, localConnection.value.id)
+}
+
+/** Opens the «Restaurar todo» dialog with the selected package's databases pre-checked. */
+function restorePackageToLocal(): void {
+  if (!connectionId.value) return
+  if (!localConnection.value) {
+    notify.warning(NO_LOCAL_WARNING)
+    return
+  }
+  const source = packageRestoreSource(packageSelection.value, packages.value)
+  if (!source) return
+  rollbackSource.value =
+    source.kind === 'run'
+      ? { kind: 'run', runId: source.runId, taskIds: source.taskIds }
+      : {
+          kind: 'files',
+          backupPaths: source.backupPaths,
+          sourceConnectionId: connectionId.value,
+          title: source.title
+        }
+  rollbackOpen.value = true
+}
+
+/** The restore is a run of its own: show its live log. */
+function onRollbackStarted(run: JobRun): void {
+  checked.value = []
+  logRunId.value = run.id
+  logOpen.value = true
 }
 
 async function remove(): Promise<void> {
@@ -162,7 +317,10 @@ watch(
     if (list === undefined && !loading.value) void reload()
   }
 )
-watch(connectionId, reload)
+watch(connectionId, () => {
+  checked.value = []
+  void reload()
+})
 </script>
 
 <template>
@@ -202,6 +360,27 @@ watch(connectionId, reload)
       >
         Restaurar en Local
       </v-btn>
+      <v-tooltip :text="packageRestoreTip" location="bottom" max-width="320">
+        <template #activator="{ props: tipProps }">
+          <span v-bind="tipProps" class="backups-view__tip-wrap">
+            <v-btn
+              size="small"
+              prepend-icon="mdi-package-variant-closed"
+              :disabled="!packageSelection.length"
+              data-test="backups-restore-package"
+              @click="restorePackageToLocal"
+            >
+              Restaurar paquete en Local
+              <span
+                v-if="packageSelection.length"
+                class="backups-view__count"
+                data-test="backups-package-count"
+                >{{ packageSelection.length }}</span
+              >
+            </v-btn>
+          </span>
+        </template>
+      </v-tooltip>
       <v-btn
         icon="mdi-folder-open-outline"
         size="small"
@@ -281,7 +460,8 @@ watch(connectionId, reload)
     >
       <strong>Rollback a Local:</strong> 1) «Nueva copia» crea una copia de «{{ connection.name }}»;
       2) selecciónala y pulsa «Restaurar en Local» para cargarla en
-      {{ localConnection?.name ?? 'tu conexión Local' }}.
+      {{ localConnection?.name ?? 'tu conexión Local' }}. Para un lote entero (todas las copias de
+      una automatización), pulsa la cabecera del paquete y «Restaurar paquete en Local».
     </v-alert>
     <v-alert v-if="error" type="error" class="backups-view__notice">{{ error }}</v-alert>
 
@@ -311,10 +491,13 @@ watch(connectionId, reload)
           v-else
           v-model:sort-by="sortBy"
           v-model:page="page"
+          v-model="checked"
           :headers="headers"
-          :items="files"
+          :items="rows"
+          :group-by="groupBy"
           :search="search"
           :loading="loading"
+          show-select
           item-value="path"
           density="compact"
           :items-per-page="PAGE_SIZE"
@@ -331,6 +514,81 @@ watch(connectionId, reload)
           "
           @click:row="onRowClick"
         >
+          <template #top="{ groupedItems, isGroupOpen, toggleGroup }">
+            <GroupAutoOpen
+              :groups="groupedItems"
+              :is-group-open="isGroupOpen"
+              :toggle-group="toggleGroup"
+              :should-open="isSingleGroup"
+            />
+          </template>
+          <template #group-header="{ item, columns, isGroupOpen, toggleGroup }">
+            <tr
+              v-if="packageOfGroup(item)"
+              class="backups-pkg"
+              :class="{ 'backups-pkg--checked': groupState(item) !== 'none' }"
+              tabindex="0"
+              role="row"
+              :aria-label="`Paquete ${packageOfGroup(item)!.title}: pulsa para seleccionar sus copias`"
+              data-test="backup-package"
+              @click="selectPackage(item)"
+              @keydown.enter.self.prevent="selectPackage(item)"
+              @keydown.space.self.prevent="selectPackage(item)"
+            >
+              <td class="backups-pkg__select">
+                <v-checkbox-btn
+                  :model-value="groupState(item) === 'all'"
+                  :indeterminate="groupState(item) === 'some'"
+                  density="compact"
+                  :aria-label="`Seleccionar paquete ${packageOfGroup(item)!.title}`"
+                  data-test="backup-package-check"
+                  @click.stop
+                  @update:model-value="selectPackage(item, $event)"
+                />
+              </td>
+              <td :colspan="columns.length - 1" class="backups-pkg__cell">
+                <div class="backups-pkg__inner">
+                  <v-btn
+                    :icon="isGroupOpen(item) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                    size="x-small"
+                    variant="text"
+                    :aria-label="isGroupOpen(item) ? 'Contraer paquete' : 'Expandir paquete'"
+                    :aria-expanded="isGroupOpen(item)"
+                    data-test="backup-package-toggle"
+                    @click.stop="toggleGroup(item)"
+                  />
+                  <v-icon
+                    :icon="
+                      packageOfGroup(item)!.kind === 'run'
+                        ? 'mdi-robot-outline'
+                        : 'mdi-package-variant-closed'
+                    "
+                    size="16"
+                    class="backups-pkg__icon"
+                    aria-hidden="true"
+                  />
+                  <span class="backups-pkg__title nd-ellipsis" data-test="backup-package-title">{{
+                    packageOfGroup(item)!.title
+                  }}</span>
+                  <span class="backups-pkg__meta nd-mono" data-test="backup-package-count"
+                    >{{ item.items.length }} {{ item.items.length === 1 ? 'copia' : 'copias' }} ·
+                    {{ formatBytes(packageOfGroup(item)!.sizeBytes)
+                    }}{{ untilText(packageOfGroup(item)!) }}</span
+                  >
+                  <span
+                    class="nd-pill backups-pkg__kind"
+                    :class="packageOfGroup(item)!.kind === 'run' ? 'nd-pill--info' : ''"
+                    :title="
+                      packageOfGroup(item)!.kind === 'run'
+                        ? 'Copias hechas por una ejecución de una tarea de automatización'
+                        : 'Copias con la misma etiqueta hechas una tras otra (menos de 10 min entre ellas)'
+                    "
+                    >{{ packageOfGroup(item)!.kind === 'run' ? 'Automatización' : 'Lote' }}</span
+                  >
+                </div>
+              </td>
+            </tr>
+          </template>
           <template #[`item.fileName`]="{ item }">
             <div class="backups-view__name">
               <v-icon
@@ -373,6 +631,15 @@ watch(connectionId, reload)
                 <template v-if="search"> · filtrado</template>
               </span>
               <span class="backups-view__footer-spacer" />
+              <v-switch
+                v-model="groupByPackage"
+                label="Agrupar por paquete"
+                color="primary"
+                density="compact"
+                hide-details
+                class="backups-view__group-toggle"
+                data-test="backups-group-toggle"
+              />
               <div
                 v-if="pageCount > 1"
                 class="backups-view__pager"
@@ -421,10 +688,99 @@ watch(connectionId, reload)
         <BackupDetailsPanel :file="selected" @close="selectedPath = null" />
       </div>
     </div>
+
+    <RollbackDialog v-model="rollbackOpen" :source="rollbackSource" @started="onRollbackStarted" />
+    <v-dialog v-model="logOpen" max-width="980" scrollable>
+      <v-card class="backups-view__log-card">
+        <div class="backups-view__log-panel">
+          <RunLogPanel :run="logRun" @close="logOpen = false" />
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <style scoped>
+.backups-view__tip-wrap {
+  display: inline-flex;
+  flex: none;
+}
+.backups-view__count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--nd-radius-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--nd-accent-gradient-soft);
+}
+.backups-view__group-toggle {
+  flex: none;
+  margin-right: 6px;
+}
+.backups-view__group-toggle :deep(.v-selection-control) {
+  min-height: 28px;
+}
+.backups-view__group-toggle :deep(.v-label) {
+  font-family: var(--nd-font-ui);
+  font-size: var(--nd-fs-xs);
+  white-space: nowrap;
+}
+.backups-pkg__select {
+  width: 1px;
+  padding: 0 !important;
+  border-bottom: 1px solid var(--nd-border) !important;
+}
+.backups-pkg__select :deep(.v-selection-control) {
+  justify-content: center;
+}
+.backups-pkg {
+  cursor: pointer;
+  background: var(--nd-bg-raised);
+}
+.backups-pkg:hover,
+.backups-pkg:focus-visible {
+  background: var(--nd-hover);
+  outline: none;
+}
+.backups-pkg--checked {
+  background: rgba(var(--nd-accent-rgb), 0.08);
+}
+.backups-pkg__cell {
+  padding: 0 8px 0 4px !important;
+  border-bottom: 1px solid var(--nd-border) !important;
+}
+.backups-pkg__inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 36px;
+}
+.backups-pkg__inner :deep(.v-selection-control) {
+  flex: none;
+}
+.backups-pkg__icon {
+  flex: none;
+  color: var(--nd-accent);
+}
+.backups-pkg__title {
+  font-weight: 600;
+  color: var(--nd-text);
+}
+.backups-pkg__meta {
+  flex: none;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+  white-space: nowrap;
+}
+.backups-pkg__kind {
+  flex: none;
+  height: 17px;
+  font-size: 10.5px;
+}
+.backups-view__log-panel {
+  height: min(70vh, 640px);
+}
 .backups-view {
   height: 100%;
   min-height: 0;
@@ -457,7 +813,7 @@ watch(connectionId, reload)
 }
 .backups-view__filter {
   flex: 0 1 160px;
-  min-width: 120px;
+  min-width: 96px;
   margin-left: 4px;
 }
 .backups-view__filter :deep(.v-field__input) {

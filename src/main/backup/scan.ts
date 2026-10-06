@@ -2,6 +2,7 @@ import { readdir, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { BackupFile, ConnectionConfig } from '@shared/types'
 import type { AppContext } from '../context'
+import { backupPathKey, backupRunIndex } from '../automation/backupRuns'
 import { isBackupFileName, parseBackupFileName } from './naming'
 
 /**
@@ -148,13 +149,20 @@ export async function listBackups(
       const rel = relative(dir, resolve(path))
       return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
     })
+  // Files written by an automation run carry it (packages in the backups list).
+  const runs = backupRunIndex(ctx)
   const byPath = new Map<string, BackupFile>()
   for (const file of results.flat()) {
     if (byPath.has(file.path)) continue
     // An ElectronDB root may contain an extra dir (or vice versa): the file's location decides.
-    byPath.set(file.path, underExtra(file.path) ? { ...file, source: 'navicat' } : file)
+    const located: BackupFile = underExtra(file.path) ? { ...file, source: 'navicat' } : file
+    byPath.set(file.path, { ...located, run: runs.get(backupPathKey(file.path)) ?? null })
   }
+  // Names carry the time to the second only: the file written last wins a tie.
   return [...byPath.values()].sort(
-    (a, b) => b.createdAt.localeCompare(a.createdAt) || b.fileName.localeCompare(a.fileName)
+    (a, b) =>
+      b.createdAt.localeCompare(a.createdAt) ||
+      b.modifiedAt.localeCompare(a.modifiedAt) ||
+      b.fileName.localeCompare(a.fileName)
   )
 }

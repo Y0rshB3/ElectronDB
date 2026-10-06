@@ -1,0 +1,121 @@
+import type { ConnectionConfig, JobTask } from './types'
+
+/**
+ * Rules of the 'restoreschema' job step, shared by main (jobs:save and the
+ * runner) and the job editor so both refuse the same things with the same
+ * Spanish messages. Keep free of Node/Electron/browser imports.
+ */
+
+/** Label of the safety backups taken before a database is replaced. */
+export const SAFETY_BACKUP_LABEL = 'previo-rollback'
+
+/** Server schemas that are never dropped or replaced (grant tables, metadata...). */
+export const SYSTEM_SCHEMAS: ReadonlySet<string> = new Set([
+  'mysql',
+  'information_schema',
+  'performance_schema',
+  'sys'
+])
+
+export const isSystemSchema = (name: string | null | undefined): boolean =>
+  !!name && SYSTEM_SCHEMAS.has(name.trim().toLowerCase())
+
+/** Why a database cannot be replaced because it belongs to the server itself. */
+export function systemSchemaRefusal(schema: string): string {
+  return `«${schema.trim()}» es una base de datos del sistema de MySQL y nunca se reemplaza (borrarla dejaría el servidor sin usuarios ni permisos). Elige otra base de datos de destino.`
+}
+
+type Lookup = (id: string) => ConnectionConfig | null | undefined
+
+export function restoreProductionRefusal(stepName: string, connectionName: string): string {
+  return (
+    `El paso «${stepName}» restaura sobre «${connectionName}», una conexión de producción. ` +
+    'Los pasos de restauración de una tarea se ejecutan sin nadie que los confirme (al ejecutarla, ' +
+    'programada o con launchd), así que no pueden escribir en producción. Para restaurar en ' +
+    'producción usa «Restaurar todo» desde el historial de ejecuciones, que pide confirmación.'
+  )
+}
+
+export interface RestoreSourceRef {
+  connectionId: string | null
+  schema: string
+}
+
+/**
+ * Connection and schema the restore step reads from, as far as the job
+ * definition tells (null when the source is incomplete).
+ */
+export function restoreSourceOf(task: JobTask, tasks: JobTask[]): RestoreSourceRef | null {
+  const source = task.restoreSource
+  if (!source) return null
+  if (source.kind === 'task') {
+    const ref = tasks.find((t) => t.id === source.taskId)
+    return ref ? { connectionId: ref.connectionId || null, schema: ref.schema } : null
+  }
+  if (source.kind === 'latest')
+    return { connectionId: source.connectionId || null, schema: source.schema }
+  return { connectionId: source.connectionId, schema: source.schema }
+}
+
+/** Target schema of a restore step: its own schema, or the source schema when left empty. */
+export function restoreTargetSchema(task: JobTask, tasks: JobTask[]): string {
+  return task.schema?.trim() || restoreSourceOf(task, tasks)?.schema?.trim() || ''
+}
+
+export interface RestoreCheckOptions {
+  /** «Restaurar todo» after a typed confirmation: production targets and `file` sources are fine. */
+  rollback?: boolean
+}
+
+/**
+ * First problem of a restore step, or null when it can run. `label` names
+ * the step in the message ("paso 3", "Restaurar auth"...).
+ */
+export function restoreTaskProblem(
+  task: JobTask,
+  tasks: JobTask[],
+  lookup: Lookup,
+  label: string,
+  options: RestoreCheckOptions = {}
+): string | null {
+  const source = task.restoreSource
+  if (!source) return `El ${label} necesita una copia de origen.`
+  if (source.kind === 'task') {
+    const index = tasks.findIndex((t) => t.id === task.id)
+    const refIndex = tasks.findIndex((t) => t.id === source.taskId)
+    if (!source.taskId || refIndex < 0)
+      return `El ${label} restaura la copia de un paso que no existe; elige un paso de copia de seguridad anterior.`
+    if (tasks[refIndex].type !== 'backupschema')
+      return `El ${label} solo puede restaurar la copia de un paso de tipo «Copia de seguridad».`
+    if (index >= 0 && refIndex >= index)
+      return `El ${label} debe ir después del paso de copia que restaura («${tasks[refIndex].referenceName || `paso ${refIndex + 1}`}»).`
+    if (tasks[refIndex].includeData === false)
+      return `El ${label} restaura la copia de «${tasks[refIndex].referenceName || tasks[refIndex].schema}», que es solo de estructura (sin datos): las tablas de destino quedarían vacías. Activa «Incluir datos» en ese paso de copia o elige otro origen.`
+  } else if (source.kind === 'latest') {
+    if (!source.connectionId) return `El ${label} necesita la conexión de origen de la copia.`
+    if (!source.schema?.trim()) return `El ${label} necesita el esquema de origen de la copia.`
+  } else if (source.kind === 'file') {
+    if (!options.rollback)
+      return `El ${label} usa un archivo concreto como origen; elige un paso de copia o «Última copia en disco».`
+    if (!source.path) return `El ${label} no indica el archivo de backup.`
+  } else {
+    return `El ${label} tiene un origen de copia desconocido.`
+  }
+  if (!task.connectionId) return `El ${label} necesita una conexión de destino.`
+  const target = lookup(task.connectionId)
+  if (target?.environment === 'production' && !options.rollback)
+    return restoreProductionRefusal(task.referenceName || label, target.name)
+  const targetSchema = restoreTargetSchema(task, tasks)
+  if (!targetSchema) return `El ${label} necesita la base de datos de destino.`
+  if (isSystemSchema(targetSchema))
+    return `El ${label} no es válido: ${systemSchemaRefusal(targetSchema)}`
+  const from = restoreSourceOf(task, tasks)
+  if (
+    !options.rollback &&
+    from &&
+    from.connectionId === task.connectionId &&
+    from.schema.trim() === targetSchema
+  )
+    return `El ${label} restauraría «${targetSchema}» sobre sí misma (misma conexión y base de datos de origen); elige otra conexión o base de datos de destino.`
+  return null
+}

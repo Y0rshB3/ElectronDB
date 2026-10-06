@@ -168,6 +168,58 @@ export class Nb3Reader {
     }
     return count
   }
+
+  /**
+   * Reads the whole archive once without delivering anything: every object
+   * metadata entry and every data chunk is checked against its SHA1 and fully
+   * decompressed. Used before an irreversible step (a REPLACE drops the target
+   * database first) so a damaged file is refused while nothing has changed.
+   */
+  async verify(
+    signal?: AbortSignal,
+    onObject?: (done: number, total: number) => void
+  ): Promise<Nb3VerifyResult> {
+    const manifest = await this.assertNotEncrypted()
+    const result: Nb3VerifyResult = { objects: 0, chunks: 0, rows: 0 }
+    const total = manifest.Objects.length
+    for (const object of manifest.Objects) {
+      throwIfAborted(signal)
+      const meta = await this.objectMeta(object.UUID)
+      for (const ref of meta.Data) {
+        throwIfAborted(signal)
+        const entry = this.entry(ref.Filename)
+        const hash = createHash('sha1')
+        const tap = new Transform({
+          transform(chunk: Buffer, _enc, cb) {
+            hash.update(chunk)
+            cb(null, chunk)
+          }
+        })
+        const file = createReadStream(this.path, {
+          start: entry.offset,
+          end: entry.offset + entry.size - 1
+        })
+        result.rows += await consumeChunk(
+          (gunzip, cb) => pipeline(file, tap, gunzip, cb),
+          ref.Filename,
+          () => undefined,
+          signal
+        )
+        if (!checksumMatches(ref.Checksum, hash.digest('hex'))) throw checksumError(ref.Filename)
+        result.chunks++
+      }
+      result.objects++
+      onObject?.(result.objects, total)
+    }
+    return result
+  }
+}
+
+export interface Nb3VerifyResult {
+  objects: number
+  /** Data chunks read and verified. */
+  chunks: number
+  rows: number
 }
 
 type PipelineBuilder = (gunzip: Gunzip, done: (err: NodeJS.ErrnoException | null) => void) => void
@@ -234,6 +286,15 @@ export async function readManifest(path: string): Promise<BackupMeta> {
 export async function readObjectMeta(path: string, uuid: string): Promise<Nb3ObjectMeta> {
   const reader = await Nb3Reader.open(path)
   return reader.objectMeta(uuid)
+}
+
+/** Full integrity check of a .nb3 (see Nb3Reader.verify). */
+export async function verifyBackupFile(
+  path: string,
+  signal?: AbortSignal
+): Promise<Nb3VerifyResult> {
+  const reader = await Nb3Reader.open(path)
+  return reader.verify(signal)
 }
 
 export async function iterateObjectRows(

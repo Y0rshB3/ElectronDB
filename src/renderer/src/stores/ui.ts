@@ -46,6 +46,8 @@ export const useUiStore = defineStore('ui', () => {
     open: boolean
     backup: BackupFile | null
     connectionId: string | null
+    /** Open in «Reemplazar la base de datos completa» mode (undo of a rollback). */
+    replace?: boolean
   }>({ open: false, backup: null, connectionId: null })
 
   /** Objects list presentation, shared so the choice survives tab switches. */
@@ -62,8 +64,12 @@ export const useUiStore = defineStore('ui', () => {
   function openBackupDialog(connectionId: string, schema: string | null = null): void {
     backupDialog.value = { open: true, connectionId, schema }
   }
-  function openRestoreDialog(backup: BackupFile, connectionId: string | null): void {
-    restoreDialog.value = { open: true, backup, connectionId }
+  function openRestoreDialog(
+    backup: BackupFile,
+    connectionId: string | null,
+    options: { replace?: boolean } = {}
+  ): void {
+    restoreDialog.value = { open: true, backup, connectionId, replace: options.replace === true }
   }
 
   function openImportDialog(): void {

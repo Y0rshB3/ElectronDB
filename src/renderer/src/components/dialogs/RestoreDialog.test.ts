@@ -96,5 +96,64 @@ describe('RestoreDialog', () => {
     const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
     expect(options.connectionId).toBe('local')
     expect('confirmProduction' in options).toBe(false)
+    expect('replaceSchema' in options).toBe(false)
+  })
+
+  it('a safety copy opens in «Reemplazar la base de datos completa» mode and undoes with a confirmed replace', async () => {
+    const safety = makeBackup({
+      path: '/b/local/billing/20261006001037-previo-rollback.nb3',
+      fileName: '20261006001037-previo-rollback.nb3',
+      connectionId: 'local',
+      schema: 'billing',
+      source: 'electrondb',
+      label: 'previo-rollback'
+    })
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'backups:meta') return meta
+      if (channel === 'backups:restore')
+        return {
+          objectsRestored: 1,
+          rowsInserted: 3,
+          errors: [],
+          durationMs: 12,
+          safetyBackupPath: '/b/local/billing/20261006002000-previo-rollback.nb3'
+        }
+      return []
+    })
+    const pinia = freshPinia()
+    const connections = useConnectionsStore()
+    connections.items = [
+      makeConnection({ id: 'prod', name: 'Production', environment: 'production' }),
+      makeConnection({ id: 'local', name: 'Local', environment: 'local' })
+    ]
+    connections.loaded = true
+    const ui = useUiStore()
+    ui.restoreDialog = { open: true, backup: safety, connectionId: null }
+    wrapper = mountWith(RestoreDialog, pinia)
+    await settle()
+    const w = wrapper
+    expect(w.find('[data-test="restore-safety-copy-info"]').exists()).toBe(true)
+    expect(w.find('[data-test="restore-replace-options"]').exists()).toBe(true)
+    expect(w.get('[data-test="restore-replace-warning"]').text()).toContain(
+      'lo que no esté en la copia desaparece'
+    )
+    await w.get('[data-test="restore-submit"]').trigger('click')
+    await settle()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.message).toContain('«billing» se borrará en «Local»')
+    ui.answer(true)
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options).toMatchObject({
+      backupPath: safety.path,
+      connectionId: 'local',
+      targetSchema: 'billing',
+      replaceSchema: true,
+      safetyBackup: true
+    })
+    expect(options.objects).toBeUndefined()
+    expect(w.get('[data-test="restore-result-safety"]').text()).toContain(
+      '20261006002000-previo-rollback.nb3'
+    )
   })
 })

@@ -1,7 +1,7 @@
 import { realpath, stat, unlink } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { IpcArgs, IpcResult } from '@shared/ipc'
-import type { ConnectionConfig, ProgressEvent } from '@shared/types'
+import type { ConnectionConfig, ProgressEvent, RestoreOptions, RestoreResult } from '@shared/types'
 import type { AppContext } from '../context'
 import type { BackupService, ProgressReporter } from './index'
 import { readBackupMeta } from './index'
@@ -91,6 +91,44 @@ export async function objectDdl(path: string, uuid: string): Promise<string> {
 }
 
 type Kind = ProgressEvent['kind']
+
+/**
+ * backups:restore with `replaceSchema`: the whole database is replaced by the
+ * backup (the way to undo a rollback with its 'previo-rollback' copy).
+ */
+export async function replaceRestore(
+  service: BackupService,
+  options: RestoreOptions,
+  progress: ProgressReporter,
+  signal: AbortSignal
+): Promise<RestoreResult> {
+  if (!options || typeof options !== 'object')
+    throw new Error('Opciones de restauración no válidas.')
+  const path = requireBackupPath(options.backupPath)
+  if (!options.connectionId) throw new Error('Selecciona la conexión de destino.')
+  if (!options.targetSchema?.trim()) throw new Error('Indica la base de datos de destino.')
+  const meta = await service.readMeta(path)
+  if (!meta.schema) throw new Error(`El backup ${path} no indica qué base de datos contiene.`)
+  const result = await service.replace(
+    {
+      backupPath: path,
+      expectedSchema: meta.schema,
+      connectionId: options.connectionId,
+      targetSchema: options.targetSchema.trim(),
+      safetyBackup: options.safetyBackup !== false,
+      continueOnError: options.continueOnError === true,
+      ...(options.confirmProduction ? { confirmProduction: true } : {})
+    },
+    {
+      progress: (stage, event) =>
+        progress(
+          stage === 'safety' ? { ...event, message: `Copia previa · ${event.message}` } : event
+        )
+    },
+    signal
+  )
+  return { ...result.restore, safetyBackupPath: result.safetyBackup?.path ?? null }
+}
 
 export interface BackupHandlers {
   list(...args: IpcArgs<'backups:list'>): Promise<IpcResult<'backups:list'>>
@@ -190,7 +228,10 @@ export function createBackupHandlers(
         // flag them on the final event so progress-only listeners can tell it did not succeed.
         (r) =>
           r.errors.length > 0 ? r.errors.map((e) => `${e.object}: ${e.message}`).join('\n') : null,
-        (service, progress, signal) => service.restore(options, progress, signal)
+        (service, progress, signal) =>
+          options?.replaceSchema
+            ? replaceRestore(service, options, progress, signal)
+            : service.restore(options, progress, signal)
       ),
     delete: (path) => deleteBackupFile(ctx.connections.list(), ctx.userDataPath, path),
     cancel: async (operationId) => {

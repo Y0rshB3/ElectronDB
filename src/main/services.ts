@@ -18,7 +18,10 @@ export async function startBackgroundServices(ctx: AppContext): Promise<void> {
   try {
     // Dynamic + guarded so unit tests can exercise this file without electron.
     const { app } = await import('electron')
-    app.on('before-quit', () => {
+    const { quitVetoed } = await import('./quitGuard')
+    app.on('before-quit', (event) => {
+      // The user chose to keep a running restore: nothing is stopped.
+      if (quitVetoed(event)) return
       automation.stop().catch((err) => log.warn('automation service failed to stop', err))
     })
   } catch {

@@ -14,8 +14,10 @@ import {
   stepHeading,
   stepLabel,
   summaryLines,
+  type SafetyCopy,
   type StepInfo
 } from '@shared/jobLog'
+import { restoreSourceOf, restoreTargetSchema, restoreTaskProblem } from '@shared/restoreTask'
 import type {
   BackupCreateResult,
   Job,
@@ -26,9 +28,17 @@ import type {
   ProgressEvent
 } from '@shared/types'
 import type { BackupService } from '../backup/index'
+import {
+  ReplaceIncompleteError,
+  incompleteNotice,
+  replaceSchemaFromBackup,
+  type ReplaceResult,
+  type SchemaCharset
+} from '../backup/replace'
 import type { AppContext } from '../context'
 import type { SessionFactory } from '../mysql/types'
 import { newId, nowIso } from '../storage/ids'
+import { findLatestJobBackup } from './latestBackup'
 import { RunLog } from './runLog'
 
 /** Collaborators the runner needs; resolved lazily by the automation service. */
@@ -37,6 +47,24 @@ export interface RunnerDeps {
   sessions: SessionFactory
   /** Wall clock for log timestamps and durations (tests). */
   now?: () => Date
+  /** Charset/collation of a backup's schema (tests); read from the .nb3 otherwise. */
+  backupCharset?: (path: string) => Promise<SchemaCharset | null>
+}
+
+/** How one run is executed (rollbacks from the run history). */
+export interface RunOptions {
+  signal?: AbortSignal
+  kind?: JobRun['kind']
+  /** Source run of a rollback. */
+  rollbackOf?: string
+  /**
+   * Restore steps may write to a production connection: only «Restaurar todo»
+   * after the user typed the connection name (main checked confirmProduction).
+   * Saved jobs never set it: nobody confirms scheduled or launchd runs.
+   */
+  allowProductionRestore?: boolean
+  /** continueOnError of the objects inside each restore (defaults to the job's). */
+  restoreContinueOnError?: boolean
 }
 
 export interface StartedJob {
@@ -89,6 +117,67 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+const connectionName = (ctx: AppContext, id: string | null | undefined): string =>
+  (id ? ctx.connections.get(id)?.name : undefined) ?? 'conexión desconocida'
+
+/** Safety copies taken by the restore steps of a run (what the summary lists for undo). */
+export function safetyCopiesOf(ctx: AppContext, run: JobRun): SafetyCopy[] {
+  return run.tasks
+    .filter((t) => t.type === 'restoreschema' && !!t.outputPath)
+    .map((t) => ({
+      schema: t.schema ?? '?',
+      connectionName: connectionName(ctx, t.connectionId),
+      path: t.outputPath!
+    }))
+}
+
+/** "f_score, users y 2 más" */
+function namesOf(errors: { object: string }[]): string {
+  const names = errors.slice(0, 3).map((e) => e.object)
+  const more = errors.length - names.length
+  return more > 0 ? `${names.join(', ')} y ${more} más` : names.join(', ')
+}
+
+/** Step message of a REPLACE restore that finished with object errors. */
+export function partialRestoreMessage(schema: string, result: ReplaceResult): string {
+  const restored = result.restore
+  const counts = [
+    plural(restored.objectsRestored, 'objeto', 'objetos'),
+    plural(restored.rowsInserted, 'fila', 'filas')
+  ]
+  const first = restored.errors[0]
+  const firstText = first.message.trim().replace(/[.]$/, '')
+  return [
+    `${plural(restored.errors.length, 'objeto', 'objetos')} con error al restaurar «${schema}»: ${namesOf(restored.errors)} (${counts.join(', ')} restaurados).`,
+    `Error en ${first.object}: ${firstText}.`,
+    incompleteNotice(
+      schema,
+      result.connectionName,
+      result.safetyBackup?.path ?? null,
+      result.existed
+    )
+  ].join(' ')
+}
+
+/** Heading/summary description of a step (restore steps also name their source). */
+export function describeStep(ctx: AppContext, tasks: JobTask[], task: JobTask): StepInfo {
+  const info: StepInfo = {
+    type: task.type,
+    schema: task.schema,
+    connectionName: connectionName(ctx, task.connectionId),
+    referenceName: task.referenceName
+  }
+  if (task.type === 'restoreschema') {
+    const source = restoreSourceOf(task, tasks)
+    info.schema = restoreTargetSchema(task, tasks)
+    info.sourceSchema = source?.schema
+    info.sourceConnectionName = source?.connectionId
+      ? connectionName(ctx, source.connectionId)
+      : 'backup'
+  }
+  return info
+}
+
 function requireConnectionName(ctx: AppContext, task: JobTask): string {
   const conn = ctx.connections.get(task.connectionId)
   if (!conn) {
@@ -116,7 +205,7 @@ class RunExecution {
     private readonly deps: RunnerDeps,
     private readonly job: Job,
     readonly run: JobRun,
-    private readonly signal: AbortSignal | undefined
+    private readonly options: RunOptions
   ) {
     this.log = new RunLog(run.logPath)
     this.now = deps.now ?? (() => new Date())
@@ -126,6 +215,10 @@ class RunExecution {
   private publish(): void {
     this.ctx.runs.upsert(structuredClone(this.run))
     this.ctx.emit('event:jobRun', structuredClone(this.run))
+  }
+
+  private get signal(): AbortSignal | undefined {
+    return this.options.signal
   }
 
   private get aborted(): boolean {
@@ -160,12 +253,7 @@ class RunExecution {
   }
 
   private stepInfo(task: JobTask): StepInfo {
-    return {
-      type: task.type,
-      schema: task.schema,
-      connectionName: this.ctx.connections.get(task.connectionId)?.name ?? 'conexión desconocida',
-      referenceName: task.referenceName
-    }
+    return describeStep(this.ctx, this.job.tasks, task)
   }
 
   async execute(): Promise<JobRun> {
@@ -199,7 +287,8 @@ class RunExecution {
         at: this.now()
       })
     )
-    this.ctx.jobs.touchLastRun(this.job.id, this.run.startedAt)
+    // A rollback restores another run's backups: the job itself did not run.
+    if (this.run.kind !== 'rollback') this.ctx.jobs.touchLastRun(this.job.id, this.run.startedAt)
     this.publish()
 
     let stopRemaining = false
@@ -233,6 +322,7 @@ class RunExecution {
     const lines = summaryLines({
       status: this.run.status,
       durationMs: this.elapsedSince(this.startedMs),
+      safetyCopies: safetyCopiesOf(this.ctx, this.run),
       steps: this.run.tasks.map((t, i) => ({
         index: i + 1,
         label: this.job.tasks[i] ? stepLabel(this.stepInfo(this.job.tasks[i])) : t.referenceName,
@@ -250,16 +340,28 @@ class RunExecution {
       jobName: this.job.name,
       step: index + 1,
       steps: this.job.tasks.length,
-      stepLabel: task.type === 'backupschema' ? task.schema : task.referenceName
+      stepLabel:
+        task.type === 'backupschema'
+          ? task.schema
+          : task.type === 'restoreschema'
+            ? restoreTargetSchema(task, this.job.tasks)
+            : task.referenceName
     }
   }
 
-  private emitProgress(index: number, task: JobTask, event: BackupProgress): void {
+  private emitProgress(
+    index: number,
+    task: JobTask,
+    event: BackupProgress,
+    phaseLabel?: string
+  ): void {
+    const step = this.stepDetail(index, task)
+    if (phaseLabel) step.stepLabel = `${step.stepLabel} · ${phaseLabel}`
     this.ctx.emit('event:progress', {
       ...event,
       operationId: this.run.id,
       kind: 'job',
-      detail: { ...event.detail, ...this.stepDetail(index, task) }
+      detail: { ...event.detail, ...step }
     })
   }
 
@@ -289,6 +391,16 @@ class RunExecution {
             formatElapsed(this.elapsedSince(stepStart))
           ])
         )
+      } else if (task.type === 'restoreschema') {
+        const result = await this.runRestore(task, taskRun, index)
+        const restored = result.restore
+        const counts = [
+          plural(restored.objectsRestored, 'objeto', 'objetos'),
+          plural(restored.rowsInserted, 'fila', 'filas')
+        ]
+        if (restored.errors.length)
+          throw new Error(partialRestoreMessage(restoreTargetSchema(task, this.job.tasks), result))
+        this.say(resultLine('OK', [...counts, formatElapsed(this.elapsedSince(stepStart))]))
       } else if (task.type === 'runquery') {
         const count = await this.runQuery(task, index)
         this.say(
@@ -306,8 +418,12 @@ class RunExecution {
       const elapsed = formatElapsed(this.elapsedSince(stepStart))
       if (this.aborted) {
         taskRun.status = 'cancelled'
-        taskRun.message = CANCELLED_MESSAGE
-        this.say(resultLine('CANCELADO', [CANCELLED_MESSAGE, elapsed]))
+        // A replace cancelled after the DROP says the database is incomplete and how to undo.
+        taskRun.message =
+          err instanceof ReplaceIncompleteError
+            ? `${CANCELLED_MESSAGE} ${err.message}`
+            : CANCELLED_MESSAGE
+        this.say(resultLine('CANCELADO', [taskRun.message, elapsed]))
       } else {
         taskRun.status = 'failed'
         taskRun.message = errorMessage(err)
@@ -352,6 +468,91 @@ class RunExecution {
       (event) => {
         this.logBackupEvent(event)
         this.emitProgress(index, task, event)
+      },
+      this.signal
+    )
+  }
+
+  /** Finds the .nb3 a restore step restores and the schema it must contain. */
+  private async restoreSource(
+    task: JobTask
+  ): Promise<{ path: string; schema: string; connectionId: string | null }> {
+    const source = task.restoreSource
+    if (!source) throw new Error(`El paso "${task.referenceName}" no indica qué copia restaurar.`)
+    if (source.kind === 'file') return source
+    if (source.kind === 'task') {
+      const ref = this.job.tasks.find((t) => t.id === source.taskId)
+      const refRun = this.run.tasks.find((t) => t.taskId === source.taskId)
+      if (!ref || !refRun)
+        throw new Error(`El paso de origen de "${task.referenceName}" no existe.`)
+      if (refRun.status !== 'success' || !refRun.outputPath) {
+        throw new Error(
+          `El paso de origen «${ref.referenceName}» no generó ninguna copia en esta ejecución; no se restaura nada.`
+        )
+      }
+      return { path: refRun.outputPath, schema: ref.schema, connectionId: ref.connectionId }
+    }
+    const name = connectionName(this.ctx, source.connectionId)
+    // Only complete copies (all objects, with data) made by a job step of that very
+    // connection: never a structure-only, partial, manual, Navicat or safety copy.
+    const latest = await findLatestJobBackup(this.ctx, source.connectionId, source.schema)
+    if (!latest)
+      throw new Error(
+        `No hay ninguna copia completa (con datos) de «${source.schema}» de ${name} hecha por una tarea de ElectronDB. Ejecuta antes una tarea que la copie con «Incluir datos»; no se restaura nada.`
+      )
+    this.say(`  Copia más reciente con datos: tarea «${latest.jobName}», ${latest.fileName}`)
+    return { path: latest.path, schema: source.schema, connectionId: source.connectionId }
+  }
+
+  private async runRestore(
+    task: JobTask,
+    taskRun: JobTaskRun,
+    index: number
+  ): Promise<ReplaceResult> {
+    requireConnectionName(this.ctx, task)
+    const problem = restoreTaskProblem(
+      task,
+      this.job.tasks,
+      (id) => this.ctx.connections.get(id),
+      `paso "${task.referenceName}"`,
+      { rollback: this.options.allowProductionRestore === true || this.run.kind === 'rollback' }
+    )
+    if (problem) throw new Error(problem)
+    const target = this.ctx.connections.get(task.connectionId)!
+    // Defence in depth: only a confirmed rollback may replace databases in production.
+    if (target.environment === 'production' && this.options.allowProductionRestore !== true) {
+      throw new Error(
+        `«${target.name}» es una conexión de producción: este paso no puede reemplazar sus bases de datos sin una confirmación explícita.`
+      )
+    }
+    const source = await this.restoreSource(task)
+    return replaceSchemaFromBackup(
+      {
+        connections: this.ctx.connections,
+        sessions: this.deps.sessions,
+        backups: this.deps.backups,
+        backupCharset: this.deps.backupCharset
+      },
+      {
+        backupPath: source.path,
+        expectedSchema: source.schema,
+        connectionId: task.connectionId,
+        targetSchema: restoreTargetSchema(task, this.job.tasks),
+        safetyBackup: task.safetyBackup !== false,
+        continueOnError: this.options.restoreContinueOnError ?? this.job.continueOnError,
+        confirmProduction: this.options.allowProductionRestore === true
+      },
+      {
+        line: (body) => this.say(body),
+        progress: (stage, event) => {
+          // Object lines are logged for the restore only; the safety copy is one line.
+          if (stage === 'restore') this.logBackupEvent(event)
+          this.emitProgress(index, task, event, stage === 'safety' ? 'copia previa' : 'restaurando')
+        },
+        safetyBackupDone: (result) => {
+          taskRun.outputPath = result.path
+          this.publish()
+        }
       },
       this.signal
     )
@@ -433,6 +634,17 @@ export function startJob(
 ): StartedJob {
   const job = ctx.jobs.get(jobId)
   if (!job) throw new JobNotFoundError(jobId)
+  return startJobWith(ctx, deps, job, trigger, { signal })
+}
+
+/** Like startJob for a job definition that is not (necessarily) stored, e.g. a rollback. */
+export function startJobWith(
+  ctx: AppContext,
+  deps: RunnerDeps,
+  job: Job,
+  trigger: JobRun['trigger'],
+  options: RunOptions = {}
+): StartedJob {
   const runId = newId()
   const run: JobRun = {
     id: runId,
@@ -449,14 +661,24 @@ export function startJob(
       startedAt: null,
       finishedAt: null,
       message: null,
-      outputPath: null
+      outputPath: null,
+      type: t.type,
+      connectionId: t.connectionId,
+      schema: t.type === 'restoreschema' ? restoreTargetSchema(t, job.tasks) : t.schema,
+      ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {})
     })),
     logPath: runLogPath(ctx, runId),
     pid: process.pid
   }
+  if (options.kind && options.kind !== 'job') run.kind = options.kind
+  if (options.rollbackOf) run.rollbackOf = options.rollbackOf
   // Snapshot before execute(): it runs synchronously up to its first await.
   const snapshot = structuredClone(run)
-  const done = new RunExecution(ctx, deps, structuredClone(job), run, signal).execute()
+  const { signal, ...rest } = options
+  const done = new RunExecution(ctx, deps, structuredClone(job), run, {
+    ...rest,
+    signal
+  }).execute()
   return { run: snapshot, done }
 }
 

@@ -8,9 +8,14 @@ import { Nb3Writer } from './nb3/writer'
 import {
   BATCH_MAX_ROWS,
   PRODUCTION_GUARD_MESSAGE,
+  DefinerAccounts,
   RESTORE_CANCELLED,
+  definerOf,
+  executeDdl,
   restoreBackup,
-  stripDefiner
+  stripDefiner,
+  describeRestoreError,
+  restoreErrorHint
 } from './restore'
 import {
   FakeSessionFactory,
@@ -96,6 +101,31 @@ const run = (
   ).then((result) => ({ result, factory, session: factory.sessions[0] }))
 
 describe('restoreBackup', () => {
+  it('reports one objectDone event per restored object (type, rows) for automation logs', async () => {
+    const events: { phase: string; type?: string; name?: string; rows?: number | null }[] = []
+    await restoreBackup(
+      {
+        connections: connectionsOf(connectionFixture()),
+        sessions: new FakeSessionFactory()
+      },
+      baseOptions(),
+      (e) =>
+        events.push({
+          phase: e.phase,
+          type: e.detail?.objectType,
+          name: e.detail?.objectName,
+          rows: e.detail?.rows
+        })
+    )
+    expect(events.filter((e) => e.phase === 'objectDone')).toEqual([
+      { phase: 'objectDone', type: 'Table', name: 'items', rows: 2 },
+      { phase: 'objectDone', type: 'Function', name: 'f_one', rows: null },
+      { phase: 'objectDone', type: 'Procedure', name: 'p_noop', rows: null },
+      { phase: 'objectDone', type: 'View', name: 'v_items', rows: null },
+      { phase: 'objectDone', type: 'Event', name: 'e_tick', rows: null }
+    ])
+  })
+
   it('refuses production targets without confirmation before opening the file or a session', async () => {
     const factory = new FakeSessionFactory()
     await expect(
@@ -291,6 +321,46 @@ describe('restoreBackup', () => {
     expect(factory.sessions[0].released).toBe(true)
   })
 
+  it('drops the DEFINER of accounts missing on the target (cross-server restores) and keeps existing ones', async () => {
+    expect(
+      definerOf('CREATE ALGORITHM=UNDEFINED DEFINER=`app`@`%` SQL SECURITY DEFINER VIEW v')
+    ).toEqual({
+      user: 'app',
+      host: '%'
+    })
+    expect(definerOf("CREATE DEFINER='o''k'@'localhost' FUNCTION f()")).toEqual({
+      user: "o''k",
+      host: 'localhost'
+    })
+    expect(definerOf('CREATE SQL SECURITY DEFINER VIEW v AS SELECT 1')).toBeNull()
+
+    const session = await new FakeSessionFactory().acquire('conn-1')
+    const accounts: Record<string, number> = { 'root@localhost': 1 }
+    session.query = async <T>(sql: string, params: unknown[] = []): Promise<T[]> => {
+      session.queried.push(sql)
+      return [{ n: accounts[`${params[0]}@${params[1]}`] ?? 0 }] as T[]
+    }
+    const definers = new DefinerAccounts(session)
+    await executeDdl(
+      session,
+      'CREATE DEFINER=`app`@`%` TRIGGER t BEFORE INSERT ON x FOR EACH ROW SET @a = 1',
+      definers
+    )
+    await executeDdl(session, 'CREATE DEFINER=`root`@`localhost` PROCEDURE p() BEGIN END', definers)
+    await executeDdl(
+      session,
+      'CREATE DEFINER=`app`@`%` EVENT e ON SCHEDULE EVERY 1 DAY DO SELECT 1',
+      definers
+    )
+    expect(session.executed).toEqual([
+      'CREATE TRIGGER t BEFORE INSERT ON x FOR EACH ROW SET @a = 1',
+      'CREATE DEFINER=`root`@`localhost` PROCEDURE p() BEGIN END',
+      'CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO SELECT 1'
+    ])
+    // One lookup per account.
+    expect(session.queried.filter((q) => q.includes('mysql.user'))).toHaveLength(2)
+  })
+
   it('stripDefiner removes quoted and unquoted definers but keeps SQL SECURITY DEFINER', () => {
     expect(stripDefiner('CREATE DEFINER=`a`@`%` PROCEDURE p() BEGIN END')).toBe(
       'CREATE PROCEDURE p() BEGIN END'
@@ -300,5 +370,25 @@ describe('restoreBackup', () => {
     expect(stripDefiner('CREATE SQL SECURITY DEFINER VIEW v AS SELECT 1')).toBe(
       'CREATE SQL SECURITY DEFINER VIEW v AS SELECT 1'
     )
+  })
+})
+
+describe('restore error hints (5.7 staging -> 8.x local)', () => {
+  it('explains ER_BINLOG_UNSAFE_ROUTINE in Spanish and keeps the server message', () => {
+    const err = {
+      message: 'x',
+      sqlMessage:
+        'This function has none of DETERMINISTIC, NO SQL, or READS SQL DATA in its declaration',
+      code: 'ER_BINLOG_UNSAFE_ROUTINE',
+      errno: 1418
+    }
+    const text = describeRestoreError(err)
+    expect(text).toMatch(
+      /^This function has none of DETERMINISTIC.*\(ER_BINLOG_UNSAFE_ROUTINE 1418\)\. Pista: /
+    )
+    expect(text).toContain('SET GLOBAL log_bin_trust_function_creators = 1')
+    expect(restoreErrorHint({ message: 'x', errno: 1273 })).toMatch(/utf8mb4_0900_ai_ci/)
+    expect(restoreErrorHint({ message: 'x', errno: 1062 })).toBeNull()
+    expect(describeRestoreError(new Error('plain'))).toBe('plain')
   })
 })

@@ -6,6 +6,17 @@ export const SOURCE_CHIPS: Record<BackupFile['source'], { label: string; color: 
   unknown: { label: 'Desconocido', color: 'secondary' }
 }
 
+/**
+ * Chip for a backup source. Never throws: an unexpected value (for example "navidog" sent
+ * by a main process from before the ElectronDB rename) is shown as "Desconocido".
+ */
+export function sourceChip(source: string | null | undefined): { label: string; color: string } {
+  return (
+    (source && (SOURCE_CHIPS as Record<string, { label: string; color: string }>)[source]) ||
+    SOURCE_CHIPS.unknown
+  )
+}
+
 export const ENVIRONMENTS: { value: Environment; title: string; color: string }[] = [
   { value: 'local', title: 'Local', color: 'success' },
   { value: 'staging', title: 'Staging', color: 'warning' },

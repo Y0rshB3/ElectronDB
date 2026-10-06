@@ -29,6 +29,9 @@ import type {
   QueryStatementResult,
   RestoreOptions,
   RestoreResult,
+  RollbackFilesSource,
+  RollbackPlan,
+  RollbackRequest,
   RoutineInfo,
   RowChange,
   ServerInfo,
@@ -166,6 +169,16 @@ export interface IpcInvokeMap {
     args: [id: string]
     result: { inApp: boolean; launchAgent: boolean; nextRun: string | null }
   }
+  /**
+   * Backups «Restaurar todo» would restore into `targetConnectionId`: those of a
+   * finished run (its id) or the given backup files (a package of the backups list).
+   */
+  'jobs:rollbackPlan': {
+    args: [source: string | RollbackFilesSource, targetConnectionId: string | null]
+    result: RollbackPlan
+  }
+  /** Starts the restore of a run's backups (REPLACE semantics); resolves with the new run. */
+  'jobs:rollback': { args: [request: RollbackRequest, options?: WriteOptions]; result: JobRun }
 
   'navicat:detect': { args: [rootPath?: string | null]; result: NavicatDetection }
   'navicat:previewConnections': {
@@ -250,6 +263,8 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'jobs:runs',
   'jobs:runLog',
   'jobs:scheduleStatus',
+  'jobs:rollbackPlan',
+  'jobs:rollback',
   'navicat:detect',
   'navicat:previewConnections',
   'navicat:previewJobs',

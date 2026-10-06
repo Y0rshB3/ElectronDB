@@ -7,10 +7,15 @@ import {
   type ProgressEntry
 } from '@renderer/stores/progress'
 import { useNotify, errorMessage } from '@renderer/composables/useNotify'
+import { useConfirm } from '@renderer/composables/useConfirm'
+import { useJobsStore } from '@renderer/stores/jobs'
 import { describeProgress } from '@renderer/stores/progressText'
+import { cancelRestorePrompt } from '@renderer/components/automation/rollback'
 
 const progress = useProgressStore()
 const notify = useNotify()
+const jobs = useJobsStore()
+const { ask } = useConfirm()
 const cancelling = ref<Record<string, boolean>>({})
 const cards = computed(() => progress.visible.map((op) => ({ op, view: describeProgress(op) })))
 
@@ -28,6 +33,10 @@ function title(op: ProgressEntry): string {
 }
 
 async function cancel(op: ProgressEntry): Promise<void> {
+  // Job progress uses the run id: a run that restores databases asks first.
+  const run = op.kind === 'job' ? jobs.runs.find((r) => r.id === op.operationId) : undefined
+  const prompt = run ? cancelRestorePrompt(run) : null
+  if (prompt && !(await ask(prompt))) return
   cancelling.value = { ...cancelling.value, [op.operationId]: true }
   try {
     await progress.cancel(op.operationId)

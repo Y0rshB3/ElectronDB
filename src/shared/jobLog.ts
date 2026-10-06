@@ -144,11 +144,27 @@ export interface StepInfo {
   schema: string
   connectionName: string
   referenceName: string
+  /** restoreschema: schema stored in the backup and the connection it came from. */
+  sourceSchema?: string
+  sourceConnectionName?: string
+}
+
+/**
+ * Restore heading: "Base de datos auth: Staging -> Local", with the target
+ * schema appended when it is not the source name ("... -> Local · auth_copy").
+ */
+export function restoreLabel(step: StepInfo): string {
+  const source = step.sourceSchema || step.schema || '?'
+  const target = step.schema || source
+  const from = step.sourceConnectionName || 'backup'
+  const suffix = target !== source ? ` · ${target}` : ''
+  return `Base de datos ${source}: ${from} -> ${step.connectionName}${suffix}`
 }
 
 /** Short step name used in headings and the summary: "Base de datos accounts (Local)". */
 export function stepLabel(step: StepInfo): string {
   if (step.type === 'backupschema') return `Base de datos ${step.schema} (${step.connectionName})`
+  if (step.type === 'restoreschema') return restoreLabel(step)
   const where = step.schema ? `${step.schema} (${step.connectionName})` : step.connectionName
   return `Consulta «${step.referenceName}» · ${where}`
 }
@@ -172,12 +188,28 @@ export function objectLine(input: {
   status: LineStatus
   error?: string
 }): string {
-  const label = `${objectTypeLabel(input.type)} ${input.name}`
-  const dots = Math.max(3, LABEL_WIDTH - label.length - 1)
   const [one, many] = input.unit ?? ['fila', 'filas']
-  const count = input.count === null ? '' : plural(input.count, one, many)
+  return labelLine({
+    label: `${objectTypeLabel(input.type)} ${input.name}`,
+    value: input.count === null ? '' : plural(input.count, one, many),
+    status: input.status,
+    error: input.error
+  })
+}
+
+/**
+ * Any aligned "label ..... value  OK" line (safety backups, DROP/CREATE of a
+ * restore...), styled like the object lines.
+ */
+export function labelLine(input: {
+  label: string
+  value?: string
+  status: LineStatus
+  error?: string
+}): string {
+  const dots = Math.max(3, LABEL_WIDTH - input.label.length - 1)
   const status = input.status === 'ok' ? 'OK' : `ERROR: ${oneLine(input.error ?? 'error')}`
-  return `  ${label} ${'.'.repeat(dots)} ${count.padStart(COUNT_WIDTH)}  ${status}`
+  return `  ${input.label} ${'.'.repeat(dots)} ${(input.value ?? '').padStart(COUNT_WIDTH)}  ${status}`
 }
 
 export type ResultStatus = 'OK' | 'ERROR' | 'CANCELADO' | 'OMITIDO'
@@ -193,6 +225,27 @@ export interface SummaryStep {
   message: string | null
 }
 
+/** Safety copy taken before a database was replaced (restore steps). */
+export interface SafetyCopy {
+  schema: string
+  connectionName: string
+  path: string
+}
+
+/** File name of a path written by main (POSIX or Windows separators). */
+export function fileNameOf(path: string): string {
+  return path.split(/[\\/]/).pop() || path
+}
+
+/** How to undo a replace from the UI (single source for the log, the summary and the dialogs). */
+export const UNDO_REPLACE_HOW =
+  'Copias de seguridad › conexión › base de datos › Restaurar › «Reemplazar la base de datos completa»'
+
+/** "Para deshacerlo, restaura la copia previa <file> de <conn> (…) ." */
+export function undoHint(copy: SafetyCopy): string {
+  return `Para volver al estado anterior restaura la copia previa ${fileNameOf(copy.path)} (Copias de seguridad › ${copy.connectionName} › ${copy.schema}) con «Reemplazar la base de datos completa».`
+}
+
 /** Summary block printed at the end of every run. */
 export function summaryLines(input: {
   status: RunStatus
@@ -200,6 +253,8 @@ export function summaryLines(input: {
   steps: SummaryStep[]
   /** The process died mid-run; the run was closed when ElectronDB started again. */
   interrupted?: boolean
+  /** Safety copies taken by restore steps: listed so the user knows how to undo. */
+  safetyCopies?: SafetyCopy[]
 }): string[] {
   const total = input.steps.length
   const count = (s: RunStatus): number => input.steps.filter((x) => x.status === s).length
@@ -215,6 +270,12 @@ export function summaryLines(input: {
   ]
   for (const f of failed)
     lines.push(`  ERROR · Paso ${f.index}/${total} · ${f.label}: ${oneLine(f.message ?? 'error')}`)
+  const copies = input.safetyCopies ?? []
+  if (copies.length) {
+    lines.push(`  Copias previas (para deshacer: ${UNDO_REPLACE_HOW}):`)
+    for (const c of copies)
+      lines.push(`    ${c.schema} en ${c.connectionName}: ${fileNameOf(c.path)}`)
+  }
   lines.push(`  Duración total: ${formatElapsed(input.durationMs)}`)
   if (input.interrupted) lines.push(`Ejecución interrumpida: ${ok} de ${total} pasos completados.`)
   else if (input.status === 'cancelled')

@@ -90,4 +90,43 @@ describe('AutomationView', () => {
     expect(wrapper.find('[data-test="run-log-panel"]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('lists restores without a job under «Restauraciones manuales» and shows their history', async () => {
+    const manual: JobRun = {
+      ...started,
+      id: 'rb-manual',
+      jobId: 'manual-rollbacks',
+      jobName: 'Rollback a Local · backup-staging · 2026-10-05 23:16',
+      status: 'success',
+      kind: 'rollback',
+      finishedAt: '2026-10-05T15:40:00.000Z'
+    }
+    // A run whose job no longer exists must not break anything either.
+    const orphan: JobRun = { ...started, id: 'orphan', jobId: 'deleted-job', status: 'success' }
+    installBridge({
+      'jobs:list': () => [job],
+      'jobs:runs': (jobId: unknown) =>
+        jobId === 'manual-rollbacks' ? [manual] : jobId ? [] : [manual, orphan],
+      'jobs:scheduleStatus': () => ({ inApp: false, launchAgent: false, nextRun: null })
+    })
+    const wrapper = mount(AutomationView, {
+      props: { tab: { id: 'automation', kind: 'automation', title: 'Automatización' } as never },
+      global: { plugins: [createTestVuetify()] },
+      attachTo: document.body
+    })
+    await flush()
+    await flush()
+    const entry = wrapper.get('[data-test="jobs-manual-rollbacks"]')
+    expect(entry.text()).toContain('Restauraciones manuales')
+    await entry.trigger('click')
+    await flush()
+    await flush()
+    const history = wrapper.get('[data-test="run-history"]')
+    expect(history.text()).toContain('Restauraciones manuales')
+    expect(history.find('[data-test="run-kind-rollback"]').exists()).toBe(true)
+    // Not a job: nothing to edit, run or delete.
+    for (const id of ['jobs-edit', 'jobs-run', 'jobs-delete'])
+      expect(wrapper.get(`[data-test="${id}"]`).attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
 })

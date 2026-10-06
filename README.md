@@ -39,8 +39,10 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - **Diseñador de tablas** (columnas, índices, claves foráneas) y editor DDL de vistas y rutinas.
 - **Copias de seguridad `.nb3`**: crear, listar (incluidas las de Navicat, en solo lectura), restaurar en
   cualquier conexión y "rollback a local".
-- **Automatización**: trabajos con pasos de backup y de SQL, programador tipo cron, historial y registro de
-  ejecución.
+- **Automatización**: trabajos con pasos de backup, de SQL y de restauración, programador tipo cron, historial
+  y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
+  sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
+  la lista de copias de seguridad con un paquete entero (también los lotes de Navicat).
 - **Importación desde Navicat**: conexiones, colores, trabajos por lotes y copias existentes. Es de solo
   lectura: no modifica nada de Navicat.
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide confirmación
@@ -298,7 +300,7 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
   y opción de cancelar.
 - **Restaurar** carga una copia en la conexión y el esquema que elijas. Puedes crear el esquema, borrar antes
   los objetos, restaurar solo estructura o solo datos y elegir objetos concretos.
-- **Rollback a local**: para traer el estado de un servidor remoto a tu MySQL local:
+- **Rollback a local** de una sola copia: para traer el estado de un servidor remoto a tu MySQL local:
   1. Crea una conexión a tu MySQL local con entorno **Local**.
   2. En la conexión remota, pulsa **Nueva copia**.
   3. Selecciona esa copia y pulsa **Restaurar en Local**.
@@ -306,10 +308,108 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
 Las copias nuevas se guardan en `<perfil>/backups/<conexión>/<esquema>/`, salvo que cambies la carpeta en la
 conexión o en **Ajustes** (si venías de Navidog, siguen en la carpeta `backups` del perfil de Navidog).
 
+### Restaurar todo en Local (rollback de una ejecución)
+
+Si un trabajo de automatización saca copias de varias bases de datos (por ejemplo, todas las de staging), puedes
+pasarlas todas a tu MySQL local de una vez y dejarlo **igual que estaba en el momento del backup**:
+
+1. En **Automatización**, selecciona el trabajo y, en el **Historial**, pulsa el icono **Restaurar todo en
+   Local** de una ejecución terminada (también está dentro de la ejecución al desplegarla).
+2. Elige la **conexión de destino**. Por defecto es la primera conexión con entorno **Local**; nunca se
+   preselecciona una de producción.
+3. Revisa la lista: cada base de datos muestra `origen → destino` (mismo nombre), cuántos objetos y filas
+   tiene la copia, su tamaño y si en el destino **se reemplaza** (ya existe) o es **nueva**. Desmarca las que
+   no quieras. Las copias que no se pueden usar (archivo borrado, otra base de datos dentro, cifrada, o una
+   base de datos del sistema como `mysql`, `sys` o `performance_schema`, que nunca se reemplaza) aparecen
+   desactivadas con el motivo. Las copias **solo de estructura** (paso de copia sin «Incluir datos») o sin
+   ninguna fila salen con un aviso, porque dejarían las tablas vacías; las de solo estructura vienen
+   desmarcadas y la confirmación las nombra aparte («quedarán SIN DATOS»).
+4. Deja marcada **Copia de seguridad previa de Local** (recomendado) y pulsa **Restaurar**. La confirmación
+   lista exactamente qué bases de datos se van a reemplazar y cuáles se van a crear.
+
+Para cada base de datos marcada, en este orden:
+
+1. Se comprueba la copia: que existe, que contiene esa base de datos y que **se lee entera sin errores** (se
+   verifican la suma de verificación y la descompresión de cada bloque de datos, así que una copia dañada se
+   detecta antes de borrar nada). Si falla, esa base de datos no se toca.
+2. Si ya existe en el destino y la copia previa está activada, se guarda una copia de seguridad en
+   `<carpeta de backups del destino>/<esquema>/<fecha>-previo-rollback.nb3`. **Si esa copia falla, esa base
+   de datos no se toca** y aparece con ERROR.
+3. Se borra (`DROP DATABASE`) y se crea de nuevo con el juego de caracteres y la colación de la copia cuando
+   el servidor de destino los tiene (si no, los del servidor).
+4. Se restauran todos los objetos con sus datos. Funciona entre versiones (por ejemplo, MySQL 5.7 → 8.4): los
+   `DEFINER` de usuarios que no existen en el destino se quitan para que vistas, triggers y rutinas funcionen.
+
+La restauración aparece en el historial del trabajo como una ejecución más (**Restauración**, nombre
+`Rollback a Local · <trabajo>`) con su registro en vivo: un encabezado por base de datos (`Base de datos auth:
+Staging -> Local`), la comprobación de la copia, la copia previa, el borrado y la creación, una línea por objeto
+restaurado, el resultado y un resumen final con los fallos y la lista de **copias previas** guardadas. No cambia
+el estado ni la «Última ejecución» del trabajo de backup, y no impide ejecutarlo mientras dura.
+
+Si un objeto falla (por ejemplo, una función de 5.7 sin `DETERMINISTIC` en un 8.4 con binlog), el paso dice qué
+objetos fallaron, el error con una pista en español (en ese caso, `SET GLOBAL log_bin_trust_function_creators
+= 1` en el destino), que la base de datos **ha quedado incompleta** y cuál es su copia previa. Lo mismo si
+cancelas o cierras ElectronDB a mitad: cancelar una restauración pide confirmación, y salir de la aplicación
+mientras restaura también.
+
+**Deshacer.** Cada base de datos reemplazada muestra en el historial su **Copia previa** y un botón
+**Deshacer**, que abre esa copia en **Restaurar** con el modo **Reemplazar la base de datos completa**: la base
+de datos se borra y se crea de nuevo con lo que tenía antes (lo que trajo la restauración desaparece; antes se
+guarda otra copia previa). También puedes hacerlo desde **Copias de seguridad › conexión › base de datos ›
+copia `previo-rollback` › Restaurar**. El modo «Restaurar objetos» (el de siempre) solo sobrescribe los objetos
+de la copia y deja los demás.
+
+Si el destino es una conexión de **Producción**, hay que escribir su nombre para confirmar.
+
+### Restaurar un paquete de copias en Local (desde Copias de seguridad)
+
+En **Copia de seguridad** de una conexión, las copias que se hicieron juntas se agrupan en **paquetes** (el
+interruptor **Agrupar por paquete**, abajo a la derecha, está activado por defecto y se recuerda):
+
+- **Automatización**: las copias que escribió una misma ejecución de un trabajo de ElectronDB. Título
+  `<trabajo> · <fecha de la ejecución>`, por ejemplo `Backup staging · 2026-10-05 23:16`.
+- **Lote**: el resto (los lotes de Navicat, copias antiguas o hechas a mano) se agrupan por conexión y
+  etiqueta (el sufijo del nombre, `…-backup-staging.nb3`) cuando cada copia se hizo menos de 10 minutos
+  después de la anterior y no repite base de datos. Título `<etiqueta o «Sin etiqueta»> · <fecha de la
+  primera>`.
+
+Un paquete necesita al menos dos copias; las sueltas siguen como filas normales. Los paquetes salen plegados:
+la flecha los despliega. Para restaurar el paquete entero en tu MySQL local:
+
+1. Pulsa la cabecera del paquete (o su casilla): se marcan todas sus copias. También puedes marcar copias
+   sueltas a mano, o seleccionar una fila de un paquete.
+2. Pulsa **Restaurar paquete en Local**. Se abre el mismo diálogo que «Restaurar todo en Local», con las
+   bases de datos marcadas; la confirmación lista qué se **reemplaza** y qué se **crea**.
+
+Si todas las copias marcadas son de una misma ejecución, se usa esa ejecución (como desde el historial). Si no
+(un lote de Navicat, copias elegidas a mano), la restauración se hace **por archivos** con las mismas reglas:
+cada archivo tiene que estar en la carpeta de copias de una conexión conocida (la propia o una de Navicat), solo
+una copia por base de datos (si marcas dos de `auth`, te pide que elijas una), comprobación completa de cada
+copia antes de borrar nada, copia previa `previo-rollback`, nunca bases de datos del sistema y, en
+**Producción**, escribir su nombre. Queda en el historial del trabajo que hizo las copias o, si vienen de varios
+trabajos o de ninguno, en **Automatización › Restauraciones manuales**, con su registro.
+
 ## Automatización
 
-Un trabajo agrupa pasos de **backup de esquema** y de **SQL**, con una programación tipo cron, historial y
-registro de cada ejecución.
+Un trabajo agrupa pasos de **backup de esquema**, de **SQL** y de **restauración**, con una programación tipo
+cron, historial y registro de cada ejecución.
+
+El paso **Restaurar** reemplaza una base de datos con una copia, igual que «Restaurar todo en Local»
+(comprobación de la copia, copia previa, borrado y creación, restauración). Su origen es:
+
+- **un paso de copia anterior del mismo trabajo** (restaura el archivo que ese paso acaba de generar; no puede
+  ser un paso solo de estructura), o
+- **la última copia completa de una tarea** de un esquema de una conexión: la copia con datos más reciente que
+  hizo un paso de copia de una tarea de ElectronDB sobre esa misma conexión y que sigue en disco. Nunca usa
+  copias manuales, parciales, solo de estructura, de Navicat, de otra conexión ni copias previas.
+
+La base de datos de destino tiene por defecto el mismo nombre que la de origen. Así se monta un trabajo
+**Staging → Local**: un paso de copia por cada base de datos de staging y, detrás, un paso Restaurar de cada
+una en la conexión Local; programado, mantiene tu local al día cada mañana. Por seguridad, **un paso Restaurar
+nunca puede escribir en una conexión de Producción** (las ejecuciones programadas o de launchd no tienen a nadie
+que confirme): ElectronDB lo rechaza al guardar el trabajo y otra vez al ejecutarlo. Tampoco permite restaurar
+una base de datos sobre sí misma (misma conexión y esquema que el origen) ni sobre una base de datos del sistema
+(`mysql`, `sys`, `performance_schema`, `information_schema`).
 
 | Modo                                  | Sistemas   | Cómo funciona                                                                       |
 | ------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
@@ -537,6 +637,15 @@ $env:ELECTRONDB_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_t
 npm run test:integration
 ```
 
+Los tests de «Restaurar todo en Local» entre versiones (copia en MySQL 5.7, restauración en 8.4) necesitan
+además un MySQL 5.7 desechable:
+
+```sh
+docker run -d --name electrondb-test-mysql57 --platform linux/amd64 -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33357:3306 mysql:5.7
+ELECTRONDB_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
+ELECTRONDB_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' npm run test:integration
+```
+
 Usa siempre una base de datos desechable: los tests crean y borran tablas. La contraseña `navidog` y la base
 `navidog_test` son los valores con los que se creó este contenedor de pruebas; no tienen relación con tus datos.
 
@@ -551,7 +660,9 @@ ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 
 `npm run screenshots` siembra un perfil de prueba y el MySQL desechable (tablas `shot_*` en `navidog_test`),
 compila y abre la app en una ventana de 1600×1000 que recorre las pantallas principales. Guarda `01-home.png` …
-`15-light-theme-home.png` e imprime un resumen `[screenshots] {...}`. Nunca usa tu perfil real y se niega a
+`17e-manual-rollbacks-history.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
+(«Restaurar todo en Local» y «Restaurar paquete en Local») usan también el MySQL 5.7 desechable como staging
+(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
 
@@ -576,6 +687,7 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `ELECTRONDB_SMOKE=1`             | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                            |
 | `ELECTRONDB_DEBUG=1`             | Registro a nivel `debug`, copiado también en la consola.                                                                       |
 | `ELECTRONDB_TEST_MYSQL_URL`      | MySQL desechable para `npm run test:integration`.                                                                              |
+| `ELECTRONDB_TEST_MYSQL57_URL`    | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                 |
 | `ELECTRONDB_TEST_KEYCHAIN_DIR`   | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                            |
 | `ELECTRONDB_SCREENSHOTS=<dir>`   | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                               |
 

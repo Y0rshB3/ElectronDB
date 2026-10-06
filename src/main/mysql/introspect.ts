@@ -13,6 +13,7 @@ import type {
   ViewInfo
 } from '@shared/types'
 import { MysqlUserError } from './errors'
+import { isSystemSchema } from '@shared/restoreTask'
 
 /** The subset of MysqlSession introspection needs (also satisfied by a bare connection). */
 export interface Queryable {
@@ -106,12 +107,9 @@ export async function createDatabase(
   await q.query(sql)
 }
 
-/** Server schemas that must never be dropped from the UI. */
-const SYSTEM_SCHEMAS = new Set(['mysql', 'information_schema', 'performance_schema', 'sys'])
-
 export async function dropDatabase(q: Queryable, name: string): Promise<void> {
   if (!name.trim()) throw new MysqlUserError('El nombre de la base de datos no puede estar vacío')
-  if (SYSTEM_SCHEMAS.has(name.trim().toLowerCase())) {
+  if (isSystemSchema(name)) {
     throw new MysqlUserError(`La base de datos del sistema ${name} no se puede eliminar`)
   }
   await q.query(`DROP DATABASE ${escapeId(name)}`)

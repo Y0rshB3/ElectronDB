@@ -1,10 +1,11 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, dialog, Menu } from 'electron'
 import { applyProfilePath, configureFileLog, createContext, readEnvSwitches } from './bootstrap'
 import { APP_NAME } from './brand'
 import { getLogger } from './log'
 import { registerAllHandlers } from './ipc/register'
 import { buildAppMenuTemplate } from './menu'
 import { createMainWindow, watchSmoke } from './window'
+import { quitVetoed, restoreQuitPrompt, vetoQuit } from './quitGuard'
 import { runProfileMigration, runSecretMigration } from './migration'
 import {
   SCREENSHOT_QUERY,
@@ -72,6 +73,34 @@ app.whenReady().then(async () => {
     Menu.buildFromTemplate(buildAppMenuTemplate({ appName: app.name, dev: !app.isPackaged }))
   )
 
+  // Registered before every other 'before-quit' listener: quitting while a
+  // restore runs would cancel it after its DROP DATABASE, so ask first.
+  const { getAutomationService } = await import('./automation/index')
+  let quitDuringRestoreConfirmed = false
+  app.on('before-quit', (event) => {
+    if (quitDuringRestoreConfirmed) return
+    const restores = getAutomationService(ctx).activeRestores?.() ?? []
+    if (!restores.length) return
+    const prompt = restoreQuitPrompt(restores.map((r) => r.jobName))
+    const options = {
+      type: 'warning' as const,
+      buttons: ['Seguir restaurando', 'Salir de todos modos'],
+      defaultId: 0,
+      cancelId: 0,
+      message: prompt.message,
+      detail: prompt.detail
+    }
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const choice = parent
+      ? dialog.showMessageBoxSync(parent, options)
+      : dialog.showMessageBoxSync(options)
+    if (choice === 1) {
+      quitDuringRestoreConfirmed = true
+      return
+    }
+    vetoQuit(event)
+  })
+
   const { startBackgroundServices } = await import('./services')
   await startBackgroundServices(ctx)
 
@@ -80,7 +109,7 @@ app.whenReady().then(async () => {
   const { getConnectionManager } = await import('./mysql/manager')
   let closingConnections = false
   app.on('before-quit', (event) => {
-    if (closingConnections) return
+    if (quitVetoed(event) || closingConnections) return
     closingConnections = true
     event.preventDefault()
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000))

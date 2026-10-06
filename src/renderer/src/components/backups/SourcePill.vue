@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BackupFile } from '@shared/types'
-import { SOURCE_CHIPS } from './backupHelpers'
+import { sourceChip } from './backupHelpers'
 
 /** Who created a backup (Navicat / ElectronDB), as a small tinted pill. */
 defineProps<{ source: BackupFile['source'] }>()
@@ -8,7 +8,7 @@ defineProps<{ source: BackupFile['source'] }>()
 
 <template>
   <span class="nd-pill source-pill" :class="`source-pill--${source}`">
-    <span class="source-pill__dot" aria-hidden="true" />{{ SOURCE_CHIPS[source].label }}
+    <span class="source-pill__dot" aria-hidden="true" />{{ sourceChip(source).label }}
   </span>
 </template>
 

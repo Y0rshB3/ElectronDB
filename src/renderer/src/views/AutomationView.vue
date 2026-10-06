@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import type { Job, JobRun } from '@shared/types'
+import { MANUAL_ROLLBACKS_JOB_ID, MANUAL_ROLLBACKS_NAME } from '@shared/backupPackages'
 import { api } from '@renderer/api'
 import { useNotify } from '@renderer/composables/useNotify'
 import { useWorkspace } from '@renderer/composables/useWorkspace'
@@ -33,6 +34,22 @@ const running = ref<Record<string, boolean>>({})
 const selected = computed<Job | null>(() =>
   selectedId.value ? (jobs.get(selectedId.value) ?? null) : null
 )
+/**
+ * Restores of backup packages picked in the backups list that no single job
+ * made: recorded under a synthetic job id that has no job definition.
+ */
+const manualRuns = computed(() => jobs.runsOf(MANUAL_ROLLBACKS_JOB_ID))
+const manualSelected = computed(() => selectedId.value === MANUAL_ROLLBACKS_JOB_ID)
+const historyName = computed(() =>
+  manualSelected.value ? MANUAL_ROLLBACKS_NAME : selected.value?.name
+)
+
+function selectManual(): void {
+  if (manualSelected.value) return
+  selectedId.value = MANUAL_ROLLBACKS_JOB_ID
+  const active = manualRuns.value.find((r) => r.status === 'running' || r.status === 'queued')
+  logRunId.value = active?.id ?? null
+}
 /** Run shown in the log panel (auto-selected by «Ejecutar ahora»). */
 const logRunId = ref<string | null>(null)
 const logRun = computed<JobRun | null>(() =>
@@ -333,6 +350,23 @@ watch(
             <span v-else class="nd-muted">—</span>
           </template>
         </v-data-table>
+        <button
+          v-if="manualRuns.length"
+          type="button"
+          class="automation-view__manual nd-transition"
+          :class="{ 'automation-view__manual--selected': manualSelected }"
+          :aria-pressed="manualSelected"
+          data-test="jobs-manual-rollbacks"
+          @click="selectManual"
+        >
+          <v-icon icon="mdi-package-variant-closed" size="16" aria-hidden="true" />
+          <span class="automation-view__manual-title">{{ MANUAL_ROLLBACKS_NAME }}</span>
+          <span class="automation-view__manual-hint nd-ellipsis"
+            >Paquetes de copias restaurados desde «Copias de seguridad»</span
+          >
+          <StatusPill v-if="manualRuns[0]" :status="manualRuns[0].status" />
+          <span class="nd-pill">{{ manualRuns.length }}</span>
+        </button>
       </div>
       <div v-if="logRun" class="automation-view__log">
         <RunLogPanel :run="logRun" @close="logRunId = null" />
@@ -340,7 +374,7 @@ watch(
       <div class="automation-view__history">
         <RunHistory
           :job-id="selectedId"
-          :job-name="selected?.name"
+          :job-name="historyName"
           :selected-run-id="logRunId"
           inline-log
           @open-log="openLog"
@@ -406,6 +440,44 @@ watch(
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.automation-view__jobs > * {
+  flex: none;
+}
+.automation-view__manual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 16px;
+  border-top: 1px solid var(--nd-border);
+  color: var(--nd-text);
+  font: inherit;
+  font-size: var(--nd-fs-dense);
+  text-align: left;
+  background: var(--nd-bg-raised);
+  cursor: pointer;
+}
+.automation-view__manual:hover,
+.automation-view__manual:focus-visible {
+  background: var(--nd-hover);
+  outline: none;
+}
+.automation-view__manual--selected {
+  background: rgba(var(--nd-accent-rgb), 0.1);
+}
+.automation-view__manual-title {
+  flex: none;
+  font-weight: 500;
+}
+.automation-view__manual-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--nd-text-muted);
+  font-size: var(--nd-fs-xs);
 }
 .automation-view__log {
   grid-area: log;
@@ -413,8 +485,9 @@ watch(
   min-height: 0;
   border-top: 1px solid var(--nd-border);
 }
-.jobs-grid {
-  height: 100%;
+.automation-view__jobs > .jobs-grid {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .jobs-grid :deep(.jobs-grid__name) {
   max-width: 0;

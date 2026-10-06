@@ -1,11 +1,20 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
+import { restoreSourceOf } from '@shared/restoreTask'
 import type { JobTask, JobTaskType } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
-import { TASK_TYPES, defaultReferenceName, moveItem, newTask } from './jobForm'
+import { environmentLabel } from '@renderer/components/backups/backupHelpers'
+import {
+  TASK_ICONS,
+  TASK_TYPES,
+  defaultReferenceName,
+  moveItem,
+  newRestoreTask,
+  newTask
+} from './jobForm'
 
 const tasks = defineModel<JobTask[]>({ required: true })
 
@@ -22,16 +31,86 @@ function update(index: number, changes: Partial<JobTask>): void {
   tasks.value = next
 }
 
+/** Restore targets: production connections are listed but cannot be chosen. */
+const targetItems = computed(() =>
+  connections.sorted.map((c) => ({
+    title: c.name,
+    value: c.id,
+    props: {
+      disabled: c.environment === 'production',
+      subtitle:
+        c.environment === 'production'
+          ? 'Producción: no se puede restaurar desde una tarea'
+          : environmentLabel(c.environment)
+    }
+  }))
+)
+
 function changeType(index: number, type: JobTaskType): void {
   const current = tasks.value[index]
-  const replacement = {
-    ...newTask(type, current.connectionId, current.schema),
-    id: current.id,
-    referenceName: current.referenceName
-  }
+  const base =
+    type === 'restoreschema'
+      ? newRestoreTask(tasks.value.slice(0, index), connections.sorted)
+      : newTask(type, current.connectionId, current.schema)
+  const replacement = { ...base, id: current.id, referenceName: current.referenceName }
   const next = [...tasks.value]
   next[index] = replacement
   tasks.value = next
+}
+
+/** «Origen» choices of a restore step: earlier backup steps, or the latest file on disk. */
+function sourceItems(index: number): { title: string; value: string }[] {
+  const items = tasks.value.slice(0, index).flatMap((t, i) =>
+    t.type === 'backupschema'
+      ? [
+          {
+            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}`,
+            value: `task:${t.id}`
+          }
+        ]
+      : []
+  )
+  return [...items, { title: 'Última copia completa de una tarea de…', value: 'latest' }]
+}
+
+function sourceValue(task: JobTask): string | null {
+  const source = task.restoreSource
+  if (!source) return null
+  if (source.kind === 'task') return source.taskId ? `task:${source.taskId}` : null
+  return source.kind === 'latest' ? 'latest' : null
+}
+
+function changeSource(index: number, value: string | null): void {
+  if (value === 'latest') {
+    const current = tasks.value[index].restoreSource
+    update(index, {
+      restoreSource:
+        current?.kind === 'latest' ? current : { kind: 'latest', connectionId: '', schema: '' }
+    })
+  } else if (value?.startsWith('task:')) {
+    update(index, { restoreSource: { kind: 'task', taskId: value.slice(5) } })
+  }
+}
+
+function latestOf(task: JobTask): { connectionId: string; schema: string } {
+  const source = task.restoreSource
+  return source?.kind === 'latest' ? source : { connectionId: '', schema: '' }
+}
+
+function changeLatest(index: number, changes: { connectionId?: string; schema?: string }): void {
+  const base = latestOf(tasks.value[index])
+  const next = { kind: 'latest' as const, ...base, ...changes }
+  if (changes.connectionId !== undefined && changes.connectionId !== base.connectionId) {
+    next.schema = ''
+    if (changes.connectionId) void schemaLoader.load(changes.connectionId)
+  }
+  update(index, { restoreSource: next })
+}
+
+/** Placeholder of the target database: the source schema (same name). */
+function targetPlaceholder(task: JobTask): string {
+  const schema = restoreSourceOf(task, tasks.value)?.schema
+  return schema ? `Mismo nombre (${schema})` : 'Mismo nombre que el origen'
 }
 
 function changeConnection(index: number, connectionId: string): void {
@@ -41,7 +120,11 @@ function changeConnection(index: number, connectionId: string): void {
 
 function add(type: JobTaskType): void {
   const last = tasks.value[tasks.value.length - 1]
-  tasks.value = [...tasks.value, newTask(type, last?.connectionId ?? '', '')]
+  const task =
+    type === 'restoreschema'
+      ? newRestoreTask(tasks.value, connections.sorted)
+      : newTask(type, last?.connectionId ?? '', '')
+  tasks.value = [...tasks.value, task]
 }
 
 function remove(index: number): void {
@@ -53,8 +136,11 @@ function move(index: number, delta: number): void {
 }
 
 function schemaItems(task: JobTask): string[] {
-  const list = schemaLoader.of(task.connectionId)
-  return task.schema && !list.includes(task.schema) ? [task.schema, ...list] : list
+  return withCurrent(schemaLoader.of(task.connectionId), task.schema)
+}
+
+function withCurrent(list: string[], current: string | undefined): string[] {
+  return current && !list.includes(current) ? [current, ...list] : list
 }
 
 // Preload schema lists only for connections that are already open: merely viewing a
@@ -63,15 +149,20 @@ function schemaItems(task: JobTask): string[] {
 watch(
   () => [
     ...new Set(
-      tasks.value.map((t) => t.connectionId).filter((id) => !!id && connections.isOpen(id))
+      tasks.value
+        .flatMap((t) => [
+          t.connectionId,
+          t.restoreSource?.kind === 'latest' ? t.restoreSource.connectionId : ''
+        ])
+        .filter((id) => !!id && connections.isOpen(id))
     )
   ],
   (ids) => ids.forEach((id) => void schemaLoader.load(id)),
   { immediate: true }
 )
 
-function onSchemaMenu(task: JobTask, opened: boolean): void {
-  if (opened && task.connectionId) void schemaLoader.load(task.connectionId)
+function onSchemaMenu(connectionId: string, opened: boolean): void {
+  if (opened && connectionId) void schemaLoader.load(connectionId)
 }
 </script>
 
@@ -94,7 +185,7 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
         <div class="task-card__lead">
           <span class="task-card__index nd-mono" aria-hidden="true">{{ index + 1 }}</span>
           <v-icon
-            :icon="task.type === 'backupschema' ? 'mdi-archive-outline' : 'mdi-console-line'"
+            :icon="TASK_ICONS[task.type] ?? 'mdi-console-line'"
             size="18"
             class="task-card__type-icon"
             aria-hidden="true"
@@ -112,11 +203,73 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
             <v-text-field
               :model-value="task.referenceName"
               label="Nombre de referencia"
-              :placeholder="defaultReferenceName(task)"
+              :placeholder="defaultReferenceName(task, tasks)"
               class="task-card__ref"
               @update:model-value="update(index, { referenceName: $event })"
             />
+            <template v-if="task.type === 'restoreschema'">
+              <v-select
+                :model-value="sourceValue(task)"
+                :items="sourceItems(index)"
+                label="Origen (copia a restaurar)"
+                :hint="
+                  task.restoreSource?.kind === 'latest'
+                    ? 'La copia con datos más reciente de ese esquema hecha por una tarea de ElectronDB (nunca copias manuales, parciales, solo de estructura ni de Navicat).'
+                    : undefined
+                "
+                persistent-hint
+                prepend-inner-icon="mdi-archive-arrow-up-outline"
+                class="task-card__wide"
+                data-test="restore-source"
+                @update:model-value="changeSource(index, $event)"
+              />
+              <template v-if="task.restoreSource?.kind === 'latest'">
+                <v-select
+                  :model-value="latestOf(task).connectionId || null"
+                  :items="connectionItems"
+                  label="Conexión de origen"
+                  prepend-inner-icon="mdi-server-network"
+                  no-data-text="No hay conexiones"
+                  @update:model-value="changeLatest(index, { connectionId: $event ?? '' })"
+                />
+                <v-combobox
+                  :model-value="latestOf(task).schema || null"
+                  :items="
+                    withCurrent(schemaLoader.of(latestOf(task).connectionId), latestOf(task).schema)
+                  "
+                  :loading="schemaLoader.isLoading(latestOf(task).connectionId)"
+                  :disabled="!latestOf(task).connectionId"
+                  label="Esquema de origen"
+                  prepend-inner-icon="mdi-database-outline"
+                  @update:menu="onSchemaMenu(latestOf(task).connectionId, $event)"
+                  @update:model-value="changeLatest(index, { schema: $event ?? '' })"
+                />
+              </template>
+              <v-select
+                :model-value="task.connectionId || null"
+                :items="targetItems"
+                label="Conexión de destino"
+                prepend-inner-icon="mdi-server-network"
+                no-data-text="No hay conexiones"
+                data-test="restore-target"
+                @update:model-value="changeConnection(index, $event)"
+              />
+              <v-combobox
+                :model-value="task.schema || null"
+                :items="schemaItems(task)"
+                :loading="schemaLoader.isLoading(task.connectionId)"
+                :disabled="!task.connectionId"
+                :placeholder="targetPlaceholder(task)"
+                persistent-placeholder
+                label="Base de datos de destino"
+                prepend-inner-icon="mdi-database-arrow-down-outline"
+                clearable
+                @update:menu="onSchemaMenu(task.connectionId, $event)"
+                @update:model-value="update(index, { schema: $event ?? '' })"
+              />
+            </template>
             <v-select
+              v-else
               :model-value="task.connectionId || null"
               :items="connectionItems"
               label="Conexión"
@@ -125,6 +278,7 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
               @update:model-value="changeConnection(index, $event)"
             />
             <v-combobox
+              v-if="task.type !== 'restoreschema'"
               :model-value="task.schema || null"
               :items="schemaItems(task)"
               :loading="schemaLoader.isLoading(task.connectionId)"
@@ -137,7 +291,7 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
               label="Esquema"
               prepend-inner-icon="mdi-database-outline"
               class="task-card__schema"
-              @update:menu="onSchemaMenu(task, $event)"
+              @update:menu="onSchemaMenu(task.connectionId, $event)"
               @update:model-value="update(index, { schema: $event ?? '' })"
             />
           </div>
@@ -150,6 +304,21 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
             class="task-card__check"
             @update:model-value="update(index, { includeData: !!$event })"
           />
+          <template v-else-if="task.type === 'restoreschema'">
+            <v-checkbox
+              :model-value="task.safetyBackup !== false"
+              label="Copia de seguridad previa del destino (recomendado)"
+              density="compact"
+              hide-details
+              class="task-card__check"
+              data-test="restore-safety"
+              @update:model-value="update(index, { safetyBackup: !!$event })"
+            />
+            <p class="task-card__hint">
+              La base de datos de destino se borra y se crea de nuevo con el contenido de la copia.
+              Desde una tarea no se puede restaurar en conexiones de producción.
+            </p>
+          </template>
           <div v-else class="job-tasks__sql">
             <SqlEditor
               :model-value="task.sql ?? ''"
@@ -197,6 +366,13 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
       >
       <v-btn prepend-icon="mdi-database-search-outline" variant="tonal" @click="add('runquery')"
         >Añadir consulta</v-btn
+      >
+      <v-btn
+        prepend-icon="mdi-backup-restore"
+        variant="tonal"
+        data-test="add-restore-task"
+        @click="add('restoreschema')"
+        >Añadir restauración</v-btn
       >
     </div>
   </div>
@@ -269,6 +445,14 @@ function onSchemaMenu(task: JobTask, opened: boolean): void {
   display: flex;
   gap: 2px;
   padding-top: 2px;
+}
+.task-card__wide {
+  grid-column: 1 / -1;
+}
+.task-card__hint {
+  margin: 2px 0 0;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
 }
 .task-card__check {
   margin-top: 6px;

@@ -42,6 +42,11 @@ const SCHEMA = 'navidog_test'
 /** Scratch schema created and dropped by the live job log steps. */
 const BIG_SCHEMA = 'electrondb_shots_big'
 const LIVE_JOB = 'Backup con errores'
+/** Seeded job backing up rb_shop/rb_crm on the 5.7 "staging"; its run is restored into Local Test. */
+const ROLLBACK_JOB = 'Backup staging 5.7'
+const STAGING_TO_LOCAL_JOB = 'Staging 5.7 -> Local'
+/** Seeded MySQL 5.7 "staging" connection id (scripts/seed-screenshots.mjs). */
+const STAGING57 = 'shot-staging57'
 
 /** Helpers installed once in the renderer. */
 const HELPERS = `
@@ -457,6 +462,154 @@ const STEPS: Step[] = [
     cleanup: `
       const run = S.jobs.runs.find((r) => r.jobName === ${JSON.stringify(LIVE_JOB)})
       if (run) delete S.jobLogs.buffers[run.id]`
+  },
+  {
+    // «Restaurar todo en Local»: run the staging backup job, then open the dialog from its run.
+    name: '16a-rollback-dialog',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.jobs.find((j) => j.name === ${JSON.stringify(ROLLBACK_JOB)})
+      if (!job) throw new Error('job ${ROLLBACK_JOB} not seeded (run scripts/seed-screenshots.mjs)')
+      S.workspace.openAutomation()
+      const row = await H.until(() => [...document.querySelectorAll('[data-test="automation-view"] tbody tr')]
+        .find((r) => r.textContent.includes(job.name)), 10000)
+      row.click()
+      await H.sleep(300)
+      await H.click('[data-test="jobs-run"]', 5000)
+      await H.until(() => {
+        const run = S.jobs.runs.find((r) => r.jobId === job.id && r.kind !== 'rollback')
+        return run && run.status === 'success'
+      }, 180000, 200)
+      await H.sleep(500)
+      await H.click('[data-test="run-log-close"]', 5000)
+      await H.click('[data-test="run-history"] [data-test="run-rollback"]', 5000)
+      await H.waitFor('[data-test="rollback-item-state"]', 20000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '16b-rollback-confirm',
+    script: `
+      await H.click('[data-test="rollback-submit"]', 5000)
+      await H.until(() => S.ui.confirm.open, 5000)
+      await H.sleep(700)`
+  },
+  {
+    // Mid-restore: rb_shop was backed up and recreated, its big events table is being restored.
+    name: '16c-rollback-live-log',
+    script: `
+      S.ui.answer(true)
+      await H.until(() => /Tabla customers/.test(H.$('[data-test="run-log-panel"]')?.textContent || ''), 120000, 40)
+      try {
+        await H.until(() => /Tabla events/.test(H.$('[data-test="progress-message"]')?.textContent || ''), 20000, 40)
+      } catch (e) { /* fast machine: the table may finish first */ }
+      await H.sleep(150)`
+  },
+  {
+    // Cancelling a running restore asks first (the database may stay incomplete); answered «no».
+    name: '16c2-rollback-cancel-confirm',
+    script: `
+      await H.click('[data-test="run-history"] [data-test="run-cancel"]', 10000)
+      await H.until(() => S.ui.confirm.open, 5000)
+      await H.sleep(500)`,
+    cleanup: `S.ui.answer(false)`
+  },
+  {
+    name: '16d-rollback-summary',
+    script: `
+      await H.until(() => H.$('[data-test="run-log-summary"]'), 240000, 200)
+      await H.sleep(900)`
+  },
+  {
+    // The replaced database shows its safety copy with «Deshacer» in the run history.
+    name: '16d2-rollback-history-undo',
+    script: `
+      const card = await H.waitFor('[data-test="run-history"] .timeline__card', 5000)
+      card.click()
+      await H.waitFor('[data-test="run-undo-restore"]', 5000)
+      await H.sleep(600)`
+  },
+  {
+    // «Deshacer» opens the safety copy in «Reemplazar la base de datos completa» mode.
+    name: '16d3-undo-restore-dialog',
+    script: `
+      await H.click('[data-test="run-undo-restore"]', 5000)
+      await H.waitFor('[data-test="restore-replace-warning"]', 10000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.restoreDialog = { ...S.ui.restoreDialog, open: false }`
+  },
+  {
+    // Backups list grouped by package: the run of «Backup staging 5.7» and a «backup-staging»
+    // batch made by hand (no run: grouped by label and time); the batch is selected and expanded.
+    name: '17a-backups-packages',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      try { localStorage.removeItem('electrondb.backups.groupByPackage') } catch (e) { /* default on */ }
+      for (const schema of ['rb_crm', 'rb_shop'])
+        await S.api.backups.create('shots-package-' + schema, {
+          connectionId: '${STAGING57}', schema, includeData: true, label: 'backup-staging'
+        })
+      S.workspace.openBackups('${STAGING57}', null)
+      const header = await H.until(() => [...document.querySelectorAll('[data-test="backup-package"]')]
+        .find((h) => h.textContent.includes('backup-staging')), 15000)
+      header.click()
+      await H.sleep(200)
+      header.querySelector('[data-test="backup-package-toggle"]').click()
+      await H.settle(S, 900)`
+  },
+  {
+    // «Restaurar paquete en Local» opens the rollback dialog with the package's databases checked.
+    name: '17b-package-rollback-dialog',
+    script: `
+      await H.click('[data-test="backups-restore-package"]', 5000)
+      await H.waitFor('[data-test="rollback-item-state"]', 20000)
+      await H.settle(S, 900)`
+  },
+  {
+    // Only rb_shop (rb_crm holds a routine 8.4 refuses, see 16d): the confirmation lists
+    // exactly what is replaced and what is created.
+    name: '17c-package-rollback-confirm',
+    script: `
+      const item = await H.until(() => [...document.querySelectorAll('[data-test="rollback-items"] li')]
+        .find((li) => li.textContent.includes('rb_crm')), 5000)
+      item.querySelector('[data-test="rollback-item-check"] input').click()
+      await H.sleep(300)
+      await H.click('[data-test="rollback-submit"]', 5000)
+      await H.until(() => S.ui.confirm.open, 5000)
+      await H.sleep(700)`
+  },
+  {
+    name: '17d-package-rollback-summary',
+    script: `
+      S.ui.answer(true)
+      await H.until(() => H.$('[data-test="run-log-summary"]'), 180000, 200)
+      await H.sleep(900)`,
+    cleanup: `await H.click('[data-test="run-log-close"]', 5000).catch(() => null)`
+  },
+  {
+    // The restore is recorded under «Restauraciones manuales» (its files come from no single job).
+    name: '17e-manual-rollbacks-history',
+    script: `
+      S.workspace.openAutomation()
+      await H.click('[data-test="jobs-manual-rollbacks"]', 10000)
+      const card = await H.waitFor('[data-test="run-history"] .timeline__card', 5000)
+      card.click()
+      await H.settle(S, 900)`
+  },
+  {
+    name: '16e-job-restore-step',
+    script: `
+      await S.jobs.load()
+      const job = S.jobs.jobs.find((j) => j.name === ${JSON.stringify(STAGING_TO_LOCAL_JOB)})
+      if (!job) throw new Error('job ${STAGING_TO_LOCAL_JOB} not seeded')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="restore-source"]', 10000)
+      await H.settle(S, 1200)`,
+    cleanup: `
+      // Scratch schemas of the rollback screens, on the 8.4 "local" and the 5.7 "staging".
+      for (const id of [H.local(S).id, 'shot-staging57'])
+        for (const db of ['rb_shop', 'rb_crm'])
+          await S.api.invokeSilent('db:execute', id, 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
   },
   {
     name: '15-light-theme-home',

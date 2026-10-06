@@ -7,6 +7,8 @@ import type {
   ObjectType,
   QueryExecuteOptions,
   RestoreOptions,
+  RollbackFilesSource,
+  RollbackRequest,
   RowChange,
   TableDataRequest,
   WriteOptions
@@ -161,7 +163,12 @@ export const api = {
     cancel: (runId: string) => invoke('jobs:cancel', runId),
     runs: (jobId: string | null, limit?: number) => invoke('jobs:runs', jobId, limit),
     runLog: (runId: string) => invoke('jobs:runLog', runId),
-    scheduleStatus: (id: string) => invokeSilent('jobs:scheduleStatus', id)
+    scheduleStatus: (id: string) => invokeSilent('jobs:scheduleStatus', id),
+    /** Plan of a run (its id) or of backup files picked in the backups list. */
+    rollbackPlan: (source: string | RollbackFilesSource, targetConnectionId: string | null) =>
+      invokeSilent('jobs:rollbackPlan', source, targetConnectionId),
+    rollback: (request: RollbackRequest, options?: WriteOptions) =>
+      invokeSilent('jobs:rollback', request, options)
   },
   navicat: {
     detect: (rootPath?: string | null) => invoke('navicat:detect', rootPath),

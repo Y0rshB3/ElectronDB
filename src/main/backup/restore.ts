@@ -32,6 +32,37 @@ interface PlannedObject {
 const DEFINER_RE =
   /\s+DEFINER\s*=\s*(?:`(?:[^`]|``)*`|'(?:[^'\\]|\\.)*'|[^\s@]+)\s*@\s*(?:`(?:[^`]|``)*`|'(?:[^'\\]|\\.)*'|[^\s(]+)/i
 
+/**
+ * Spanish advice for MySQL errors that typically appear when a backup from
+ * another server (staging 5.7) is restored into a local 8.x; null otherwise.
+ */
+export function restoreErrorHint(err: unknown): string | null {
+  const errno = (err as { errno?: unknown })?.errno
+  switch (typeof errno === 'number' ? errno : null) {
+    case 1418: // ER_BINLOG_UNSAFE_ROUTINE
+    case 1419: // ER_BINLOG_CREATE_ROUTINE_NEED_SUPER
+      return 'Pista: el servidor de destino tiene el binlog activado y no acepta rutinas sin DETERMINISTIC, NO SQL o READS SQL DATA. Ejecuta en el destino SET GLOBAL log_bin_trust_function_creators = 1 (o añade esa característica a la rutina en el origen) y vuelve a restaurar.'
+    case 1227: // ER_SPECIFIC_ACCESS_DENIED_ERROR
+      return 'Pista: el usuario de la conexión de destino no tiene privilegios suficientes (SUPER, o SET_USER_ID/SYSTEM_USER para objetos con otro DEFINER); restaura con un usuario administrador.'
+    case 1449: // ER_NO_SUCH_USER
+      return 'Pista: el DEFINER del objeto no existe en el servidor de destino; crea ese usuario o restaura con un usuario que pueda leer mysql.user.'
+    case 1273: // ER_UNKNOWN_COLLATION
+    case 1115: // ER_UNKNOWN_CHARACTER_SET
+      return 'Pista: el servidor de destino no conoce esa colación o juego de caracteres (por ejemplo utf8mb4_0900_ai_ci no existe en MySQL 5.7).'
+    case 1146: // ER_NO_SUCH_TABLE
+      return 'Pista: el objeto usa una tabla que no está en la copia ni en el destino.'
+    default:
+      return null
+  }
+}
+
+/** describeError plus the restore hint, if any. */
+export function describeRestoreError(err: unknown): string {
+  const message = describeError(err)
+  const hint = restoreErrorHint(err)
+  return hint ? `${message}. ${hint}` : message
+}
+
 /** Removes `DEFINER=user@host` so the object is created with the current user as definer. */
 export function stripDefiner(ddl: string): string {
   return ddl.replace(DEFINER_RE, '')
@@ -77,8 +108,67 @@ export function assertRestoreAllowed(
   }
 }
 
-/** Runs one DDL statement; on failure retries once without the DEFINER clause. */
-export async function executeDdl(session: MysqlSession, ddl: string): Promise<void> {
+const unquoteAccountPart = (part: string): string => {
+  const q = part[0]
+  if ((q === '`' || q === "'") && part.endsWith(q) && part.length >= 2)
+    return part.slice(1, -1).replace(q === '`' ? /``/g : /\\(.)/g, q === '`' ? '`' : '$1')
+  return part
+}
+
+/** `DEFINER=user@host` of a DDL statement, unquoted; null when there is none. */
+export function definerOf(ddl: string): { user: string; host: string } | null {
+  const m =
+    /\sDEFINER\s*=\s*(`(?:[^`]|``)*`|'(?:[^'\\]|\\.)*'|[^\s@]+)\s*@\s*(`(?:[^`]|``)*`|'(?:[^'\\]|\\.)*'|[^\s(]+)/i.exec(
+      ddl
+    )
+  return m ? { user: unquoteAccountPart(m[1]), host: unquoteAccountPart(m[2]) } : null
+}
+
+/**
+ * Remembers whether DEFINER accounts exist on the target server. A backup
+ * from another server (staging 5.7 -> local 8.4) usually names accounts the
+ * target lacks: MySQL accepts such objects but every use fails with "The
+ * user specified as a definer does not exist", so their DEFINER is dropped
+ * (the restoring user becomes the definer). Unknown (no privilege to read
+ * mysql.user) keeps the DDL as it is.
+ */
+export class DefinerAccounts {
+  private readonly known = new Map<string, boolean | null>()
+
+  constructor(private readonly session: MysqlSession) {}
+
+  async exists(user: string, host: string): Promise<boolean | null> {
+    const key = `${user}@${host}`
+    if (this.known.has(key)) return this.known.get(key)!
+    let found: boolean | null = null
+    try {
+      const rows = await this.session.query<{ n: unknown }>(
+        'SELECT COUNT(*) AS n FROM mysql.user WHERE User = ? AND Host = ?',
+        [user, host]
+      )
+      found = rows.length ? Number(rows[0].n) > 0 : null
+    } catch {
+      found = null
+    }
+    this.known.set(key, found)
+    return found
+  }
+}
+
+/**
+ * Runs one DDL statement; a DEFINER whose account does not exist on the
+ * target is removed up front, and any failure is retried once without it.
+ */
+export async function executeDdl(
+  session: MysqlSession,
+  ddl: string,
+  definers?: DefinerAccounts
+): Promise<void> {
+  const definer = definers ? definerOf(ddl) : null
+  if (definer && (await definers!.exists(definer.user, definer.host)) === false) {
+    await session.execute(stripDefiner(ddl))
+    return
+  }
   try {
     await session.execute(ddl)
   } catch (err) {
@@ -197,12 +287,30 @@ export async function restoreBackup(
       throw new Error(`No se pudo seleccionar la base de datos ${schema}: ${describeError(err)}`)
     }
     saved = await prepareSession(session)
+    const definers = new DefinerAccounts(session)
 
     const total = plan.length
     let index = 0
+    let done = 0
     let stop = false
-    const fail = (name: string, err: unknown): void => {
-      result.errors.push({ object: name, message: describeError(err) })
+    const detailOf = (item: PlannedObject) => ({
+      objectType: item.summary.Type,
+      objectName: item.summary.Name,
+      objectIndex: Math.min(total, index + 1),
+      objects: total
+    })
+    const fail = (item: PlannedObject, err: unknown): void => {
+      const message = describeRestoreError(err)
+      result.errors.push({ object: item.summary.Name, message })
+      // Structured per-object failure: automation logs print one line per object.
+      progress({
+        phase: 'objectError',
+        current: index,
+        total,
+        message: `Error al restaurar ${item.summary.Name}`,
+        done: false,
+        detail: { ...detailOf(item), objectsDone: done, error: message }
+      })
       if (!options.continueOnError) stop = true
     }
 
@@ -210,43 +318,71 @@ export async function restoreBackup(
     const views = plan.filter((p) => p.summary.Type.toLowerCase() === 'view')
     const runOne = async (item: PlannedObject): Promise<void> => {
       const name = item.summary.Name
+      const isTable = item.summary.Type.toLowerCase() === 'table'
+      const estimate = isTable && /^\d+$/.test(item.summary.Rows) ? Number(item.summary.Rows) : null
       progress({
         phase: 'object',
         current: index,
         total,
         message: `Restaurando ${name}`,
-        done: false
+        done: false,
+        detail: {
+          ...detailOf(item),
+          objectsDone: done,
+          rows: isTable && options.includeData ? 0 : null,
+          rowsEstimate: options.includeData ? estimate : null
+        }
       })
-      if (item.summary.Type.toLowerCase() === 'table') {
-        result.rowsInserted += await restoreTable(
+      let rows: number | null = null
+      if (isTable) {
+        rows = await restoreTable(
           session,
           reader,
           item.meta,
           name,
           options,
+          definers,
           signal,
-          (rows) =>
+          (count) =>
             progress({
               phase: 'rows',
               current: index,
               total,
-              message: `Restaurando ${name}: ${rows} filas`,
-              done: false
+              message: `Restaurando ${name}: ${count} filas`,
+              done: false,
+              detail: {
+                ...detailOf(item),
+                objectsDone: done,
+                rows: count,
+                rowsEstimate: options.includeData ? estimate : null
+              }
             })
         )
+        result.rowsInserted += rows
+        if (!options.includeData) rows = null
       } else if (options.includeStructure) {
         await restoreDdlObject(
           session,
           item.summary.Type,
           name,
           item.meta,
-          options.dropObjectsFirst
+          options.dropObjectsFirst,
+          definers
         )
       } else {
         // Data-only restore: nothing is executed for views/routines/events.
         return
       }
       result.objectsRestored++
+      done++
+      progress({
+        phase: 'objectDone',
+        current: index + 1,
+        total,
+        message: `${name} restaurado`,
+        done: false,
+        detail: { ...detailOf(item), objectsDone: done, rows }
+      })
     }
 
     const tablesAndRoutines = regular.filter((p) => rankOf(p.summary.Type) < PHASE_RANK.view)
@@ -259,7 +395,7 @@ export async function restoreBackup(
         await runOne(item)
       } catch (err) {
         if (cancelled() || isCancelled(err)) throw new Error(RESTORE_CANCELLED)
-        fail(item.summary.Name, err)
+        fail(item, err)
       }
       index++
     }
@@ -279,7 +415,7 @@ export async function restoreBackup(
       }
       if (failed.length === pending.length) {
         for (const f of failed) {
-          fail(f.item.summary.Name, f.err)
+          fail(f.item, f.err)
           index++
           if (stop) break
         }
@@ -295,7 +431,7 @@ export async function restoreBackup(
         await runOne(item)
       } catch (err) {
         if (cancelled() || isCancelled(err)) throw new Error(RESTORE_CANCELLED)
-        fail(item.summary.Name, err)
+        fail(item, err)
       }
       index++
     }
@@ -319,14 +455,15 @@ async function restoreDdlObject(
   type: string,
   name: string,
   meta: Nb3ObjectMeta,
-  dropFirst: boolean
+  dropFirst: boolean,
+  definers: DefinerAccounts
 ): Promise<void> {
   const keyword = DROP_KEYWORD[type.toLowerCase()]
   if (dropFirst && keyword)
     await session.execute(`DROP ${keyword} IF EXISTS ${session.escapeId(name)}`)
   if (!meta.DDL.trim()) throw new Error(`El backup no contiene la definición de ${name}`)
-  await executeDdl(session, meta.DDL)
-  for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub)
+  await executeDdl(session, meta.DDL, definers)
+  for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)
 }
 
 async function restoreTable(
@@ -335,6 +472,7 @@ async function restoreTable(
   meta: Nb3ObjectMeta,
   name: string,
   options: RestoreOptions,
+  definers: DefinerAccounts,
   signal: AbortSignal | undefined,
   onRows: (rows: number) => void
 ): Promise<number> {
@@ -342,8 +480,8 @@ async function restoreTable(
   if (options.includeStructure) {
     if (options.dropObjectsFirst) await session.execute(`DROP TABLE IF EXISTS ${table}`)
     if (!meta.DDL.trim()) throw new Error(`El backup no contiene la definición de la tabla ${name}`)
-    await executeDdl(session, meta.DDL)
-    for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub)
+    await executeDdl(session, meta.DDL, definers)
+    for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)
   }
   let inserted = 0
   if (options.includeData && meta.Data.length > 0) {
@@ -366,8 +504,8 @@ async function restoreTable(
     inserted = batcher.inserted
   }
   if (options.includeStructure) {
-    for (const ddl of meta.IndexDDL) if (ddl.trim()) await executeDdl(session, ddl)
-    for (const ddl of meta.TriggerDDL) if (ddl.trim()) await executeDdl(session, ddl)
+    for (const ddl of meta.IndexDDL) if (ddl.trim()) await executeDdl(session, ddl, definers)
+    for (const ddl of meta.TriggerDDL) if (ddl.trim()) await executeDdl(session, ddl, definers)
     if (/^\d+$/.test(meta.AutoIncrement.trim())) {
       await session.execute(`ALTER TABLE ${table} AUTO_INCREMENT = ${meta.AutoIncrement.trim()}`)
     }

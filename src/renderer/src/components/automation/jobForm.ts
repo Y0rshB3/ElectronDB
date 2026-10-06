@@ -1,4 +1,5 @@
-import type { Job, JobInput, JobTask, JobTaskType } from '@shared/types'
+import { restoreSourceOf, restoreTaskProblem } from '@shared/restoreTask'
+import type { ConnectionConfig, Job, JobInput, JobTask, JobTaskType } from '@shared/types'
 import {
   cronFromForm,
   defaultScheduleForm,
@@ -20,8 +21,15 @@ export interface JobDraft {
 
 export const TASK_TYPES: { value: JobTaskType; title: string }[] = [
   { value: 'backupschema', title: 'Copia de seguridad' },
-  { value: 'runquery', title: 'Ejecutar consulta' }
+  { value: 'runquery', title: 'Ejecutar consulta' },
+  { value: 'restoreschema', title: 'Restaurar' }
 ]
+
+export const TASK_ICONS: Record<JobTaskType, string> = {
+  backupschema: 'mdi-archive-outline',
+  runquery: 'mdi-console-line',
+  restoreschema: 'mdi-backup-restore'
+}
 
 function randomId(): string {
   return globalThis.crypto?.randomUUID
@@ -32,15 +40,37 @@ function randomId(): string {
 export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobTask {
   const task: JobTask = { id: randomId(), type, connectionId, schema, referenceName: '' }
   if (type === 'backupschema') task.includeData = true
-  else task.sql = ''
+  else if (type === 'restoreschema') {
+    task.restoreSource = { kind: 'task', taskId: '' }
+    task.safetyBackup = true
+  } else task.sql = ''
+  return task
+}
+
+/**
+ * New restore step placed after `tasks`: restores the last backup step that no
+ * restore uses yet, into the first local connection (never a production one).
+ */
+export function newRestoreTask(tasks: JobTask[], connections: ConnectionConfig[]): JobTask {
+  const used = new Set(
+    tasks.flatMap((t) =>
+      t.type === 'restoreschema' && t.restoreSource?.kind === 'task' ? [t.restoreSource.taskId] : []
+    )
+  )
+  const backups = tasks.filter((t) => t.type === 'backupschema')
+  const source = [...backups].reverse().find((t) => !used.has(t.id)) ?? backups[backups.length - 1]
+  const local = connections.find((c) => c.environment === 'local')
+  const task = newTask('restoreschema', local?.id ?? '', '')
+  task.restoreSource = { kind: 'task', taskId: source?.id ?? '' }
   return task
 }
 
 /** Default reference name in Navicat style when the user leaves it empty. */
-export function defaultReferenceName(task: JobTask): string {
-  return task.type === 'backupschema'
-    ? `Backup ${task.schema}`.trim()
-    : `Consulta ${task.schema}`.trim()
+export function defaultReferenceName(task: JobTask, tasks: JobTask[] = []): string {
+  if (task.type === 'backupschema') return `Backup ${task.schema}`.trim()
+  if (task.type === 'restoreschema')
+    return `Restaurar ${task.schema || restoreSourceOf(task, tasks)?.schema || ''}`.trim()
+  return `Consulta ${task.schema}`.trim()
 }
 
 export function emptyDraft(): JobDraft {
@@ -68,7 +98,10 @@ export function draftFromJob(job: Job): JobDraft {
 }
 
 /** Client-side checks; the main process validates again and its messages are shown too. */
-export function validateDraft(draft: JobDraft): string[] {
+export function validateDraft(
+  draft: JobDraft,
+  lookup: (id: string) => ConnectionConfig | null | undefined = () => null
+): string[] {
   const errors: string[] = []
   if (!draft.name.trim()) errors.push('El nombre de la tarea es obligatorio.')
   if (/[/\\:]/.test(draft.name)) errors.push('El nombre no puede contener "/", "\\" ni ":".')
@@ -81,6 +114,15 @@ export function validateDraft(draft: JobDraft): string[] {
       errors.push(`Tarea ${n}: selecciona un esquema.`)
     if (task.type === 'runquery' && !task.sql?.trim())
       errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
+    if (task.type === 'restoreschema' && task.connectionId) {
+      // Same rules as main (production targets and self-restores are refused).
+      const named = {
+        ...task,
+        referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
+      }
+      const problem = restoreTaskProblem(named, draft.tasks, lookup, `paso ${n}`)
+      if (problem) errors.push(problem)
+    }
   })
   const cron = cronFromForm(draft.schedule)
   if (draft.scheduleEnabled && !isValidCron(cron))
@@ -98,10 +140,14 @@ export function buildJobInput(draft: JobDraft): JobInput {
         type: task.type,
         connectionId: task.connectionId,
         schema: task.schema,
-        referenceName: task.referenceName.trim() || defaultReferenceName(task)
+        referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
       }
       if (task.type === 'backupschema') out.includeData = task.includeData !== false
-      else out.sql = task.sql ?? ''
+      else if (task.type === 'restoreschema') {
+        out.schema = task.schema.trim()
+        if (task.restoreSource) out.restoreSource = { ...task.restoreSource }
+        out.safetyBackup = task.safetyBackup !== false
+      } else out.sql = task.sql ?? ''
       return out
     }),
     schedule: {

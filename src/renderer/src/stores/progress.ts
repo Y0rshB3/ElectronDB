@@ -41,6 +41,20 @@ const steps = (n: number): string => (n === 1 ? 'paso' : 'pasos')
 export function jobOutcome(
   run: JobRun
 ): Pick<FinishedEvent, 'phase' | 'message' | 'error' | 'tone'> {
+  const outcome = baseOutcome(run)
+  // Restore steps: say where the way back is (the log summary lists the files).
+  const copies = run.tasks.filter((t) => t.type === 'restoreschema' && !!t.outputPath).length
+  if (!copies) return outcome
+  // Short: the card truncates; «Deshacer» is in the run history and the summary lists the files.
+  const note = ` · ${copies === 1 ? 'copia previa' : `${copies} copias previas`}`
+  return {
+    ...outcome,
+    message: `${outcome.message}${note}`,
+    ...(outcome.error ? { error: `${outcome.error}${note}` } : {})
+  }
+}
+
+function baseOutcome(run: JobRun): Pick<FinishedEvent, 'phase' | 'message' | 'error' | 'tone'> {
   const total = run.tasks.length
   const ok = run.tasks.filter((t) => t.status === 'success').length
   const failed = run.tasks.filter((t) => t.status === 'failed').length

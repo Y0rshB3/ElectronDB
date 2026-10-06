@@ -87,7 +87,7 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<boolean> {
-  errors.value = validateDraft(draft.value)
+  errors.value = validateDraft(draft.value, (id) => connections.get(id))
   if (errors.value.length) return false
   const input = buildJobInput(draft.value)
   const risk = riskOf(input)
