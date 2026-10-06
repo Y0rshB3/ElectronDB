@@ -6,7 +6,10 @@ defineProps<{
   results: QueryStatementResult[]
   /** Free-form notice shown on top (e.g. stopped execution). */
   notice?: string | null
+  /** Show «Explicar error» on failed statements (AI assistant enabled). */
+  canExplain?: boolean
 }>()
+const emit = defineEmits<{ 'explain-error': [result: QueryStatementResult] }>()
 
 function summary(r: QueryStatementResult): string {
   if (r.error) return r.error
@@ -41,6 +44,18 @@ function summary(r: QueryStatementResult): string {
       <div class="query-messages__body">
         <code class="query-messages__sql" :title="r.sql">{{ r.sql }}</code>
         <div class="query-messages__summary">{{ summary(r) }}</div>
+        <v-btn
+          v-if="r.error && canExplain"
+          size="x-small"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-creation-outline"
+          class="query-messages__explain"
+          title="Pregunta al asistente de IA por qué falla (se envían el SQL y el mensaje de error)"
+          :data-test="`explain-error-${i}`"
+          @click="emit('explain-error', r)"
+          >Explicar error</v-btn
+        >
       </div>
       <span class="query-messages__time">{{ formatDuration(r.durationMs) }}</span>
     </div>
@@ -134,6 +149,9 @@ function summary(r: QueryStatementResult): string {
 }
 .is-error .query-messages__summary {
   color: var(--nd-error);
+}
+.query-messages__explain {
+  margin-top: 6px;
 }
 .query-messages__time {
   flex: none;

@@ -49,6 +49,21 @@ import type {
   ViewInfo,
   WriteOptions
 } from './types'
+import type {
+  AiChatRequest,
+  AiChatStart,
+  AiContextPreview,
+  AiContextRequest,
+  AiConversation,
+  AiConversationInput,
+  AiConversationSummary,
+  AiDeltaEvent,
+  AiDoneEvent,
+  AiProviderInput,
+  AiProviderView,
+  AiStatusEvent,
+  AiTestResult
+} from './ai'
 
 /**
  * Request/response channels (ipcRenderer.invoke / ipcMain.handle).
@@ -230,6 +245,42 @@ export interface IpcInvokeMap {
     result: NavicatImportResult
   }
   'navicat:recoverPasswords': { args: []; result: KeychainRecoveryResult }
+
+  /*
+   * AI assistant (bring your own key). Keys go renderer -> main only: no channel
+   * returns a key. Requests and the model's answers never contain row data.
+   */
+  'ai:providers': { args: []; result: AiProviderView[] }
+  'ai:saveProvider': { args: [input: AiProviderInput]; result: AiProviderView }
+  'ai:deleteProvider': { args: [id: string]; result: void }
+  /** Minimal request with the stored key, or with `key` when given (not saved). */
+  'ai:testProvider': {
+    args: [input: AiProviderInput, key: string | null]
+    result: AiTestResult
+  }
+  /** Stores (or with null/'' removes) the provider's API key in CredentialStore. */
+  'ai:setKey': { args: [id: string, key: string | null]; result: void }
+  'ai:hasKey': { args: [id: string]; result: boolean }
+  /** Model IDs reported by the provider (`key` as in test); [] when it cannot list them. */
+  'ai:listModels': { args: [input: AiProviderInput, key: string | null]; result: string[] }
+  /** Starts a streamed answer; text arrives as event:aiDelta, the end as event:aiDone. */
+  'ai:chat': { args: [request: AiChatRequest]; result: AiChatStart }
+  'ai:cancel': { args: [requestId: string]; result: void }
+  'ai:conversations': { args: [connectionId: string]; result: AiConversationSummary[] }
+  'ai:conversation': {
+    args: [connectionId: string, id: string]
+    result: AiConversation | null
+  }
+  'ai:saveConversation': { args: [input: AiConversationInput]; result: AiConversation }
+  'ai:deleteConversation': { args: [connectionId: string, id: string]; result: void }
+  /** «Memoria»: notes of a connection (schema null) or of one of its databases. */
+  'ai:memory': { args: [connectionId: string, schema: string | null]; result: string }
+  'ai:setMemory': {
+    args: [connectionId: string, schema: string | null, text: string]
+    result: void
+  }
+  /** Exact instructions + context that a request would send («Ver contexto enviado»). */
+  'ai:contextPreview': { args: [request: AiContextRequest]; result: AiContextPreview }
 }
 
 export type IpcChannel = keyof IpcInvokeMap
@@ -245,6 +296,12 @@ export interface IpcEventMap {
   'event:jobLog': JobLogEvent
   /** App menu «Buscar actualizaciones…»: the renderer opens its updates dialog. */
   'event:checkUpdates': null
+  /** Streamed text of an AI answer. */
+  'event:aiDelta': AiDeltaEvent
+  /** Progress note of an AI request (fetching more structure…). */
+  'event:aiStatus': AiStatusEvent
+  /** End of an AI answer (done, refused, cancelled or failed). */
+  'event:aiDone': AiDoneEvent
 }
 
 export type IpcEventChannel = keyof IpcEventMap
@@ -320,7 +377,23 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'navicat:previewConnections',
   'navicat:previewJobs',
   'navicat:import',
-  'navicat:recoverPasswords'
+  'navicat:recoverPasswords',
+  'ai:providers',
+  'ai:saveProvider',
+  'ai:deleteProvider',
+  'ai:testProvider',
+  'ai:setKey',
+  'ai:hasKey',
+  'ai:listModels',
+  'ai:chat',
+  'ai:cancel',
+  'ai:conversations',
+  'ai:conversation',
+  'ai:saveConversation',
+  'ai:deleteConversation',
+  'ai:memory',
+  'ai:setMemory',
+  'ai:contextPreview'
 ] as const
 
 export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
@@ -329,7 +402,10 @@ export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'event:log',
   'event:connectionClosed',
   'event:jobLog',
-  'event:checkUpdates'
+  'event:checkUpdates',
+  'event:aiDelta',
+  'event:aiStatus',
+  'event:aiDone'
 ] as const
 
 /** Typed API surface exposed on window.electronDB by the preload script. */

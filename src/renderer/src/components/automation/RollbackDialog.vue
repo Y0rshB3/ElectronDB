@@ -9,6 +9,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useJobsStore } from '@renderer/stores/jobs'
 import { formatBytes, formatDate } from '@renderer/utils/format'
 import DialogHeader from '@renderer/components/dialogs/DialogHeader.vue'
+import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
 import {
   environmentLabel,
   environmentPillClass,
@@ -44,6 +45,8 @@ const loading = ref(false)
 const error = ref('')
 const selected = ref<string[]>([])
 const safetyBackup = ref(true)
+/** «Contenido»: true = «Estructura y datos» (default), false = «Solo estructura». */
+const includeData = ref(true)
 const starting = ref(false)
 /** Answer of the latest plan request (target changes while one is loading). */
 let planRequest = 0
@@ -160,6 +163,7 @@ function reset(): void {
   plan.value = null
   selected.value = []
   safetyBackup.value = true
+  includeData.value = true
   error.value = ''
   starting.value = false
 }
@@ -201,6 +205,7 @@ async function start(): Promise<void> {
     targetName: target.value.name,
     items: chosen.value,
     safetyBackup: safetyBackup.value,
+    includeData: includeData.value,
     ...(source.kind === 'files' ? { origin: `las copias de «${plan.value.jobName}»` } : {})
   })
   const ok = await confirmDestructive({
@@ -221,7 +226,8 @@ async function start(): Promise<void> {
             runId: source.runId,
             targetConnectionId: target.value.id,
             taskIds: chosen.value.map((i) => i.taskId),
-            safetyBackup: safetyBackup.value
+            safetyBackup: safetyBackup.value,
+            includeData: includeData.value
           }
         : {
             source: 'files',
@@ -229,7 +235,8 @@ async function start(): Promise<void> {
             sourceConnectionId: source.sourceConnectionId,
             title: source.title,
             targetConnectionId: target.value.id,
-            safetyBackup: safetyBackup.value
+            safetyBackup: safetyBackup.value,
+            includeData: includeData.value
           },
       needsTyped.value ? { confirmProduction: true } : undefined
     )
@@ -264,8 +271,12 @@ async function start(): Promise<void> {
       <v-card-text class="rollback-dialog__body">
         <p class="rollback-dialog__intro">
           Cada base de datos marcada se <strong>reemplaza</strong>: se borra en el destino y se crea
-          de nuevo con todos los objetos y datos de la copia, para que quede igual que en el momento
-          del backup.
+          de nuevo con todos los objetos
+          {{
+            includeData
+              ? 'y datos de la copia, para que quede igual que en el momento del backup.'
+              : 'de la copia, con las tablas vacías (solo estructura).'
+          }}
         </p>
         <v-select
           :model-value="targetId"
@@ -377,6 +388,7 @@ async function start(): Promise<void> {
           >Hay más de una copia de «{{ duplicated }}» marcada; deja solo una.</v-alert
         >
 
+        <ReplaceContentToggle v-model="includeData" :disabled="starting" class="mt-3" />
         <v-checkbox
           v-model="safetyBackup"
           :label="`Copia de seguridad previa de ${target?.name ?? 'Local'}`"

@@ -63,6 +63,18 @@ export function describeRestoreError(err: unknown): string {
   return hint ? `${message}. ${hint}` : message
 }
 
+/** `AUTO_INCREMENT=N` table option of SHOW CREATE TABLE (after ENGINE, or right after the column list). */
+const TABLE_AUTO_INCREMENT_RE = /(\)\s*(?:ENGINE\s*=\s*\w+\s+)?)AUTO_INCREMENT\s*=\s*\d+\s*/i
+
+/**
+ * Removes the `AUTO_INCREMENT=N` table option so the table counter starts
+ * fresh. The column attribute `AUTO_INCREMENT` (no `=`) is kept.
+ */
+export function stripAutoIncrementOption(ddl: string): string {
+  const stripped = ddl.replace(TABLE_AUTO_INCREMENT_RE, (_, head: string) => head)
+  return stripped === ddl ? ddl : stripped.trimEnd()
+}
+
 /** Removes `DEFINER=user@host` so the object is created with the current user as definer. */
 export function stripDefiner(ddl: string): string {
   return ddl.replace(DEFINER_RE, '')
@@ -480,7 +492,8 @@ async function restoreTable(
   if (options.includeStructure) {
     if (options.dropObjectsFirst) await session.execute(`DROP TABLE IF EXISTS ${table}`)
     if (!meta.DDL.trim()) throw new Error(`El backup no contiene la definición de la tabla ${name}`)
-    await executeDdl(session, meta.DDL, definers)
+    const ddl = options.skipAutoIncrement ? stripAutoIncrementOption(meta.DDL) : meta.DDL
+    await executeDdl(session, ddl, definers)
     for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)
   }
   let inserted = 0
@@ -506,7 +519,7 @@ async function restoreTable(
   if (options.includeStructure) {
     for (const ddl of meta.IndexDDL) if (ddl.trim()) await executeDdl(session, ddl, definers)
     for (const ddl of meta.TriggerDDL) if (ddl.trim()) await executeDdl(session, ddl, definers)
-    if (/^\d+$/.test(meta.AutoIncrement.trim())) {
+    if (!options.skipAutoIncrement && /^\d+$/.test(meta.AutoIncrement.trim())) {
       await session.execute(`ALTER TABLE ${table} AUTO_INCREMENT = ${meta.AutoIncrement.trim()}`)
     }
   }

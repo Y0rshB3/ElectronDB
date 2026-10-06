@@ -21,6 +21,7 @@ import {
   jobInput,
   makeContext,
   queryTask,
+  restoreTask,
   type FakeBackupService,
   type FakeSessionFactory,
   type TestContext
@@ -182,6 +183,63 @@ describe('rollback of a run («Restaurar todo en Local»)', () => {
       expect.stringMatching(/^ {2}Resultado: OK · 2 objetos · 10 filas · /)
     )
     expect(bodies.at(-1)).toBe('Finalizado correctamente: 2 de 2 pasos OK.')
+  })
+
+  it('«Solo estructura» (includeData false) replaces every database with empty tables and says so in the log', async () => {
+    const run = await stagingRun()
+    const plan = await buildRollbackPlan(t.ctx, run.id, localId, inspector)
+    const prepared = prepareRollback(
+      t.ctx,
+      plan,
+      {
+        runId: run.id,
+        targetConnectionId: localId,
+        taskIds: ['b1', 'b2'],
+        safetyBackup: true,
+        includeData: false
+      },
+      t.ctx.connections.get(localId)!,
+      false
+    )
+    expect(prepared.job.tasks.map((x) => x.includeData)).toEqual([false, false])
+    const final = await startJobWith(t.ctx, deps, prepared.job, 'manual', prepared.options).done
+    expect(final.status).toBe('success')
+    const restores = backups.restores.slice(-2)
+    expect(restores.map((r) => [r.includeData, r.skipAutoIncrement])).toEqual([
+      [false, true],
+      [false, true]
+    ])
+    // The safety copy of the database being replaced keeps its rows.
+    expect(backups.calls.at(-1)).toMatchObject({ includeData: true, label: 'previo-rollback' })
+    const bodies = readFileSync(final.logPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => l.slice(11))
+    expect(bodies).toContain('Paso 1/2 · Base de datos auth: Staging -> Local (solo estructura)')
+    expect(bodies).toContainEqual(expect.stringMatching(/^ {2}Contenido: solo estructura/))
+    expect(bodies).toContainEqual(
+      expect.stringMatching(/^ {2}Resultado: OK · Solo estructura: 2 objetos, 0 filas · /)
+    )
+    expect(bodies).toContain(
+      '  Paso 1/2 · Base de datos auth: Staging -> Local (solo estructura): Solo estructura: 2 objetos, 0 filas'
+    )
+    expect(bodies.at(-1)).toBe('Finalizado correctamente: 2 de 2 pasos OK.')
+  })
+
+  it('a rollback request without includeData (older callers) restores structure and data', async () => {
+    const run = await stagingRun()
+    const plan = await buildRollbackPlan(t.ctx, run.id, localId, inspector)
+    const prepared = prepareRollback(
+      t.ctx,
+      plan,
+      { runId: run.id, targetConnectionId: localId, taskIds: ['b1'], safetyBackup: false },
+      t.ctx.connections.get(localId)!,
+      false
+    )
+    expect(prepared.job.tasks[0].includeData).toBe(true)
+    await startJobWith(t.ctx, deps, prepared.job, 'manual', prepared.options).done
+    expect(backups.restores.at(-1)).toMatchObject({ includeData: true })
+    expect(backups.restores.at(-1)?.skipAutoIncrement).toBeUndefined()
   })
 
   it('skips a database whose safety backup fails (ERROR) and keeps going with the others', async () => {
@@ -635,6 +693,38 @@ describe('restore steps inside a job', () => {
     expect(run.tasks[1].message).toMatch(/solo de estructura/)
     expect(backups.restores).toEqual([])
     expect(sessions.executed).toEqual([])
+  })
+
+  it('a «Solo estructura» restore step may restore a structure-only backup step, with empty tables', async () => {
+    const staging = t.ctx.connections.save(connectionInput('Staging'))
+    const local = t.ctx.connections.save(connectionInput('Local'))
+    const job = t.ctx.jobs.save(
+      jobInput('Solo estructura', [
+        { ...backupTask('b1', staging.id, 'auth'), includeData: false },
+        restoreTask('r1', local.id, 'b1', { includeData: false })
+      ])
+    )
+    expect(t.ctx.jobs.get(job.id)?.tasks[1].includeData).toBe(false)
+    const run = await runJob(t.ctx, deps, job.id, 'schedule')
+    expect(run.status).toBe('success')
+    expect(backups.restores[0]).toMatchObject({ includeData: false, skipAutoIncrement: true })
+    expect(readFileSync(run.logPath, 'utf8')).toContain('Solo estructura: 1 objeto, 0 filas')
+  })
+
+  it('a restore step saved before 0.1.6 (no includeData) restores structure and data', async () => {
+    const staging = t.ctx.connections.save(connectionInput('Staging'))
+    const local = t.ctx.connections.save(connectionInput('Local'))
+    const legacy = restoreTask('r1', local.id, 'b1')
+    delete legacy.includeData
+    const job = t.ctx.jobs.save(
+      jobInput('Antiguo', [backupTask('b1', staging.id, 'auth'), legacy])
+    )
+    const run = await runJob(t.ctx, deps, job.id, 'schedule')
+    expect(run.status).toBe('success')
+    expect(backups.restores[0]).toMatchObject({ includeData: true })
+    const log = readFileSync(run.logPath, 'utf8')
+    expect(log).toMatch(/Resultado: OK · 1 objeto · 2 filas/)
+    expect(log).not.toContain('solo estructura')
   })
 
   it('fails the step (without restoring) when the source backup step failed', async () => {

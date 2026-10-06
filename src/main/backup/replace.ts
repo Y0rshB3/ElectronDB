@@ -1,4 +1,5 @@
 import {
+  STRUCTURE_ONLY_LABEL,
   describeObjectCounts,
   formatSize,
   labelLine,
@@ -26,7 +27,10 @@ import { NB3_ENCRYPTION_NONE } from './nb3/format'
  *      'previo-rollback' — when this fails the database is NOT touched;
  *   3. DROP DATABASE + CREATE DATABASE with the backup's charset/collation
  *      when the target server knows them (server default otherwise);
- *   4. restore every object with its data.
+ *   4. restore every object with its data, or with empty tables when
+ *      `includeData` is false («Solo estructura»: same tables, indexes,
+ *      foreign keys, views, routines, events and triggers, no rows, and the
+ *      backup's AUTO_INCREMENT values are not applied so counters start fresh).
  *
  * Once the database has been dropped any failure or cancellation throws a
  * ReplaceIncompleteError that says the database is incomplete and how to
@@ -64,6 +68,8 @@ export interface ReplaceRequest {
   continueOnError: boolean
   /** Required when the target connection is flagged production. */
   confirmProduction?: boolean
+  /** Restore the rows too (default true); false = «Solo estructura». */
+  includeData?: boolean
 }
 
 export interface ReplaceHooks {
@@ -83,6 +89,8 @@ export interface ReplaceResult {
   safetyBackup: BackupCreateResult | null
   /** Charset/collation used for CREATE DATABASE; null = server default. */
   charset: SchemaCharset | null
+  /** False when only the structure was restored (empty tables). */
+  includeData: boolean
   restore: RestoreResult
 }
 
@@ -257,6 +265,7 @@ export async function replaceSchemaFromBackup(
     throw new Error(REPLACE_PRODUCTION_MESSAGE)
   const target = request.targetSchema.trim()
   const keep = untouched(target, connection.name)
+  const includeData = request.includeData !== false
 
   // 1. Source integrity, before touching the server.
   let meta: BackupMeta
@@ -267,6 +276,11 @@ export async function replaceSchemaFromBackup(
   }
   say(`  Origen: ${request.backupPath}`)
   say(`  Contiene ${describeObjectCounts(meta.objects.map((o) => String(o.type)))}`)
+  say(
+    includeData
+      ? '  Contenido: estructura y datos'
+      : `  Contenido: ${STRUCTURE_ONLY_LABEL.toLowerCase()} (tablas vacías con sus claves e índices; sin filas y con AUTO_INCREMENT desde el principio)`
+  )
   // The manifest alone does not prove the data is readable: read every entry now,
   // while dropping is still avoidable (a damaged chunk would fail after the DROP).
   const integrityLabel = 'Comprobar integridad del backup'
@@ -396,7 +410,7 @@ export async function replaceSchemaFromBackup(
     )
   if (cancelled()) throw incomplete(REPLACE_CANCELLED)
 
-  // 4. Every object with its data into the fresh database.
+  // 4. Every object (with its data unless «Solo estructura») into the fresh database.
   let restore: RestoreResult
   try {
     restore = await deps.backups.restore(
@@ -407,7 +421,8 @@ export async function replaceSchemaFromBackup(
         createSchema: false,
         dropObjectsFirst: false,
         includeStructure: true,
-        includeData: true,
+        includeData,
+        ...(includeData ? {} : { skipAutoIncrement: true }),
         continueOnError: request.continueOnError,
         ...(request.confirmProduction ? { confirmProduction: true } : {})
       },
@@ -423,6 +438,7 @@ export async function replaceSchemaFromBackup(
     connectionName: connection.name,
     safetyBackup: safety,
     charset: applied,
-    restore
+    includeData,
+    restore: includeData ? restore : { ...restore, structureOnly: true }
   }
 }

@@ -115,8 +115,9 @@ export function restoreTaskProblem(
       return `El ${label} solo puede restaurar la copia de un paso de tipo «Copia de seguridad».`
     if (index >= 0 && refIndex >= index)
       return `El ${label} debe ir después del paso de copia que restaura («${tasks[refIndex].referenceName || `paso ${refIndex + 1}`}»).`
-    if (tasks[refIndex].includeData === false)
-      return `El ${label} restaura la copia de «${tasks[refIndex].referenceName || tasks[refIndex].schema}», que es solo de estructura (sin datos): las tablas de destino quedarían vacías. Activa «Incluir datos» en ese paso de copia o elige otro origen.`
+    // A structure-only copy is fine when the step itself restores only the structure.
+    if (tasks[refIndex].includeData === false && task.includeData !== false)
+      return `El ${label} restaura la copia de «${tasks[refIndex].referenceName || tasks[refIndex].schema}», que es solo de estructura (sin datos): las tablas de destino quedarían vacías. Activa «Incluir datos» en ese paso de copia, elige otro origen o marca «Solo estructura» en este paso.`
   } else if (source.kind === 'latest') {
     if (!source.connectionId) return `El ${label} necesita la conexión de origen de la copia.`
     if (!source.schema?.trim()) return `El ${label} necesita el esquema de origen de la copia.`

@@ -103,6 +103,51 @@ describe('replaceSchemaFromBackup', () => {
     expect(lines.join('\n')).toMatch(/Reemplazar base de datos auth \.+ +utf8mb4_0900_ai_ci {2}OK/)
   })
 
+  it('includeData defaults to true when absent and logs «estructura y datos»', async () => {
+    const result = await run()
+    expect(result.includeData).toBe(true)
+    expect(backups.restores[0].includeData).toBe(true)
+    expect(backups.restores[0].skipAutoIncrement).toBeUndefined()
+    expect(result.restore.structureOnly).toBeUndefined()
+    expect(lines).toContain('  Contenido: estructura y datos')
+  })
+
+  it('«Solo estructura» restores every object without rows nor AUTO_INCREMENT, keeping safety copy and checks', async () => {
+    sessions.schemas.set(local.id, new Set(['auth']))
+    const result = await run({ includeData: false })
+    expect(timeline).toEqual([
+      'create:auth',
+      'DROP DATABASE `auth`',
+      'CREATE DATABASE `auth` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci',
+      'restore:auth'
+    ])
+    // The safety copy of the current database still keeps its rows.
+    expect(backups.calls[0]).toMatchObject({ includeData: true, label: SAFETY_LABEL })
+    expect(backups.restores[0]).toMatchObject({
+      includeStructure: true,
+      includeData: false,
+      skipAutoIncrement: true,
+      createSchema: false,
+      dropObjectsFirst: false
+    })
+    expect(result.includeData).toBe(false)
+    expect(result.restore).toMatchObject({ objectsRestored: 2, rowsInserted: 0, structureOnly: true })
+    const log = lines.join('\n')
+    expect(log).toContain('Contenido: solo estructura')
+    expect(log).toMatch(/Comprobar integridad del backup \.+ .*OK/)
+  })
+
+  it('«Solo estructura» keeps the production and system-schema rules', async () => {
+    const prod = connections.save({ ...connectionInput('Prod'), environment: 'production' })
+    await expect(run({ connectionId: prod.id, includeData: false })).rejects.toThrow(
+      REPLACE_PRODUCTION_MESSAGE
+    )
+    await expect(run({ targetSchema: 'mysql', includeData: false })).rejects.toThrow(
+      /base de datos del sistema/
+    )
+    expect(timeline).toEqual([])
+  })
+
   it('never drops the database when the safety backup fails', async () => {
     sessions.schemas.set(local.id, new Set(['auth']))
     backups.failures.set('auth', 'disk full')

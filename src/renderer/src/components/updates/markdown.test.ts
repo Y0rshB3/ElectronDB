@@ -44,7 +44,7 @@ describe('parseMarkdown', () => {
       children: []
     })
     expect((blocks[2] as { ordered: boolean }).ordered).toBe(true)
-    expect(blocks[3]).toEqual({ type: 'code', text: 'git pull' })
+    expect(blocks[3]).toEqual({ type: 'code', text: 'git pull', lang: 'sh' })
     expect(blocks[6]).toEqual({
       type: 'paragraph',
       children: [{ type: 'text', text: 'Párrafo en dos líneas.' }]

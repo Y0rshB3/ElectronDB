@@ -469,7 +469,9 @@ export function prepareRollback(
         schema: item.schema,
         connectionId: item.sourceConnectionId
       },
-      safetyBackup: request.safetyBackup !== false
+      safetyBackup: request.safetyBackup !== false,
+      // «Solo estructura» only when asked explicitly (absent = structure and data).
+      includeData: request.includeData !== false
     })),
     schedule: { enabled: false, cron: '', launchAgent: false },
     createdAt: now,

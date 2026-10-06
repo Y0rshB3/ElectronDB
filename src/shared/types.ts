@@ -2,7 +2,7 @@
  * Shared domain types used by main, preload and renderer.
  * Keep this file free of Node/Electron/browser-only imports.
  */
-
+import type { AiEffort } from './ai'
 import type { WhatsNewEntry } from './whatsNew'
 
 export type Environment = 'local' | 'staging' | 'production' | 'other'
@@ -449,14 +449,20 @@ export interface RestoreOptions {
   continueOnError: boolean
   /**
    * REPLACE the whole database (DROP + CREATE DATABASE, then every object
-   * with its data): it ends up exactly like the backup. Ignores objects,
-   * createSchema, dropObjectsFirst, includeStructure and includeData.
+   * of the backup): it ends up exactly like the backup. Ignores objects,
+   * createSchema, dropObjectsFirst and includeStructure; `includeData: false`
+   * creates every object with empty tables («Solo estructura»).
    */
   replaceSchema?: boolean
   /** With replaceSchema: back up the current database first (default true). */
   safetyBackup?: boolean
   /** Required when the target connection needs the typed confirmation (see WriteOptions). */
   confirmProduction?: boolean
+  /**
+   * Internal (replace «Solo estructura»): create tables without the backup's
+   * AUTO_INCREMENT value so counters start fresh. Object restores keep it.
+   */
+  skipAutoIncrement?: boolean
 }
 
 export interface RestoreResult {
@@ -466,6 +472,8 @@ export interface RestoreResult {
   durationMs: number
   /** replaceSchema: safety copy of the database that was replaced (null = none taken). */
   safetyBackupPath?: string | null
+  /** replaceSchema with `includeData: false`: objects created, no rows inserted. */
+  structureOnly?: boolean
 }
 
 /* ---------- Automation ---------- */
@@ -496,6 +504,10 @@ export interface JobTask {
   referenceName: string
   /** For runquery: SQL to execute. */
   sql?: string
+  /**
+   * backupschema: copy the rows too. restoreschema: restore the rows too;
+   * false = «Solo estructura» (empty tables). Absent = true (older jobs).
+   */
   includeData?: boolean
   /** For restoreschema: backup to restore. */
   restoreSource?: RestoreTaskSource
@@ -614,6 +626,8 @@ export interface RollbackRunRequest {
   taskIds: string[]
   /** Back up each existing target database before replacing it. */
   safetyBackup: boolean
+  /** False = «Solo estructura»: every object, empty tables. Absent = true. */
+  includeData?: boolean
 }
 
 /**
@@ -633,6 +647,8 @@ export interface RollbackFilesRequest extends RollbackFilesSource {
   targetConnectionId: string
   /** Back up each existing target database before replacing it. */
   safetyBackup: boolean
+  /** False = «Solo estructura»: every object, empty tables. Absent = true. */
+  includeData?: boolean
 }
 
 export type RollbackRequest = RollbackRunRequest | RollbackFilesRequest
@@ -731,6 +747,14 @@ export interface AppSettings {
   confirmDestructiveEverywhere: boolean
   /** Look for a new release on GitHub a few seconds after start (at most every 6 hours). */
   checkUpdatesOnStartup: boolean
+  /** «Activar asistente de IA» (off by default; needs a configured provider). */
+  aiEnabled: boolean
+  /** Provider profile used by the assistant (null: the first one). */
+  aiDefaultProviderId: string | null
+  /** Reasoning effort for providers that support it (Claude): Bajo / Medio / Alto. */
+  aiEffort: AiEffort
+  /** Max output tokens per answer. */
+  aiMaxTokens: number
 }
 
 /* ---------- Updates ---------- */

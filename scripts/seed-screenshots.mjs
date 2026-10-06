@@ -108,7 +108,48 @@ const b64 = (s) => Buffer.from(s, 'utf8').toString('base64')
 const credentials = {
   version: 1,
   codec: 'plain',
-  items: Object.fromEntries(connections.map((c) => [`mysql:${c.id}`, b64(passwordOf(c))]))
+  items: {
+    ...Object.fromEntries(connections.map((c) => [`mysql:${c.id}`, b64(passwordOf(c))])),
+    // Fake key for the AI screens (answered by ELECTRONDB_AI_FIXTURE, never sent anywhere).
+    'ai:shot-ai-claude': b64('sk-ant-fixture-not-a-real-key')
+  }
+}
+
+/* AI assistant (steps 20*): providers, memory and one saved conversation. */
+const aiProviders = {
+  version: 1,
+  items: [
+    {
+      id: 'shot-ai-claude',
+      name: 'Claude',
+      type: 'anthropic',
+      baseUrl: '',
+      model: 'claude-opus-5-5',
+      createdAt: iso(daysAgo(3)),
+      updatedAt: iso(daysAgo(3))
+    },
+    {
+      id: 'shot-ai-ollama',
+      name: 'Ollama local',
+      type: 'ollama',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'qwen-coder',
+      createdAt: iso(daysAgo(2)),
+      updatedAt: iso(daysAgo(2))
+    }
+  ]
+}
+const aiMemory = {
+  version: 1,
+  connections: {
+    'shot-local': {
+      notes: 'Los importes están en euros con IVA incluido.',
+      databases: {
+        [DB.database]:
+          "shot_orders.status: 'pending' = sin pagar, 'paid' = cobrado, 'cancelled' = anulado por el cliente."
+      }
+    }
+  }
 }
 
 const task = (id, type, connectionId, schema, referenceName, extra = {}) => ({
@@ -248,7 +289,11 @@ const settings = {
   theme: 'dark',
   confirmProductionWrites: true,
   confirmDestructiveEverywhere: true,
-  checkUpdatesOnStartup: true
+  checkUpdatesOnStartup: true,
+  aiEnabled: true,
+  aiDefaultProviderId: 'shot-ai-claude',
+  aiEffort: 'low',
+  aiMaxTokens: 16000
 }
 
 rmSync(PROFILE, { recursive: true, force: true })
@@ -260,6 +305,8 @@ writeJson('credentials.json', credentials)
 writeJson('jobs.json', { version: 1, items: jobs })
 writeJson('job-runs.json', { version: 1, items: runs })
 writeJson('settings.json', settings)
+writeJson('ai-providers.json', aiProviders)
+writeJson('ai-memory.json', aiMemory)
 for (const r of runs)
   writeFileSync(r.logPath, `[${r.startedAt}] ${r.jobName}: ${r.status}\n`, { mode: 0o600 })
 

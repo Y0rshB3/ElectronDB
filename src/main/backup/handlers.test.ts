@@ -253,8 +253,8 @@ describe('backup handlers', () => {
       targetSchema: 'demo',
       createSchema: true,
       dropObjectsFirst: true,
-      includeStructure: true,
-      includeData: false,
+      includeStructure: false,
+      includeData: true,
       objects: ['ignored'],
       continueOnError: false,
       replaceSchema: true,
@@ -267,7 +267,8 @@ describe('backup handlers', () => {
         connectionId: 'conn-1',
         targetSchema: 'demo',
         safetyBackup: true,
-        continueOnError: false
+        continueOnError: false,
+        includeData: true
       }
     ])
     expect(result).toMatchObject({
@@ -276,6 +277,48 @@ describe('backup handlers', () => {
     })
     expect(events[0]).toMatchObject({ operationId: 'op-r', message: 'Copia previa · demo' })
     expect(events.at(-1)).toMatchObject({ done: true, phase: 'done' })
+  })
+
+  it('restore with replaceSchema and includeData false asks service.replace for «Solo estructura»', async () => {
+    const replaced: { includeData?: boolean }[] = []
+    const service = {
+      readMeta: async () => ({ schema: 'demo' }),
+      replace: async (request: { includeData?: boolean }) => {
+        replaced.push(request)
+        return {
+          existed: false,
+          connectionName: 'Local',
+          safetyBackup: null,
+          charset: null,
+          includeData: false,
+          restore: {
+            objectsRestored: 4,
+            rowsInserted: 0,
+            errors: [],
+            durationMs: 3,
+            structureOnly: true
+          }
+        }
+      }
+    } as unknown as BackupService
+    const result = await handlersWith(service).restore('op-s', {
+      backupPath: FIXTURE,
+      connectionId: 'conn-1',
+      targetSchema: 'demo',
+      createSchema: true,
+      dropObjectsFirst: true,
+      includeStructure: true,
+      includeData: false,
+      continueOnError: false,
+      replaceSchema: true,
+      safetyBackup: true
+    })
+    expect(replaced[0].includeData).toBe(false)
+    expect(result).toMatchObject({ rowsInserted: 0, structureOnly: true })
+    expect(events.at(-1)).toMatchObject({
+      done: true,
+      message: 'Restauración completada · Solo estructura: 4 objetos, 0 filas'
+    })
   })
 
   it('replaceSchema on production still needs confirmProduction (real service, nothing touched)', async () => {

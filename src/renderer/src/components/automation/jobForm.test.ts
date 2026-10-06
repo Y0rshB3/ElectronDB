@@ -29,7 +29,8 @@ describe('restore steps in the job form', () => {
       connectionId: 'local',
       schema: '',
       restoreSource: { kind: 'task', taskId: backup.id },
-      safetyBackup: true
+      safetyBackup: true,
+      includeData: true
     })
     expect(defaultReferenceName(restore, [backup, restore])).toBe('Restaurar auth')
   })
@@ -45,8 +46,23 @@ describe('restore steps in the job form', () => {
       schema: '',
       referenceName: 'Restaurar auth',
       restoreSource: { kind: 'task', taskId: 'b1' },
-      safetyBackup: true
+      safetyBackup: true,
+      includeData: true
     })
+  })
+
+  it('persists «Solo estructura» of a restore step, and a step without includeData (older jobs) saves it as true', () => {
+    const [backup, restore] = stagingToLocal()
+    const structure = buildJobInput({
+      ...emptyDraft(),
+      name: 'Solo estructura',
+      tasks: [backup, { ...restore, includeData: false }]
+    })
+    expect(structure.tasks[1].includeData).toBe(false)
+    const legacy: JobTask = { ...restore }
+    delete legacy.includeData
+    const old = buildJobInput({ ...emptyDraft(), name: 'Antiguo', tasks: [backup, legacy] })
+    expect(old.tasks[1].includeData).toBe(true)
   })
 
   it('refuses a production target and a restore onto the source database', () => {

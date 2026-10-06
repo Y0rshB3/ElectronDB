@@ -14,6 +14,7 @@ import {
   splitLogText,
   stampLine,
   stepHeading,
+  structureOnlySummary,
   summaryLines
 } from './jobLog'
 
@@ -192,5 +193,36 @@ describe('job log parser', () => {
     ).toMatchObject({ kind: 'final', tone: 'ok' })
     expect(parseLogLine('Sin registro')).toMatchObject({ time: null, text: 'Sin registro' })
     expect(splitLogText('a\nb\n')).toEqual(['a', 'b'])
+  })
+
+  it('names «Solo estructura» restores in the heading, the result and the summary', () => {
+    expect(structureOnlySummary(7)).toBe('Solo estructura: 7 objetos, 0 filas')
+    expect(structureOnlySummary(1)).toBe('Solo estructura: 1 objeto, 0 filas')
+    const step = {
+      type: 'restoreschema',
+      schema: 'auth',
+      connectionName: 'Local',
+      referenceName: '',
+      sourceSchema: 'auth',
+      sourceConnectionName: 'Staging',
+      structureOnly: true
+    }
+    expect(stepHeading(1, 1, step)).toBe(
+      'Paso 1/1 · Base de datos auth: Staging -> Local (solo estructura)'
+    )
+    const lines = summaryLines({
+      status: 'success',
+      durationMs: 10,
+      steps: [
+        {
+          index: 1,
+          label: 'Base de datos auth',
+          status: 'success',
+          message: null,
+          note: structureOnlySummary(3)
+        }
+      ]
+    })
+    expect(lines).toContain('  Paso 1/1 · Base de datos auth: Solo estructura: 3 objetos, 0 filas')
   })
 })

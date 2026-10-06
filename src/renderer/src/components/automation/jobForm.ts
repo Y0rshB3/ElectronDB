@@ -50,6 +50,7 @@ export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobT
   else if (type === 'restoreschema') {
     task.restoreSource = { kind: 'task', taskId: '' }
     task.safetyBackup = true
+    task.includeData = true
   } else task.sql = ''
   return task
 }
@@ -163,6 +164,8 @@ export function buildJobInput(draft: JobDraft): JobInput {
         out.schema = task.schema.trim()
         if (task.restoreSource) out.restoreSource = { ...task.restoreSource }
         out.safetyBackup = task.safetyBackup !== false
+        // Absent in jobs saved before 0.1.6: structure and data.
+        out.includeData = task.includeData !== false
       } else out.sql = task.sql ?? ''
       return out
     }),

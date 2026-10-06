@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { BackupFile, BackupMeta, RestoreResult } from '@shared/types'
-import { fileNameOf } from '@shared/jobLog'
+import { fileNameOf, structureOnlySummary } from '@shared/jobLog'
 import { SAFETY_BACKUP_LABEL } from '@shared/restoreTask'
 import { api, newOperationId } from '@renderer/api'
 import { useConfirm } from '@renderer/composables/useConfirm'
@@ -19,6 +19,8 @@ import {
   environmentPillClass,
   findLocalConnection
 } from '@renderer/components/backups/backupHelpers'
+import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
+import { replaceContentNotice } from '@renderer/components/backups/replaceContent'
 import DialogHeader from './DialogHeader.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 
@@ -50,6 +52,8 @@ const typedName = ref('')
 /** «Reemplazar la base de datos completa»: DROP + CREATE, then every object of the copy. */
 const replaceMode = ref(false)
 const safetyBackup = ref(true)
+/** Replace «Contenido»: true = «Estructura y datos» (default), false = «Solo estructura». */
+const replaceIncludeData = ref(true)
 
 const operationId = ref<string | null>(null)
 const running = ref(false)
@@ -136,6 +140,7 @@ function reset(): void {
   typedName.value = ''
   replaceMode.value = ui.restoreDialog.replace === true || isSafetyCopy(backup.value)
   safetyBackup.value = true
+  replaceIncludeData.value = true
   operationId.value = null
   error.value = ''
   result.value = null
@@ -165,7 +170,17 @@ async function restore(): Promise<void> {
   if (replaceMode.value && !needsTyped.value) {
     const ok = await ask({
       title: `Reemplazar «${targetSchema.value.trim()}»`,
-      message: `«${targetSchema.value.trim()}» se borrará en «${target.value.name}» y se creará de nuevo con todo lo que contiene ${backup.value.fileName}. Lo que no esté en la copia desaparece.${safetyBackup.value ? '\n\nAntes se guarda una copia previa (etiqueta «previo-rollback»).' : '\n\nSIN copia previa: los datos actuales se perderán.'}`,
+      message: [
+        replaceIncludeData.value
+          ? `«${targetSchema.value.trim()}» se borrará en «${target.value.name}» y se creará de nuevo con todo lo que contiene ${backup.value.fileName}. Lo que no esté en la copia desaparece.`
+          : `«${targetSchema.value.trim()}» se borrará en «${target.value.name}» y se creará de nuevo con la estructura de ${backup.value.fileName}. Lo que no esté en la copia desaparece.`,
+        replaceContentNotice(replaceIncludeData.value),
+        safetyBackup.value
+          ? 'Antes se guarda una copia previa (etiqueta «previo-rollback»).'
+          : 'SIN copia previa: los datos actuales se perderán.'
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       confirmText: 'Reemplazar',
       color: 'warning'
     })
@@ -186,7 +201,7 @@ async function restore(): Promise<void> {
       createSchema: createSchema.value,
       dropObjectsFirst: dropObjectsFirst.value,
       includeStructure: includeStructure.value,
-      includeData: includeData.value,
+      includeData: replaceMode.value ? replaceIncludeData.value : includeData.value,
       objects: !replaceMode.value && objects.value.length ? [...objects.value] : undefined,
       continueOnError: continueOnError.value,
       ...(replaceMode.value ? { replaceSchema: true, safetyBackup: safetyBackup.value } : {}),
@@ -349,6 +364,12 @@ async function cancel(): Promise<void> {
             </v-col>
           </v-row>
           <div class="nd-section-title restore-dialog__options-title">Opciones</div>
+          <ReplaceContentToggle
+            v-if="replaceMode"
+            v-model="replaceIncludeData"
+            :disabled="running"
+            class="mb-2"
+          />
           <div
             v-if="replaceMode"
             class="restore-dialog__options"
@@ -379,7 +400,10 @@ async function cancel(): Promise<void> {
             data-test="restore-replace-warning"
           >
             «{{ targetSchema || '?' }}» se borra en {{ target?.name ?? 'el destino' }} y se crea de
-            nuevo con todo lo que hay en la copia: lo que no esté en la copia desaparece.
+            nuevo con
+            {{ replaceIncludeData ? 'todo lo que hay en la copia' : 'la estructura de la copia' }}:
+            lo que no esté en la copia desaparece.
+            <template v-if="!replaceIncludeData">{{ replaceContentNotice(false) }}</template>
             {{
               safetyBackup
                 ? 'Antes se guarda una copia previa; si falla, no se toca nada.'
@@ -444,6 +468,9 @@ async function cancel(): Promise<void> {
             <div class="text-body-2">
               Vas a sobrescribir objetos en «{{ target?.name }}». Esta acción no se puede deshacer.
               Escribe el nombre de la conexión para habilitar «Restaurar».
+              <template v-if="replaceMode && !replaceIncludeData">
+                {{ replaceContentNotice(false) }}
+              </template>
             </div>
             <v-text-field
               v-model="typedName"
@@ -478,7 +505,11 @@ async function cancel(): Promise<void> {
                   : 'Restauración completada'
               }}
             </div>
-            <div class="text-caption">
+            <div v-if="result.structureOnly" class="text-caption" data-test="restore-result-mode">
+              {{ structureOnlySummary(result.objectsRestored) }} ·
+              <span class="nd-mono">{{ formatDuration(result.durationMs) }}</span>
+            </div>
+            <div v-else class="text-caption">
               <span class="nd-mono">{{ formatNumber(result.objectsRestored) }}</span> objetos ·
               <span class="nd-mono">{{ formatNumber(result.rowsInserted) }}</span> filas insertadas
               · <span class="nd-mono">{{ formatDuration(result.durationMs) }}</span>

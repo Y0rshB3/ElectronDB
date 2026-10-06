@@ -1,6 +1,7 @@
 import type { ConnectionConfig, ConnectionInput } from '@shared/types'
 import type { AppContext } from '../context'
 import { getConnectionManager } from '../mysql/manager'
+import { getAiService } from '../ai'
 import { handle } from './typed'
 
 /** Fields whose change invalidates an open pool. */
@@ -42,6 +43,10 @@ export function registerConnectionsHandlers(ctx: AppContext): void {
     await manager.close(id)
     ctx.credentials.deleteAll(id)
     ctx.connections.delete(id)
+    // The assistant's notes and conversations of that connection go with it.
+    const ai = getAiService(ctx)
+    ai.conversations.deleteConnection(id)
+    ai.memory.deleteConnection(id)
   })
 
   handle('connections:test', (input, password, sshPassword) =>

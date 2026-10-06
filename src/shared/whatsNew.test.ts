@@ -57,6 +57,12 @@ describe('WHATS_NEW (curated list)', () => {
     expect(entry?.important?.join(' ')).toMatch(/Producción ahora siempre pide escribir el nombre/)
   })
 
+  it('0.1.6 announces the AI assistant and that only the structure is sent', () => {
+    expect(whatsNewFor('0.1.6')?.highlights.join(' ')).toMatch(
+      /Asistente de IA con tu propia clave.*solo se envía la estructura/
+    )
+  })
+
   it('0.1.4 points to the new switch in Ajustes › Seguridad', () => {
     expect(whatsNewFor('0.1.4')?.important?.join(' ')).toMatch(/Ajustes › Seguridad/)
   })

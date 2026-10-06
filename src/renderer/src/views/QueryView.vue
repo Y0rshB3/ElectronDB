@@ -32,6 +32,9 @@ import { useQueriesStore } from '@renderer/stores/queries'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { formatDuration } from '@renderer/utils/format'
+import AiGenerateSqlDialog from '@renderer/components/ai/AiGenerateSqlDialog.vue'
+import { registerQueryEditor } from '@renderer/composables/useQueryEditors'
+import { useAiStore } from '@renderer/stores/ai'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
 
@@ -42,6 +45,7 @@ const settings = useSettingsStore()
 const notify = useNotify()
 const { ask, confirmDestructive } = useConfirm()
 const workspace = useWorkspace()
+const ai = useAiStore()
 
 const editor = ref<InstanceType<typeof SqlEditor> | null>(null)
 const sql = ref('')
@@ -477,6 +481,47 @@ onMounted(async () => {
   await Promise.all([loadSchemas(), loadCompletion()])
 })
 
+/* ---------- AI assistant (never runs SQL: it only reads it or inserts it) ---------- */
+
+const aiEnabled = computed(() => settings.settings.aiEnabled)
+const generateOpen = ref(false)
+
+/** Inserts AI-generated SQL at the cursor. Running it goes through run() and its guards. */
+function insertAtCursor(text: string): void {
+  if (editor.value) editor.value.insertAtCursor(text)
+  else sql.value = sql.value ? `${sql.value}\n${text}` : text
+}
+
+function onGeneratedSql(text: string): void {
+  insertAtCursor(text)
+  notify.success('SQL insertado en el editor (no se ha ejecutado)')
+}
+
+/** «Explicar / optimizar»: the selection or the whole editor (EXPLAIN only for one SELECT, in main). */
+function explainQuery(): void {
+  const selection = editor.value?.getSelection() ?? ''
+  const source = (selection.trim() ? selection : sql.value).trim()
+  if (!source) {
+    notify.warning('No hay SQL que explicar')
+    return
+  }
+  void ai.ask('explain', '', { sql: source })
+}
+
+function explainError(result: QueryStatementResult): void {
+  void ai.ask('explainError', '', { sql: result.sql, error: result.error ?? '' })
+}
+
+const unregisterEditor = registerQueryEditor({
+  tabId: props.tab.id,
+  connectionId: () => connectionId.value,
+  schema: () => schema.value,
+  sql: () => sql.value,
+  selection: () => editor.value?.getSelection() ?? '',
+  insertAtCursor
+})
+onUnmounted(unregisterEditor)
+
 defineExpose({ run, stop, results, schema, switchConnection })
 </script>
 
@@ -549,6 +594,29 @@ defineExpose({ run, stop, results, schema, switchConnection })
         @click="saveAs"
         ><span class="query-view__label">Guardar como</span></v-btn
       >
+      <template v-if="aiEnabled">
+        <span class="nd-viewbar__sep" aria-hidden="true" />
+        <v-btn
+          prepend-icon="mdi-creation-outline"
+          size="small"
+          title="Generar SQL con IA: se inserta en el editor, no se ejecuta"
+          aria-label="Generar SQL con IA"
+          :disabled="!connectionId"
+          data-test="ai-generate"
+          @click="generateOpen = true"
+          ><span class="query-view__label">Generar SQL con IA</span></v-btn
+        >
+        <v-btn
+          prepend-icon="mdi-lightbulb-on-outline"
+          size="small"
+          title="Explicar / optimizar la selección o todo el editor con IA (se envía tu SQL; EXPLAIN solo para un SELECT)"
+          aria-label="Explicar / optimizar"
+          :disabled="!connectionId || ai.busy"
+          data-test="ai-explain"
+          @click="explainQuery"
+          ><span class="query-view__label">Explicar / optimizar</span></v-btn
+        >
+      </template>
       <span class="nd-viewbar__spacer" />
       <QueryConnectionPicker
         :model-value="connectionId"
@@ -705,7 +773,12 @@ defineExpose({ run, stop, results, schema, switchConnection })
         />
         <v-window v-model="resultTab" class="query-view__window">
           <v-window-item value="messages" class="fill">
-            <QueryMessages :results="results" :notice="notice" />
+            <QueryMessages
+              :results="results"
+              :notice="notice"
+              :can-explain="aiEnabled"
+              @explain-error="explainError"
+            />
           </v-window-item>
           <v-window-item v-for="rs in resultSets" :key="rs.key" :value="rs.key" class="fill">
             <EditableResult
@@ -721,6 +794,8 @@ defineExpose({ run, stop, results, schema, switchConnection })
         </v-window>
       </div>
     </div>
+
+    <AiGenerateSqlDialog v-model="generateOpen" :editor-sql="sql" @insert="onGeneratedSql" />
 
     <v-dialog v-model="saveDialog" max-width="440">
       <v-card>

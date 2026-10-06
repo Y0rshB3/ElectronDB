@@ -9,6 +9,7 @@ import AppToolbar from '@renderer/components/layout/AppToolbar.vue'
 import ConnectionTree from '@renderer/components/layout/ConnectionTree.vue'
 import WorkspaceTabs from '@renderer/components/layout/WorkspaceTabs.vue'
 import InfoPanel from '@renderer/components/layout/InfoPanel.vue'
+import AiPanel from '@renderer/components/ai/AiPanel.vue'
 import StatusBar from '@renderer/components/layout/StatusBar.vue'
 import ProgressOverlay from '@renderer/components/layout/ProgressOverlay.vue'
 import LogDrawer from '@renderer/components/layout/LogDrawer.vue'
@@ -93,6 +94,18 @@ onBeforeUnmount(() => {
           />
           <div class="shell__info" :style="{ width: `${ui.infoWidth}px` }">
             <InfoPanel />
+          </div>
+        </template>
+        <template v-else-if="ui.aiPanelVisible">
+          <PaneSplitter
+            v-model="ui.aiWidth"
+            side="right"
+            :min="320"
+            :max="720"
+            label="Redimensionar panel del asistente"
+          />
+          <div class="shell__info" :style="{ width: `${ui.aiWidth}px` }">
+            <AiPanel />
           </div>
         </template>
       </div>

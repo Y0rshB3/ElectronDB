@@ -1,6 +1,7 @@
 import { UNDO_REPLACE_HOW, fileNameOf, formatCount } from '@shared/jobLog'
 import type { JobRun, JobTaskRun, RollbackPlanItem } from '@shared/types'
 import type { ConfirmRequest } from '@renderer/stores/ui'
+import { replaceContentNotice } from '@renderer/components/backups/replaceContent'
 
 /** Pure helpers of «Restaurar todo en Local» (run history + RollbackDialog). */
 
@@ -80,6 +81,8 @@ export function rollbackConfirmation(input: {
   targetName: string
   items: RollbackPlanItem[]
   safetyBackup: boolean
+  /** «Contenido»: false = «Solo estructura» (empty tables). Default true. */
+  includeData?: boolean
   /** Where the copies come from; default «la ejecución de «job» del <date>». */
   origin?: string
 }): RollbackConfirmation {
@@ -100,7 +103,9 @@ export function rollbackConfirmation(input: {
     for (const i of created)
       lines.push(`  • ${i.targetSchema}  ← ${i.schema} de ${i.sourceConnectionName}`)
   }
-  const empty = input.items.filter((i) => i.warning)
+  const includeData = input.includeData !== false
+  // Structure only: every table ends up empty anyway, the per-copy warnings add nothing.
+  const empty = includeData ? input.items.filter((i) => i.warning) : []
   if (empty.length) {
     lines.push('')
     lines.push('ATENCIÓN, quedarán SIN DATOS:')
@@ -118,6 +123,7 @@ export function rollbackConfirmation(input: {
     title: `Restaurar en «${input.targetName}»`,
     message: [
       `Se restaurará${n === 1 ? '' : 'n'} ${n} base${n === 1 ? '' : 's'} de datos de ${input.origin ?? `la ejecución de «${input.jobName}» del ${input.runDate}`}.`,
+      replaceContentNotice(includeData),
       safety
     ]
       .filter(Boolean)

@@ -292,6 +292,18 @@ const activeKey = computed<string | null>(() => {
     </div>
     <div class="app-toolbar__right">
       <v-btn
+        icon="mdi-creation-outline"
+        variant="text"
+        size="small"
+        class="app-toolbar__settings app-toolbar__ai"
+        :class="{ 'app-toolbar__ai--on': ui.aiPanelVisible }"
+        aria-label="Asistente de IA"
+        title="Asistente de IA"
+        :aria-pressed="ui.aiPanelVisible"
+        data-test="toolbar-ai"
+        @click="ui.toggleAiPanel()"
+      />
+      <v-btn
         icon="mdi-cog-outline"
         variant="text"
         size="small"
@@ -475,5 +487,13 @@ const activeKey = computed<string | null>(() => {
 .app-toolbar__settings.v-btn:hover {
   color: var(--nd-text);
   box-shadow: var(--nd-glow);
+}
+.app-toolbar__ai.v-btn {
+  margin-right: 6px;
+}
+.app-toolbar__ai--on.v-btn {
+  color: var(--nd-accent);
+  background: var(--nd-accent-gradient-soft);
+  border-color: rgba(var(--nd-accent-rgb), 0.3);
 }
 </style>

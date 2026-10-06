@@ -4,6 +4,7 @@ import App from './App.vue'
 import { vuetify } from './plugins/vuetify'
 import { reportError, wasNotified } from './utils/errors'
 import { api } from './api'
+import { useAiStore } from './stores/ai'
 import { useConnectionsStore } from './stores/connections'
 import { useJobLogsStore } from './stores/jobLogs'
 import { useJobsStore } from './stores/jobs'
@@ -52,6 +53,7 @@ if (new URLSearchParams(window.location.search).get('nd-screenshots') === '1') {
     api,
     theme: vuetify.theme,
     ui: useUiStore(pinia),
+    ai: useAiStore(pinia),
     tabs: useTabsStore(pinia),
     tree: useTreeStore(pinia),
     connections: useConnectionsStore(pinia),

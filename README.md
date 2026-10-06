@@ -19,6 +19,7 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - [Primer uso](#primer-uso)
 - [Copias de seguridad y rollback a local](#copias-de-seguridad-y-rollback-a-local)
 - [Automatización](#automatización)
+- [Asistente de IA](#asistente-de-ia)
 - [Dónde se guardan los datos](#dónde-se-guardan-los-datos)
 - [Actualizaciones](#actualizaciones)
 - [Solución de problemas](#solución-de-problemas)
@@ -53,6 +54,9 @@ La interfaz está en español. El código y los comentarios están en inglés.
   ([Producción y confirmaciones](#producción-y-confirmaciones)).
 - **Aviso de versiones nuevas** publicadas en GitHub, con la descarga para tu sistema o los comandos para
   actualizar la carpeta del código ([Actualizaciones](#actualizaciones)).
+- **Asistente de IA con tu propia clave** (Claude, OpenAI, Groq, Grok, GLM, Ollama o cualquier servidor
+  compatible con OpenAI): pregunta sobre tu base de datos, genera SQL en el editor y explica consultas y
+  errores. Solo se envía la estructura, nunca tus datos ([Asistente de IA](#asistente-de-ia)).
 - Tema oscuro y claro.
 
 ## Compatibilidad por sistema operativo
@@ -344,6 +348,12 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
   y opción de cancelar.
 - **Restaurar** carga una copia en la conexión y el esquema que elijas. Puedes crear el esquema, borrar antes
   los objetos, restaurar solo estructura o solo datos y elegir objetos concretos.
+- **Reemplazar la base de datos completa** (modo de **Restaurar**) borra la base de datos de destino y la crea
+  de nuevo con la copia. En **Contenido** eliges **Estructura y datos** (por defecto) o **Solo estructura**:
+  las tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, pero **sin
+  filas** y con los contadores `AUTO_INCREMENT` empezando de nuevo (no se aplica el valor de la copia). La
+  comprobación de la copia, la copia previa, las bases de datos del sistema y la confirmación de Producción
+  funcionan igual en los dos modos; la confirmación y el resultado dicen «Solo estructura».
 - **Rollback a local** de una sola copia: para traer el estado de un servidor remoto a tu MySQL local:
   1. Crea una conexión a tu MySQL local con entorno **Local**.
   2. En la conexión remota, pulsa **Nueva copia**.
@@ -368,7 +378,9 @@ pasarlas todas a tu MySQL local de una vez y dejarlo **igual que estaba en el mo
    desactivadas con el motivo. Las copias **solo de estructura** (paso de copia sin «Incluir datos») o sin
    ninguna fila salen con un aviso, porque dejarían las tablas vacías; las de solo estructura vienen
    desmarcadas y la confirmación las nombra aparte («quedarán SIN DATOS»).
-4. Deja marcada **Copia de seguridad previa de Local** (recomendado) y pulsa **Restaurar**. La confirmación
+4. En **Contenido** deja **Estructura y datos** o elige **Solo estructura** (todas las bases de datos marcadas
+   se crean con sus tablas vacías, sin filas). Deja marcada **Copia de seguridad previa de Local**
+   (recomendado) y pulsa **Restaurar**. La confirmación
    lista exactamente qué bases de datos se van a reemplazar y cuáles se van a crear.
 
 Para cada base de datos marcada, en este orden:
@@ -381,13 +393,15 @@ Para cada base de datos marcada, en este orden:
    de datos no se toca** y aparece con ERROR.
 3. Se borra (`DROP DATABASE`) y se crea de nuevo con el juego de caracteres y la colación de la copia cuando
    el servidor de destino los tiene (si no, los del servidor).
-4. Se restauran todos los objetos con sus datos. Funciona entre versiones (por ejemplo, MySQL 5.7 → 8.4): los
+4. Se restauran todos los objetos con sus datos (o, con **Solo estructura**, sin filas y sin el
+   `AUTO_INCREMENT` de la copia). Funciona entre versiones (por ejemplo, MySQL 5.7 → 8.4): los
    `DEFINER` de usuarios que no existen en el destino se quitan para que vistas, triggers y rutinas funcionen.
 
 La restauración aparece en el historial del trabajo como una ejecución más (**Restauración**, nombre
 `Rollback a Local · <trabajo>`) con su registro en vivo: un encabezado por base de datos (`Base de datos auth:
 Staging -> Local`), la comprobación de la copia, la copia previa, el borrado y la creación, una línea por objeto
-restaurado, el resultado y un resumen final con los fallos y la lista de **copias previas** guardadas. No cambia
+restaurado, el modo (`Contenido: estructura y datos` o `Contenido: solo estructura`), el resultado (`Solo
+estructura: 7 objetos, 0 filas` en ese modo) y un resumen final con los fallos y la lista de **copias previas** guardadas. No cambia
 el estado ni la «Última ejecución» del trabajo de backup, y no impide ejecutarlo mientras dura.
 
 Si un objeto falla (por ejemplo, una función de 5.7 sin `DETERMINISTIC` en un 8.4 con binlog), el paso dice qué
@@ -441,11 +455,15 @@ cron, historial y registro de cada ejecución.
 El paso **Restaurar** reemplaza una base de datos con una copia, igual que «Restaurar todo en Local»
 (comprobación de la copia, copia previa, borrado y creación, restauración). Su origen es:
 
-- **un paso de copia anterior del mismo trabajo** (restaura el archivo que ese paso acaba de generar; no puede
-  ser un paso solo de estructura), o
+- **un paso de copia anterior del mismo trabajo** (restaura el archivo que ese paso acaba de generar; solo
+  puede ser un paso solo de estructura si el paso Restaurar también es «Solo estructura»), o
 - **la última copia completa de una tarea** de un esquema de una conexión: la copia con datos más reciente que
   hizo un paso de copia de una tarea de ElectronDB sobre esa misma conexión y que sigue en disco. Nunca usa
   copias manuales, parciales, solo de estructura, de Navicat, de otra conexión ni copias previas.
+
+Como en el diálogo de restaurar, el paso tiene **Contenido**: **Estructura y datos** (por defecto, también en
+los trabajos guardados antes de la 0.1.6) o **Solo estructura** (tablas vacías con sus relaciones); se guarda
+en `jobs.json` con el paso.
 
 La base de datos de destino tiene por defecto el mismo nombre que la de origen. Así se monta un trabajo
 **Staging → Local**: un paso de copia por cada base de datos de staging y, detrás, un paso Restaurar de cada
@@ -577,6 +595,86 @@ Al editar una celda `DATE`, `DATETIME`, `TIMESTAMP`, `TIME` o `YEAR` el editor s
   `Cmd/Ctrl+S`). **Formatear JSON** guarda el JSON con sangría; si no, se guarda exactamente lo que escribes.
   **NULL** solo aparece si la columna admite `NULL`. Las confirmaciones de producción no cambian.
 
+## Asistente de IA
+
+Un panel lateral **IA** (botón ✦ a la derecha de la barra superior; se alterna con el panel Información) para
+preguntar sobre tu base de datos con el proveedor de IA que elijas y **tu propia clave**. Está **desactivado
+por defecto**: añade un proveedor en **Ajustes › IA** y activa «Activar asistente de IA».
+
+### Proveedores
+
+| Proveedor                             | URL base                                                                               | Clave    |
+| ------------------------------------- | -------------------------------------------------------------------------------------- | -------- |
+| Anthropic Claude                      | SDK oficial de Anthropic (`@anthropic-ai/sdk`)                                         | Sí       |
+| OpenAI                                | `https://api.openai.com/v1`                                                            | Sí       |
+| Groq                                  | `https://api.groq.com/openai/v1`                                                       | Sí       |
+| xAI Grok                              | `https://api.x.ai/v1`                                                                  | Sí       |
+| Zhipu GLM / Z.ai GLM (internacional)  | `https://open.bigmodel.cn/api/paas/v4` / `https://api.z.ai/api/paas/v4`                | Sí       |
+| Ollama (local)                        | `http://localhost:11434/v1` (editable)                                                 | No       |
+| Personalizado (compatible con OpenAI) | La que indiques: `https://` obligatorio, `http://` solo para `localhost` o `127.0.0.1` | Opcional |
+
+- Claude se usa siempre con el SDK oficial de Anthropic. Modelos sugeridos: `claude-opus-5-5` (por defecto),
+  `claude-sonnet-5-5`, `claude-haiku-4-5` y `claude-fable-5-1`; puedes escribir otro ID. En Opus 5.5, Sonnet 5.5
+  y Fable 5.1 el razonamiento es siempre adaptativo y el **esfuerzo** (Bajo / Medio / Alto, en Ajustes) controla
+  cuánto piensa; Haiku 4.5 no usa ni razonamiento ni esfuerzo.
+- El resto de proveedores usan el SDK oficial `openai` con su URL base. El modelo se escribe a mano o se elige
+  tras pulsar **Cargar modelos** (si el proveedor no permite listarlos, escribe el ID). Si un servidor
+  compatible no admite herramientas, la petición se repite una vez sin ellas.
+- **Probar** hace una petición mínima con la clave (en Claude solo consulta el modelo, sin generar texto).
+- Las claves se guardan cifradas en `credentials.json` con el almacén del sistema, como las contraseñas, y
+  **nunca vuelven a la interfaz** (solo se ve si hay una guardada). Todas las llamadas de red salen del proceso
+  principal con la configuración de red del sistema (proxy incluido).
+
+**Coste**: cada pregunta la factura el proveedor a tu clave según sus tarifas. El pie del panel muestra los
+tokens de la última respuesta (entrada, salida y, en Claude, los leídos de la caché). Con Claude, las
+instrucciones y la estructura van marcadas para la caché de prompts, así que las preguntas seguidas sobre la
+misma base de datos cuestan bastante menos.
+
+**Rechazos de Claude**: si los filtros de seguridad de Claude rechazan una petición se muestra un aviso en
+español. En `claude-opus-5-5`, `claude-sonnet-5-5` y `claude-fable-5-1` está activado el **reintento en el
+servidor** (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`): Anthropic repite la petición con
+el modelo que recomienda para ese tipo de rechazo, dentro de la misma llamada, y se factura con las tarifas de
+ese modelo. El pie indica el modelo que respondió.
+
+### Qué se envía y qué nunca
+
+Solo se envía la **estructura** de la base de datos seleccionada: nombres de bases de datos, tablas y columnas,
+tipos, claves primarias y únicas, índices, claves foráneas, firmas de vistas y rutinas, estimaciones de filas y
+el entorno de la conexión (Local, Staging, Producción). La estructura se lee **solo de `information_schema`**:
+el lector del asistente rechaza cualquier otra consulta, así que no puede leer filas aunque haya un error.
+
+**Nunca** se envían filas, resultados de consultas, valores de celdas, ni el servidor, usuario o contraseña de
+la conexión (tampoco su nombre).
+
+También se envía lo que tú escribes: tus preguntas, el historial de la conversación, tus notas de **Memoria** y,
+al usar «Explicar / optimizar» o «Explicar error», el SQL del editor y el mensaje de error del servidor (es tu
+texto, no datos de tus tablas). «Explicar / optimizar» añade el resultado de `EXPLAIN` **solo si el SQL es una
+única sentencia SELECT**; `EXPLAIN` no ejecuta la consulta y devuelve el plan (índices, tipo de acceso,
+estimaciones), no datos. **Ver contexto enviado** (icono del panel) muestra el texto exacto que se mandará.
+
+En bases de datos muy grandes la estructura se limita a unos 60.000 caracteres: van primero la tabla de la
+pestaña abierta, las tablas que nombras en la pregunta o en el editor y las relacionadas por claves foráneas; el
+resto aparece solo por nombre y el modelo puede pedir su estructura con una herramienta de solo lectura (que
+tampoco lee filas).
+
+### Funciones
+
+- **Chat** con el contexto de la conexión y base de datos de la pestaña activa (o de la selección del árbol).
+  Respuestas en markdown; cada bloque SQL tiene **Insertar en el editor** y **Copiar**. Enter envía, Mayús+Enter
+  añade una línea, **Detener** corta la respuesta.
+- **Generar SQL con IA** (barra del editor de consultas): describe lo que necesitas y el SQL se inserta en el
+  cursor. **Nunca se ejecuta solo**: al pulsar Ejecutar pasa por las mismas confirmaciones de siempre
+  (producción, borrados).
+- **Explicar / optimizar** la selección o todo el editor.
+- **Explicar error**: en la pestaña Mensajes, cada sentencia que falla tiene ese botón.
+- **Memoria**: notas libres por conexión y por base de datos (reglas de negocio, significado de los estados,
+  convenciones) que acompañan a la estructura. No escribas datos sensibles.
+- **Conversaciones** por conexión: lista, renombrar, eliminar y «Nueva conversación». Se guardan solo en tu
+  perfil (`ai/`), nunca se sincronizan.
+
+En conexiones de Producción el asistente funciona igual (solo estructura) y el panel muestra la etiqueta del
+entorno.
+
 ## Dónde se guardan los datos
 
 El **perfil** es una carpeta por usuario que se llama como la app:
@@ -591,17 +689,20 @@ Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en
 `Navidog` (en Linux puede ser `navidog`). ElectronDB lo copia solo en el primer arranque: ver
 [Si venías de Navidog](#si-venías-de-navidog).
 
-| Archivo o carpeta      | Contenido                                                                   |
-| ---------------------- | --------------------------------------------------------------------------- |
-| `connections.json`     | Conexiones (sin contraseñas)                                                |
-| `credentials.json`     | Contraseñas cifradas con el almacén del sistema                             |
-| `jobs.json`            | Trabajos de automatización                                                  |
-| `job-runs.json`        | Historial de ejecuciones                                                    |
-| `settings.json`        | Preferencias (carpeta de Navicat, carpeta de copias, tema, límite de filas) |
-| `logs/`                | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd      |
-| `backups/`             | Copias `.nb3` creadas por la app (carpeta por defecto)                      |
-| `notices.json`         | Avisos de arranque que ya cerraste                                          |
-| `filter-profiles.json` | Perfiles de filtro de la vista de datos (solo la definición del filtro)     |
+| Archivo o carpeta      | Contenido                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `connections.json`     | Conexiones (sin contraseñas)                                                       |
+| `credentials.json`     | Contraseñas cifradas con el almacén del sistema                                    |
+| `jobs.json`            | Trabajos de automatización                                                         |
+| `job-runs.json`        | Historial de ejecuciones                                                           |
+| `settings.json`        | Preferencias (carpeta de Navicat, carpeta de copias, tema, límite de filas)        |
+| `logs/`                | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd             |
+| `backups/`             | Copias `.nb3` creadas por la app (carpeta por defecto)                             |
+| `notices.json`         | Avisos de arranque que ya cerraste                                                 |
+| `filter-profiles.json` | Perfiles de filtro de la vista de datos (solo la definición del filtro)            |
+| `ai-providers.json`    | Proveedores del asistente de IA (sin claves; las claves van en `credentials.json`) |
+| `ai-memory.json`       | Notas de «Memoria» del asistente por conexión y base de datos                      |
+| `ai/`                  | Conversaciones del asistente, un archivo por conexión                              |
 
 ### Copiar o mover el perfil
 
@@ -832,7 +933,9 @@ responden con una versión ficticia de `tests/fixtures/updates/latest-release.js
 `18f-whats-new` simula una actualización de 0.1.2 a 0.1.4. Los pasos `19*` muestran las confirmaciones de borrado
 en Local (se cancelan: no se borra nada) y la sección Seguridad de Ajustes; `19d`-`19f`, con Staging marcado en
 Seguridad solo en memoria (no se guarda), los entornos que piden escribir el nombre, esa confirmación sobre
-«Staging Demo» (se cancela) y el candado del árbol. Nunca usa tu perfil real y se niega a
+«Staging Demo» (se cancela) y el candado del árbol. Los pasos `20*` muestran el asistente de IA con el
+proveedor falso `ELECTRONDB_AI_FIXTURE=1` (sin red ni claves reales): el panel con una conversación, la sección
+IA de Ajustes, «Ver contexto enviado» y «Generar SQL con IA». Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
 
@@ -863,6 +966,7 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error). |
 | `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                |
 | `ELECTRONDB_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).            |
+| `ELECTRONDB_AI_FIXTURE=1`           | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: el asistente de IA responde con textos fijos de un proveedor falso, sin red.                                        |
 | `ELECTRONDB_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                   |
 
 Prueba de humo del binario compilado sin tocar tus datos:
@@ -885,13 +989,13 @@ Remove-Item Env:ELECTRONDB_SMOKE, Env:ELECTRONDB_PLAIN_SECRETS, Env:ELECTRONDB_U
 
 ### Estructura del proyecto
 
-| Carpeta           | Contenido                                                                                                 |
-| ----------------- | --------------------------------------------------------------------------------------------------------- |
-| `src/shared/`     | Tipos del dominio y contrato IPC tipado (única API entre interfaz y proceso principal)                    |
-| `src/main/`       | Proceso principal de Electron: MySQL, copias `.nb3`, automatización, importación de Navicat, credenciales |
-| `src/preload/`    | Puente `contextBridge`, sin lógica                                                                        |
-| `src/renderer/`   | Interfaz Vue 3 + Vuetify 3 + Pinia                                                                        |
-| `tests/fixtures/` | Archivos de Navicat anonimizados y un `.nb3` sintético                                                    |
+| Carpeta           | Contenido                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared/`     | Tipos del dominio y contrato IPC tipado (única API entre interfaz y proceso principal)                                             |
+| `src/main/`       | Proceso principal de Electron: MySQL, copias `.nb3`, automatización, importación de Navicat, credenciales, asistente de IA (`ai/`) |
+| `src/preload/`    | Puente `contextBridge`, sin lógica                                                                                                 |
+| `src/renderer/`   | Interfaz Vue 3 + Vuetify 3 + Pinia                                                                                                 |
+| `tests/fixtures/` | Archivos de Navicat anonimizados y un `.nb3` sintético                                                                             |
 
 Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos de Navicat verificados en
 [`docs/navicat-storage.md`](docs/navicat-storage.md). Léelos antes de tocar la importación o las copias.

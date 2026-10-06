@@ -19,7 +19,7 @@ interface SecretsDoc {
   items: Record<string, string>
 }
 
-export type SecretKind = 'mysql' | 'ssh'
+export type SecretKind = 'mysql' | 'ssh' | 'ai'
 
 export class CredentialStore {
   private store: JsonStore<SecretsDoc>

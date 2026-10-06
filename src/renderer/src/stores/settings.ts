@@ -15,7 +15,11 @@ const DEFAULTS: AppSettings = {
   theme: 'dark',
   typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
-  checkUpdatesOnStartup: true
+  checkUpdatesOnStartup: true,
+  aiEnabled: false,
+  aiDefaultProviderId: null,
+  aiEffort: 'low',
+  aiMaxTokens: 16000
 }
 
 export const useSettingsStore = defineStore('settings', () => {

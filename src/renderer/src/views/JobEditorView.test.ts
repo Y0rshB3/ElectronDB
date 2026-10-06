@@ -219,6 +219,51 @@ describe('JobEditorView', () => {
     expect(tabs.tabs.find((t) => t.id === tab.id)?.payload?.jobId).toBe('job-1')
   })
 
+  it('a restore step shows «Contenido» (default «Estructura y datos», also for older steps) and saves «Solo estructura»', async () => {
+    const legacy = makeJob({
+      id: 'job-1',
+      name: 'Staging -> Local',
+      tasks: [
+        job.tasks[0],
+        {
+          id: 'r1',
+          type: 'restoreschema',
+          connectionId: 'l1',
+          schema: '',
+          referenceName: 'Restaurar billing',
+          restoreSource: { kind: 'task', taskId: 't1' },
+          safetyBackup: true
+        }
+      ],
+      schedule: { enabled: false, cron: '', launchAgent: false }
+    })
+    invoke = mockElectronDB({
+      'connections:list': () => [
+        makeConnection({ id: 'c1', name: 'Staging', environment: 'staging' }),
+        makeConnection({ id: 'l1', name: 'Local', environment: 'local' })
+      ],
+      'jobs:get': () => legacy,
+      'jobs:save': (input) => ({ ...legacy, ...(input as JobInput), id: 'job-1' }),
+      'jobs:runs': () => []
+    })
+    const { w } = await mountEditor('job-1')
+    const content = w.get('[data-test="restore-content"]')
+    expect(content.text()).toContain('Contenido')
+    expect(content.get('[data-test="replace-content-data"]').classes()).toContain('v-btn--active')
+    expect(content.get('[data-test="replace-content-hint"]').text()).toBe(
+      'Todos los objetos de la copia con todas sus filas'
+    )
+    await content.get('[data-test="replace-content-structure"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="replace-content-hint"]').text()).toBe(
+      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, sin filas'
+    )
+    await w.get('[data-test="job-save"]').trigger('click')
+    await settle()
+    const [[input]] = calls(invoke, 'jobs:save') as [[JobInput]]
+    expect(input.tasks[1]).toMatchObject({ type: 'restoreschema', includeData: false })
+  })
+
   it('asks for confirmation before running SQL on a production connection', async () => {
     invoke = mockElectronDB({
       'connections:list': () => [

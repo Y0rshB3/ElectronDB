@@ -187,4 +187,75 @@ describe('RestoreDialog', () => {
       '20261006002000-previo-rollback.nb3'
     )
   })
+
+  it('replace mode shows «Contenido» defaulting to «Estructura y datos» and sends includeData true', async () => {
+    const w = await mountFor('local')
+    // «Restaurar objetos» keeps its own Estructura/Datos checkboxes and no content control.
+    expect(w.find('[data-test="replace-content"]').exists()).toBe(false)
+    await w.get('[data-test="restore-mode-replace"]').trigger('click')
+    await settle()
+    const content = w.get('[data-test="replace-content"]')
+    expect(content.text()).toContain('Contenido')
+    expect(content.text()).toContain('Estructura y datos')
+    expect(content.text()).toContain('Solo estructura')
+    expect(content.get('[data-test="replace-content-data"]').classes()).toContain('v-btn--active')
+    await w.get('[data-test="restore-submit"]').trigger('click')
+    await settle()
+    const ui = useUiStore()
+    expect(ui.confirm.message).not.toContain('Solo estructura')
+    ui.answer(true)
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options).toMatchObject({ replaceSchema: true, includeData: true })
+  })
+
+  it('«Solo estructura» in replace mode is stated in the warning and the confirmation and sends includeData false', async () => {
+    invoke.mockImplementation(async (channel: string) => {
+      if (channel === 'backups:meta') return meta
+      if (channel === 'backups:restore')
+        return {
+          objectsRestored: 4,
+          rowsInserted: 0,
+          errors: [],
+          durationMs: 12,
+          safetyBackupPath: null,
+          structureOnly: true
+        }
+      return []
+    })
+    const w = await mountFor('local')
+    await w.get('[data-test="restore-mode-replace"]').trigger('click')
+    await settle()
+    await w.get('[data-test="replace-content-structure"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="replace-content-hint"]').text()).toBe(
+      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, sin filas'
+    )
+    expect(w.get('[data-test="restore-replace-warning"]').text()).toContain(
+      'se crearán las tablas vacías'
+    )
+    await w.get('[data-test="restore-submit"]').trigger('click')
+    await settle()
+    const ui = useUiStore()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.message).toContain('Solo estructura: se crearán las tablas vacías')
+    ui.answer(true)
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options).toMatchObject({ replaceSchema: true, includeData: false })
+    expect(w.get('[data-test="restore-result-mode"]').text()).toContain(
+      'Solo estructura: 4 objetos, 0 filas'
+    )
+  })
+
+  it('a guarded target in «Solo estructura» states it next to the typed name', async () => {
+    const w = await mountFor('prod')
+    await w.get('[data-test="restore-mode-replace"]').trigger('click')
+    await settle()
+    await w.get('[data-test="replace-content-structure"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="restore-production-warning"]').text()).toContain(
+      'se crearán las tablas vacías'
+    )
+  })
 })

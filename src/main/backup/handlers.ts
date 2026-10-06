@@ -1,6 +1,7 @@
 import { realpath, stat, unlink } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { IpcArgs, IpcResult } from '@shared/ipc'
+import { structureOnlySummary } from '@shared/jobLog'
 import type { ConnectionConfig, ProgressEvent, RestoreOptions, RestoreResult } from '@shared/types'
 import type { AppContext } from '../context'
 import { assertProductionWriteConfirmed } from '../ipc/productionGuard'
@@ -118,6 +119,8 @@ export async function replaceRestore(
       targetSchema: options.targetSchema.trim(),
       safetyBackup: options.safetyBackup !== false,
       continueOnError: options.continueOnError === true,
+      // «Solo estructura» only when asked explicitly; absent = structure and data.
+      includeData: options.includeData !== false,
       ...(options.confirmProduction ? { confirmProduction: true } : {})
     },
     {
@@ -224,7 +227,9 @@ export function createBackupHandlers(
         (r) =>
           r.errors.length > 0
             ? `Restauración terminada con ${r.errors.length} error(es): ${r.objectsRestored} objetos, ${r.rowsInserted} filas`
-            : `Restauración completada: ${r.objectsRestored} objetos, ${r.rowsInserted} filas`,
+            : r.structureOnly
+              ? `Restauración completada · ${structureOnlySummary(r.objectsRestored)}`
+              : `Restauración completada: ${r.objectsRestored} objetos, ${r.rowsInserted} filas`,
         // A restore resolves with per-object errors (and stops early unless continueOnError);
         // flag them on the final event so progress-only listeners can tell it did not succeed.
         (r) =>

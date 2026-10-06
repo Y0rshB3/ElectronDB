@@ -48,6 +48,9 @@ export const useUiStore = defineStore('ui', () => {
   const logDrawerVisible = ref(false)
   const treeWidth = ref(260)
   const infoWidth = ref(280)
+  /** AI assistant panel: right side, alternating with Información. */
+  const aiPanelVisible = ref(false)
+  const aiWidth = ref(400)
 
   const connectionDialog = ref<{ open: boolean; editing: ConnectionConfig | null }>({
     open: false,
@@ -105,6 +108,11 @@ export const useUiStore = defineStore('ui', () => {
   }
   function toggleInfoPanel(value?: boolean): void {
     infoPanelVisible.value = value ?? !infoPanelVisible.value
+    if (infoPanelVisible.value) aiPanelVisible.value = false
+  }
+  function toggleAiPanel(value?: boolean): void {
+    aiPanelVisible.value = value ?? !aiPanelVisible.value
+    if (aiPanelVisible.value) infoPanelVisible.value = false
   }
 
   function ask(request: ConfirmRequest): Promise<boolean> {
@@ -125,6 +133,8 @@ export const useUiStore = defineStore('ui', () => {
     logDrawerVisible,
     treeWidth,
     infoWidth,
+    aiPanelVisible,
+    aiWidth,
     connectionDialog,
     importDialog,
     settingsDialog,
@@ -138,6 +148,7 @@ export const useUiStore = defineStore('ui', () => {
     openSettingsDialog,
     toggleLogDrawer,
     toggleInfoPanel,
+    toggleAiPanel,
     openNewDatabaseDialog,
     openBackupDialog,
     openRestoreDialog,

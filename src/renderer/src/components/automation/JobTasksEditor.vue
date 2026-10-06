@@ -8,6 +8,7 @@ import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 import { environmentLabel } from '@renderer/components/backups/backupHelpers'
+import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
 import {
   TASK_ICONS,
   TASK_TYPES,
@@ -324,6 +325,12 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
             @update:model-value="update(index, { includeData: !!$event })"
           />
           <template v-else-if="task.type === 'restoreschema'">
+            <ReplaceContentToggle
+              :model-value="task.includeData !== false"
+              class="task-card__content"
+              data-test="restore-content"
+              @update:model-value="update(index, { includeData: $event })"
+            />
             <v-checkbox
               :model-value="task.safetyBackup !== false"
               label="Copia de seguridad previa del destino (recomendado)"
@@ -334,7 +341,12 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
               @update:model-value="update(index, { safetyBackup: !!$event })"
             />
             <p class="task-card__hint">
-              La base de datos de destino se borra y se crea de nuevo con el contenido de la copia.
+              La base de datos de destino se borra y se crea de nuevo con
+              {{
+                task.includeData === false
+                  ? 'la estructura de la copia (tablas vacías).'
+                  : 'el contenido de la copia.'
+              }}
               {{ blockedHint }}
             </p>
           </template>
@@ -476,6 +488,9 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
 .task-card__check {
   margin-top: 6px;
   margin-left: -8px;
+}
+.task-card__content {
+  margin-top: 10px;
 }
 .job-tasks__sql {
   height: 140px;

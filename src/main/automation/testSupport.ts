@@ -236,15 +236,17 @@ export function fakeBackupService(dir: string, timeline: string[] = []): FakeBac
           if (!options.continueOnError) break
           continue
         }
+        // Like restore.ts: a structure-only restore inserts no rows.
+        const rows = options.includeData ? (o.rows ?? 0) : 0
         result.objectsRestored++
-        result.rowsInserted += o.rows ?? 0
+        result.rowsInserted += rows
         progress?.({
           phase: 'objectDone',
           current: i + 1,
           total: objects.length,
           message: o.name,
           done: false,
-          detail: { ...detail, rows: o.type === 'Table' ? (o.rows ?? 0) : null }
+          detail: { ...detail, rows: o.type === 'Table' && options.includeData ? rows : null }
         })
       }
       return result

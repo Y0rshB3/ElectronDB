@@ -14,6 +14,12 @@ import type {
   TableFilter,
   WriteOptions
 } from '@shared/types'
+import type {
+  AiChatRequest,
+  AiContextRequest,
+  AiConversationInput,
+  AiProviderInput
+} from '@shared/ai'
 import { errorMessage, useNotify } from './composables/useNotify'
 import { toPlain } from './utils/toPlain'
 
@@ -196,5 +202,30 @@ export const api = {
     import: (request: NavicatImportRequest, rootPath?: string | null) =>
       invoke('navicat:import', request, rootPath),
     recoverPasswords: () => invoke('navicat:recoverPasswords')
+  },
+  /** AI assistant. Keys are only ever sent to main (setKey/test/listModels), never read back. */
+  ai: {
+    providers: () => invoke('ai:providers'),
+    saveProvider: (input: AiProviderInput) => invoke('ai:saveProvider', input),
+    deleteProvider: (id: string) => invoke('ai:deleteProvider', id),
+    testProvider: (input: AiProviderInput, key: string | null) =>
+      invokeSilent('ai:testProvider', input, key),
+    setKey: (id: string, key: string | null) => invoke('ai:setKey', id, key),
+    hasKey: (id: string) => invokeSilent('ai:hasKey', id),
+    listModels: (input: AiProviderInput, key: string | null) =>
+      invokeSilent('ai:listModels', input, key),
+    chat: (request: AiChatRequest) => invokeSilent('ai:chat', request),
+    cancel: (requestId: string) => invokeSilent('ai:cancel', requestId),
+    conversations: (connectionId: string) => invokeSilent('ai:conversations', connectionId),
+    conversation: (connectionId: string, id: string) =>
+      invokeSilent('ai:conversation', connectionId, id),
+    saveConversation: (input: AiConversationInput) => invoke('ai:saveConversation', input),
+    deleteConversation: (connectionId: string, id: string) =>
+      invoke('ai:deleteConversation', connectionId, id),
+    memory: (connectionId: string, schema: string | null) =>
+      invokeSilent('ai:memory', connectionId, schema),
+    setMemory: (connectionId: string, schema: string | null, text: string) =>
+      invoke('ai:setMemory', connectionId, schema, text),
+    contextPreview: (request: AiContextRequest) => invokeSilent('ai:contextPreview', request)
   }
 }

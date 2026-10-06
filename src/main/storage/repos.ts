@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import type { AiEffort } from '@shared/ai'
 import type {
   AppSettings,
   ConnectionConfig,
@@ -148,6 +149,16 @@ export function defaultNavicatRootPath(
 const macNavicatRootPath = (home: string): string =>
   join(home, 'Library', 'Application Support', 'PremiumSoft CyberTech', 'Navicat CC')
 
+export const DEFAULT_AI_MAX_TOKENS = 16000
+const AI_EFFORTS: readonly AiEffort[] = ['low', 'medium', 'high']
+
+/** Max output tokens accepted in Ajustes (the providers cap it further per model). */
+export function normalizeAiMaxTokens(value: unknown): number {
+  const n = Math.trunc(Number(value))
+  if (!Number.isFinite(n) || n < 256) return DEFAULT_AI_MAX_TOKENS
+  return Math.min(n, 128000)
+}
+
 export const DEFAULT_SETTINGS = (
   userData: string,
   home: string,
@@ -159,7 +170,11 @@ export const DEFAULT_SETTINGS = (
   theme: 'dark',
   typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
-  checkUpdatesOnStartup: true
+  checkUpdatesOnStartup: true,
+  aiEnabled: false,
+  aiDefaultProviderId: null,
+  aiEffort: 'low',
+  aiMaxTokens: DEFAULT_AI_MAX_TOKENS
 })
 
 /**
@@ -187,7 +202,13 @@ export class SettingsRepo {
       confirmDestructiveEverywhere: stored.confirmDestructiveEverywhere !== false,
       // Old profiles (only confirmProductionWrites, true or false), missing or invalid values:
       // ['production'] at least. Production is always added back.
-      typedConfirmEnvironments: normalizeTypedConfirmEnvironments(stored.typedConfirmEnvironments)
+      typedConfirmEnvironments: normalizeTypedConfirmEnvironments(stored.typedConfirmEnvironments),
+      // Profiles saved before 0.1.6 have no AI fields: assistant off.
+      aiEnabled: stored.aiEnabled === true,
+      aiDefaultProviderId:
+        typeof stored.aiDefaultProviderId === 'string' ? stored.aiDefaultProviderId : null,
+      aiEffort: AI_EFFORTS.includes(stored.aiEffort) ? stored.aiEffort : 'low',
+      aiMaxTokens: normalizeAiMaxTokens(stored.aiMaxTokens)
     }
     return settings.navicatRootPath === this.staleMacDefault
       ? { ...settings, navicatRootPath: '' }

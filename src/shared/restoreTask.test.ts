@@ -150,4 +150,10 @@ describe('restore task rules', () => {
     const r = restore()
     expect(restoreTaskProblem(r, [struct, r], lookup, 'paso 2')).toMatch(/solo de estructura/)
   })
+
+  it('accepts a structure-only backup step when the restore step is «Solo estructura» too', () => {
+    const struct = { ...backup, includeData: false }
+    const r = { ...restore(), includeData: false }
+    expect(restoreTaskProblem(r, [struct, r], lookup, 'paso 2')).toBeNull()
+  })
 })

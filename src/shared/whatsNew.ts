@@ -18,6 +18,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.6',
+    date: '2026-10-06',
+    highlights: [
+      'Al reemplazar una base de datos puedes elegir «Solo estructura» (tablas y relaciones sin datos)',
+      'Asistente de IA con tu propia clave (Claude, OpenAI, Groq, Grok, GLM, Ollama): pregunta sobre tu base de datos, genera y explica SQL; solo se envía la estructura'
+    ]
+  },
+  {
     version: '0.1.5',
     date: '2026-10-06',
     highlights: [

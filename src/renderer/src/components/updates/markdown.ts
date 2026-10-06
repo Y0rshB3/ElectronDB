@@ -22,7 +22,8 @@ export type Block =
   | { type: 'heading'; level: number; children: Inline[] }
   | { type: 'paragraph'; children: Inline[] }
   | { type: 'list'; ordered: boolean; items: ListItem[] }
-  | { type: 'code'; text: string }
+  /** `lang`: info string of the fence (```sql -> 'sql'), when present. */
+  | { type: 'code'; text: string; lang?: string }
   | { type: 'quote'; children: Inline[] }
   | { type: 'rule' }
   | { type: 'table'; header: Inline[][]; rows: Inline[][][] }
@@ -92,7 +93,7 @@ const BULLET = /^\s*[-*+]\s+(.*)$/
 const ORDERED = /^\s*\d+[.)]\s+(.*)$/
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/
-const FENCE = /^\s*(```|~~~)/
+const FENCE = /^\s*(```|~~~)\s*([\w+#.-]*)/
 const TABLE_ROW = /^\s*\|.*\|\s*$/
 const TABLE_SEPARATOR = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*$/
 
@@ -121,7 +122,8 @@ export function parseMarkdown(source: string): Block[] {
       i++
       while (i < lines.length && !lines[i].trim().startsWith(fence[1])) code.push(lines[i++])
       i++ // closing fence (or end of text)
-      blocks.push({ type: 'code', text: code.join('\n') })
+      const lang = fence[2]?.toLowerCase()
+      blocks.push({ type: 'code', text: code.join('\n'), ...(lang ? { lang } : {}) })
       continue
     }
     const heading = HEADING.exec(line)

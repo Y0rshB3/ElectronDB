@@ -37,7 +37,11 @@ const langCompartment = new Compartment()
 const readonlyCompartment = new Compartment()
 
 function languageExt() {
-  const lang = sql({ dialect: electronDBMySQL, schema: props.schema ?? {}, upperCaseKeywords: true })
+  const lang = sql({
+    dialect: electronDBMySQL,
+    schema: props.schema ?? {},
+    upperCaseKeywords: true
+  })
   if (!props.provider) return lang
   return [lang, lang.language.data.of({ autocomplete: schemaCompletionSource(props.provider) })]
 }
@@ -255,11 +259,31 @@ function replaceSelection(text: string): void {
   view.focus()
 }
 
+/**
+ * Inserts text at the cursor (replacing the selection, if any) on its own
+ * lines, selects it and focuses the editor. Used for AI-generated SQL: it is
+ * only inserted, never run.
+ */
+function insertAtCursor(text: string): void {
+  if (!view) return
+  const { from, to } = view.state.selection.main
+  const doc = view.state.doc
+  const before = from > 0 && doc.sliceString(from - 1, from) !== '\n' ? '\n' : ''
+  const after = to < doc.length && doc.sliceString(to, to + 1) !== '\n' ? '\n' : ''
+  const insert = before + text + after
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + before.length, head: from + before.length + text.length },
+    scrollIntoView: true
+  })
+  view.focus()
+}
+
 function focus(): void {
   view?.focus()
 }
 
-defineExpose({ getSelection, replaceSelection, focus })
+defineExpose({ getSelection, replaceSelection, insertAtCursor, focus })
 </script>
 
 <template>

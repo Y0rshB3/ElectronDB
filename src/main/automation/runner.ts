@@ -13,6 +13,7 @@ import {
   stampLine,
   stepHeading,
   stepLabel,
+  structureOnlySummary,
   summaryLines,
   type SafetyCopy,
   type StepInfo
@@ -178,6 +179,7 @@ export function describeStep(ctx: AppContext, tasks: JobTask[], task: JobTask): 
     info.sourceConnectionName = source?.connectionId
       ? connectionName(ctx, source.connectionId)
       : 'backup'
+    if (task.includeData === false) info.structureOnly = true
   }
   return info
 }
@@ -203,6 +205,8 @@ class RunExecution {
   private seq = 0
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private readonly startedMs: number
+  /** Summary note of successful steps, by step index («Solo estructura: …»). */
+  private readonly notes = new Map<number, string>()
 
   constructor(
     private readonly ctx: AppContext,
@@ -331,7 +335,8 @@ class RunExecution {
         index: i + 1,
         label: this.job.tasks[i] ? stepLabel(this.stepInfo(this.job.tasks[i])) : t.referenceName,
         status: t.status,
-        message: t.message
+        message: t.message,
+        note: this.notes.get(i) ?? null
       }))
     })
     if (total === 0) lines.splice(1, 0, '  El trabajo no tiene pasos.')
@@ -404,7 +409,13 @@ class RunExecution {
         ]
         if (restored.errors.length)
           throw new Error(partialRestoreMessage(restoreTargetSchema(task, this.job.tasks), result))
-        this.say(resultLine('OK', [...counts, formatElapsed(this.elapsedSince(stepStart))]))
+        if (result.includeData !== false) {
+          this.say(resultLine('OK', [...counts, formatElapsed(this.elapsedSince(stepStart))]))
+        } else {
+          const summary = structureOnlySummary(restored.objectsRestored)
+          this.notes.set(index, summary)
+          this.say(resultLine('OK', [summary, formatElapsed(this.elapsedSince(stepStart))]))
+        }
       } else if (task.type === 'runquery') {
         const count = await this.runQuery(task, index)
         this.say(
@@ -547,6 +558,7 @@ class RunExecution {
         connectionId: task.connectionId,
         targetSchema: restoreTargetSchema(task, this.job.tasks),
         safetyBackup: task.safetyBackup !== false,
+        includeData: task.includeData !== false,
         continueOnError: this.options.restoreContinueOnError ?? this.job.continueOnError,
         confirmProduction: this.options.allowProductionRestore === true
       },

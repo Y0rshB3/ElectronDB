@@ -1,5 +1,6 @@
 import type { StartupNotice } from '@shared/types'
 import { api } from '@renderer/api'
+import { useAiStore } from '@renderer/stores/ai'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useJobLogsStore } from '@renderer/stores/jobLogs'
 import { useJobsStore } from '@renderer/stores/jobs'
@@ -31,7 +32,9 @@ export function subscribeToMainEvents(): () => void {
     // Drops cached schema data so the tree does not show stale children.
     api.on('event:connectionClosed', ({ connectionId }) => tree.forget(connectionId)),
     // App menu «Buscar actualizaciones…».
-    api.on('event:checkUpdates', () => useUpdatesStore().openDialog())
+    api.on('event:checkUpdates', () => useUpdatesStore().openDialog()),
+    // Streamed AI answers (event:aiDelta / aiStatus / aiDone).
+    useAiStore().listen()
   ]
   return unsubscribeFromMainEvents
 }

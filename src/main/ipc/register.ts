@@ -1,4 +1,5 @@
 import type { AppContext } from '../context'
+import { registerAiHandlers } from './ai'
 import { registerAppHandlers } from './app'
 import { registerBackupsHandlers } from './backups'
 import { registerConnectionsHandlers } from './connections'
@@ -21,4 +22,5 @@ export function registerAllHandlers(ctx: AppContext): void {
   registerJobsHandlers(ctx)
   registerNavicatHandlers(ctx)
   registerUpdatesHandlers(ctx)
+  registerAiHandlers(ctx)
 }

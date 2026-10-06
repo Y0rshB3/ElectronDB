@@ -88,7 +88,7 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
         .executeJavaScript(
           `(async () => {
             const ipc = {}
-            for (const channel of ['app:info', 'app:startupNotices', 'settings:get', 'connections:list', 'jobs:list', 'jobs:runs', 'updates:check']) {
+            for (const channel of ['app:info', 'app:startupNotices', 'settings:get', 'connections:list', 'jobs:list', 'jobs:runs', 'updates:check', 'ai:providers']) {
               try { await window.electronDB.invoke(channel); ipc[channel] = 'ok' } catch (e) { ipc[channel] = String(e && e.message) }
             }
             return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.electronDB?.invoke === 'function', title: document.title, ipc }

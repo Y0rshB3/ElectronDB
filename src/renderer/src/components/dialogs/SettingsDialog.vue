@@ -16,6 +16,7 @@ import { environmentLabel, environmentPillClass } from '@renderer/components/bac
 import './pathField.css'
 import { vPathTail } from './pathTail'
 import DialogHeader from './DialogHeader.vue'
+import AiSettingsSection from '@renderer/components/ai/AiSettingsSection.vue'
 
 const ui = useUiStore()
 const settingsStore = useSettingsStore()
@@ -67,11 +68,17 @@ async function save(): Promise<void> {
     error.value = 'El límite de filas debe ser un número mayor que 0.'
     return
   }
+  const aiMaxTokens = Math.trunc(Number(form.value.aiMaxTokens))
+  if (!Number.isFinite(aiMaxTokens) || aiMaxTokens < 256 || aiMaxTokens > 128000) {
+    error.value = 'El máximo de tokens de la IA debe estar entre 256 y 128000.'
+    return
+  }
   saving.value = true
   error.value = ''
   try {
     await settingsStore.update({
       ...form.value,
+      aiMaxTokens,
       defaultRowLimit: limit,
       typedConfirmEnvironments: typedEnvironments.value
     })
@@ -182,6 +189,13 @@ async function save(): Promise<void> {
             class="settings-dialog__switch"
           />
         </section>
+
+        <AiSettingsSection
+          v-model:enabled="form.aiEnabled"
+          v-model:default-provider-id="form.aiDefaultProviderId"
+          v-model:effort="form.aiEffort"
+          v-model:max-tokens="form.aiMaxTokens"
+        />
 
         <section class="settings-section settings-section--danger" aria-label="Seguridad">
           <div class="settings-section__title">

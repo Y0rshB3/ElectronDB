@@ -13,7 +13,11 @@ const base: AppSettings = {
   theme: 'dark',
   typedConfirmEnvironments: ['production'],
   confirmDestructiveEverywhere: true,
-  checkUpdatesOnStartup: true
+  checkUpdatesOnStartup: true,
+  aiEnabled: false,
+  aiDefaultProviderId: null,
+  aiEffort: 'low',
+  aiMaxTokens: 16000
 }
 
 describe('SettingsDialog › Seguridad typed-confirmation environments', () => {

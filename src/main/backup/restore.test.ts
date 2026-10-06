@@ -13,6 +13,7 @@ import {
   definerOf,
   executeDdl,
   restoreBackup,
+  stripAutoIncrementOption,
   stripDefiner,
   describeRestoreError,
   restoreErrorHint
@@ -169,6 +170,43 @@ describe('restoreBackup', () => {
       'SET UNIQUE_CHECKS = 1',
       'SET SQL_MODE = ? -- ["STRICT_TRANS_TABLES"]'
     ])
+  })
+
+  it('structure only with skipAutoIncrement (replace «Solo estructura»): no INSERT, no AUTO_INCREMENT, same FK checks', async () => {
+    const { result, session } = await run(
+      baseOptions({ includeData: false, skipAutoIncrement: true })
+    )
+    expect(result).toMatchObject({ objectsRestored: 5, rowsInserted: 0, errors: [] })
+    const statements = session.executed.map((s) => s.replace(/\s+/g, ' '))
+    expect(statements.some((s) => s.startsWith('INSERT'))).toBe(false)
+    expect(statements.some((s) => /AUTO_INCREMENT\s*=/.test(s))).toBe(false)
+    expect(statements).toContain('CREATE TABLE `items` (`id` int) ENGINE=InnoDB')
+    expect(statements).toContain(sourceSchema.tables[0].triggers![0].ddl)
+    expect(statements).toContain(sourceSchema.views![0].ddl)
+    expect(statements).toContain('SET FOREIGN_KEY_CHECKS = 0')
+    expect(statements).toContain('SET FOREIGN_KEY_CHECKS = 1')
+  })
+
+  it('structure only without skipAutoIncrement («Restaurar objetos» › Estructura) still applies AUTO_INCREMENT', async () => {
+    const { session } = await run(baseOptions({ includeData: false }))
+    const statements = session.executed.map((s) => s.replace(/\s+/g, ' '))
+    expect(statements).toContain('CREATE TABLE `items` (`id` int) ENGINE=InnoDB AUTO_INCREMENT=5')
+    expect(statements).toContain('ALTER TABLE `items` AUTO_INCREMENT = 5')
+    expect(statements.some((s) => s.startsWith('INSERT'))).toBe(false)
+  })
+
+  it('stripAutoIncrementOption removes only the table option, never the column attribute', () => {
+    const ddl =
+      'CREATE TABLE `t` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4'
+    expect(stripAutoIncrementOption(ddl)).toBe(
+      'CREATE TABLE `t` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+    )
+    expect(stripAutoIncrementOption('CREATE TABLE `t` (`id` int) AUTO_INCREMENT=3 ENGINE=InnoDB')).toBe(
+      'CREATE TABLE `t` (`id` int) ENGINE=InnoDB'
+    )
+    expect(stripAutoIncrementOption('CREATE TABLE `t` (`id` int) ENGINE=InnoDB')).toBe(
+      'CREATE TABLE `t` (`id` int) ENGINE=InnoDB'
+    )
   })
 
   it('restores the Navicat fixture (3 rows with escapes, empty table, view)', async () => {

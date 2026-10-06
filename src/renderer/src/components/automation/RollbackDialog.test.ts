@@ -176,7 +176,8 @@ describe('RollbackDialog', () => {
       runId: 'run-1',
       targetConnectionId: 'local',
       taskIds: ['b1', 'b2'],
-      safetyBackup: true
+      safetyBackup: true,
+      includeData: true
     })
     // Not production: no confirmProduction flag.
     expect(sent[0][1]).toBeUndefined()
@@ -207,6 +208,29 @@ describe('RollbackDialog', () => {
     })
   })
 
+  it('shows «Contenido» (default «Estructura y datos»); «Solo estructura» is in the confirmation and the request', async () => {
+    const w = await mountDialog()
+    const ui = useUiStore()
+    const content = w.get('[data-test="replace-content"]')
+    expect(content.text()).toContain('Contenido')
+    expect(content.get('[data-test="replace-content-data"]').classes()).toContain('v-btn--active')
+    await content.get('[data-test="replace-content-structure"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="replace-content-hint"]').text()).toBe(
+      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, sin filas'
+    )
+    expect(w.text()).toContain('con las tablas vacías (solo estructura)')
+    await w.get('[data-test="rollback-submit"]').trigger('click')
+    await settle()
+    expect(ui.confirm.message).toContain('Solo estructura: se crearán las tablas vacías')
+    ui.answer(true)
+    await settle()
+    expect(calls(invoke, 'jobs:rollback')[0][0]).toMatchObject({
+      taskIds: ['b1', 'b2'],
+      includeData: false
+    })
+  })
+
   it('a production target requires typing its name and sends confirmProduction', async () => {
     const w = await mountDialog()
     const ui = useUiStore()
@@ -225,7 +249,13 @@ describe('RollbackDialog', () => {
     ui.answer(true)
     await settle()
     expect(calls(invoke, 'jobs:rollback')[0]).toEqual([
-      { runId: 'run-1', targetConnectionId: 'prod', taskIds: ['b1', 'b2'], safetyBackup: true },
+      {
+        runId: 'run-1',
+        targetConnectionId: 'prod',
+        taskIds: ['b1', 'b2'],
+        safetyBackup: true,
+        includeData: true
+      },
       { confirmProduction: true }
     ])
   })
@@ -381,7 +411,8 @@ describe('RollbackDialog with backup files (a package of the backups list)', () 
         sourceConnectionId: 'staging',
         title: source.title,
         targetConnectionId: 'local',
-        safetyBackup: true
+        safetyBackup: true,
+        includeData: true
       },
       undefined
     ])
@@ -545,6 +576,18 @@ describe('run history entry point', () => {
       safetyBackup: true
     })
     expect(text.title).toBe('Restaurar en «Local»')
+    expect(text.message).not.toContain('Solo estructura')
+    const structure = rollbackConfirmation({
+      jobName: 'Backup staging',
+      runDate: '05/10/2026 05:00',
+      targetName: 'Local',
+      items: planFor('local').items.map((i) => ({ ...i, warning: 'sin filas' })),
+      safetyBackup: true,
+      includeData: false
+    })
+    expect(structure.message).toContain('Solo estructura: se crearán las tablas vacías')
+    // Every table ends up empty: the per-copy «SIN DATOS» block is not repeated.
+    expect(structure.details).not.toContain('SIN DATOS')
     expect(text.message).toMatch(
       /^Se restaurarán 2 bases de datos de la ejecución de «Backup staging»/
     )

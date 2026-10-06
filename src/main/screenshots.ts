@@ -528,6 +528,20 @@ const STEPS: Step[] = [
     cleanup: `S.ui.restoreDialog = { open: false, backup: null, connectionId: null }`
   },
   {
+    // «Reemplazar la base de datos completa» with «Contenido: Solo estructura».
+    name: '12b-restore-replace-structure',
+    script: `
+      const c = H.local(S)
+      const backups = await S.api.backups.list(c.id, null)
+      if (!backups.length) throw new Error('no backups listed for ${LOCAL}')
+      S.ui.openRestoreDialog(backups[0], c.id)
+      await H.waitFor('[data-test="restore-dialog"]', 5000)
+      await H.click('[data-test="restore-mode-replace"]', 5000)
+      await H.click('[data-test="replace-content-structure"]', 5000)
+      await H.settle(S, 1200)`,
+    cleanup: `S.ui.restoreDialog = { open: false, backup: null, connectionId: null }`
+  },
+  {
     name: '13-settings-dialog',
     script: `
       S.ui.openSettingsDialog()
@@ -672,6 +686,14 @@ const STEPS: Step[] = [
       await H.click('[data-test="run-history"] [data-test="run-rollback"]', 5000)
       await H.waitFor('[data-test="rollback-item-state"]', 20000)
       await H.settle(S, 900)`
+  },
+  {
+    // Same dialog with «Contenido: Solo estructura»; set back to the default for the next steps.
+    name: '16a2-rollback-structure',
+    script: `
+      await H.click('[data-test="replace-content-structure"]', 5000)
+      await H.sleep(700)`,
+    cleanup: `await H.click('[data-test="replace-content-data"]', 5000)`
   },
   {
     name: '16b-rollback-confirm',
@@ -939,6 +961,63 @@ const STEPS: Step[] = [
       await H.waitFor('[data-test="update-error"]', 5000)
       await H.settle(S, 700)`,
     cleanup: `S.updates.dialogOpen = false`
+  },
+  {
+    // AI assistant with the fake provider (ELECTRONDB_AI_FIXTURE=1): a conversation with an SQL block.
+    name: '20a-ai-panel-chat',
+    script: `
+      const c = H.local(S)
+      S.workspace.openQuery(c.id, '${SCHEMA}', { sql: 'SELECT * FROM shot_orders LIMIT 10;', name: 'Pedidos' })
+      await H.sleep(900)
+      S.ui.toggleAiPanel(true)
+      await S.ai.loadProviders()
+      S.ai.newConversation()
+      await H.waitFor('[data-test="ai-panel"]', 5000)
+      await S.ai.send('chat', '¿Qué clientes han pagado más pedidos en los últimos 30 días?')
+      await H.until(() => !S.ai.busy, 20000)
+      await H.waitFor('[data-test="ai-code-block"]', 5000)
+      await H.settle(S, 700)`
+  },
+  {
+    name: '20b-ai-context-dialog',
+    script: `
+      await H.click('[data-test="ai-context"]', 5000)
+      await H.until(() => /shot_orders/.test(H.$('[data-test="ai-context-text"]')?.textContent || ''), 15000)
+      await H.sleep(500)`,
+    cleanup: `
+      const close = [...document.querySelectorAll('[data-test="ai-context-dialog"] button')].find((b) => /Cerrar/.test(b.textContent))
+      close?.click()`
+  },
+  {
+    name: '20c-ai-generate-sql',
+    script: `
+      await H.click('[data-test="ai-generate"]', 5000)
+      const input = await H.waitFor('[data-test="ai-generate-input"] textarea', 5000)
+      input.value = 'Pedidos pendientes más recientes con el nombre del cliente'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await H.sleep(600)`
+  },
+  {
+    // Same dialog after «Generar e insertar»: the SQL is in the editor, not executed.
+    name: '20d-ai-generated-inserted',
+    script: `
+      await H.click('[data-test="ai-generate-run"]', 5000)
+      await H.until(() => !H.$('[data-test="ai-generate-dialog"]'), 15000)
+      await H.until(() => /shot_customers c ON c.id = o.customer_id/.test(H.$('.cm-content')?.textContent || ''), 5000)
+      await H.sleep(700)`
+  },
+  {
+    name: '20e-settings-ai',
+    script: `
+      // The «SQL insertado» toast of the previous step would cover the dialog.
+      document.querySelectorAll('.v-snackbar button').forEach((b) => b.click())
+      S.ui.openSettingsDialog()
+      const section = await H.waitFor('[data-test="settings-ai"]', 5000)
+      section.scrollIntoView({ block: 'start' })
+      await H.sleep(700)`,
+    cleanup: `
+      S.ui.settingsDialog = false
+      S.ui.toggleInfoPanel(true)`
   },
   {
     name: '15-light-theme-home',

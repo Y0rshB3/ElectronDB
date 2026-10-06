@@ -147,6 +147,16 @@ export interface StepInfo {
   /** restoreschema: schema stored in the backup and the connection it came from. */
   sourceSchema?: string
   sourceConnectionName?: string
+  /** restoreschema «Solo estructura»: objects without rows. */
+  structureOnly?: boolean
+}
+
+/** Name of the replace content mode that creates every object with empty tables. */
+export const STRUCTURE_ONLY_LABEL = 'Solo estructura'
+
+/** "Solo estructura: 7 objetos, 0 filas" — result of a structure-only replace. */
+export function structureOnlySummary(objects: number): string {
+  return `${STRUCTURE_ONLY_LABEL}: ${plural(objects, 'objeto', 'objetos')}, 0 filas`
 }
 
 /**
@@ -158,7 +168,8 @@ export function restoreLabel(step: StepInfo): string {
   const target = step.schema || source
   const from = step.sourceConnectionName || 'backup'
   const suffix = target !== source ? ` · ${target}` : ''
-  return `Base de datos ${source}: ${from} -> ${step.connectionName}${suffix}`
+  const content = step.structureOnly ? ' (solo estructura)' : ''
+  return `Base de datos ${source}: ${from} -> ${step.connectionName}${suffix}${content}`
 }
 
 /** Short step name used in headings and the summary: "Base de datos accounts (Local)". */
@@ -223,6 +234,8 @@ export interface SummaryStep {
   index: number
   status: RunStatus
   message: string | null
+  /** Shown for a successful step (e.g. "Solo estructura: 7 objetos, 0 filas"). */
+  note?: string | null
 }
 
 /** Safety copy taken before a database was replaced (restore steps). */
@@ -270,6 +283,9 @@ export function summaryLines(input: {
   ]
   for (const f of failed)
     lines.push(`  ERROR · Paso ${f.index}/${total} · ${f.label}: ${oneLine(f.message ?? 'error')}`)
+  for (const s of input.steps)
+    if (s.status === 'success' && s.note)
+      lines.push(`  Paso ${s.index}/${total} · ${s.label}: ${oneLine(s.note)}`)
   const copies = input.safetyCopies ?? []
   if (copies.length) {
     lines.push(`  Copias previas (para deshacer: ${UNDO_REPLACE_HOW}):`)
