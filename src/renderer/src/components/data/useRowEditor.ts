@@ -2,8 +2,9 @@ import { computed, ref, type Ref } from 'vue'
 import { parseRowChangeFailure } from '@shared/rowChangeFailure'
 import type { ApplyRowChangesResult, CellValue, QueryColumn, RowChange } from '@shared/types'
 import { api } from '@renderer/api'
-import { useConfirm } from '@renderer/composables/useConfirm'
+import { useConfirm, type DestructiveDetails } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
+import type { ConfirmItem } from '@renderer/stores/ui'
 import {
   buildRowChangeBatch,
   newRow,
@@ -112,7 +113,8 @@ export function useRowEditor(columns: Readonly<Ref<QueryColumn[]>>) {
       connectionId: target.connectionId,
       title: 'Aplicar cambios',
       message: `Se aplicarán ${changes.length} cambio(s) en ${target.schema}.${target.table}.`,
-      alwaysAsk: false
+      alwaysAsk: false,
+      destructive: deletionDetails(changes, target)
     })
     if (!ok) return null
     applying.value = true
@@ -161,6 +163,43 @@ export function useRowEditor(columns: Readonly<Ref<QueryColumn[]>>) {
     setNull,
     discard,
     apply
+  }
+}
+
+/** Rows listed in the confirmation; the rest are summarised in one line. */
+const MAX_LISTED_ROWS = 50
+
+function keyText(key: Record<string, CellValue>): string {
+  return Object.entries(key)
+    .map(([column, value]) => `${column} = ${value === null ? 'NULL' : String(value)}`)
+    .join(', ')
+}
+
+/** Destructive confirmation for a batch that deletes rows (undefined when it deletes none). */
+export function deletionDetails(
+  changes: RowChange[],
+  target: ApplyTarget
+): DestructiveDetails | undefined {
+  const deletes = changes.filter((c) => c.kind === 'delete')
+  if (!deletes.length) return undefined
+  const n = deletes.length
+  const others = changes.length - n
+  const items: ConfirmItem[] = deletes
+    .slice(0, MAX_LISTED_ROWS)
+    .map((c) => ({ tag: 'DELETE', text: keyText(c.key) }))
+  if (n > MAX_LISTED_ROWS) items.push({ text: `… y ${n - MAX_LISTED_ROWS} fila(s) más` })
+  return {
+    title:
+      n === 1
+        ? `¿Eliminar 1 fila de «${target.table}»?`
+        : `¿Eliminar ${n} filas de «${target.table}»?`,
+    message:
+      `${n === 1 ? 'Se eliminará 1 fila' : `Se eliminarán ${n} filas`} de ${target.schema}.${target.table} de forma permanente.` +
+      (others
+        ? ` También se aplicarán ${others} cambio(s) más (inserciones o modificaciones).`
+        : ''),
+    items,
+    confirmText: 'Eliminar'
   }
 }
 

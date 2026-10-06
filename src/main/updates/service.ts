@@ -1,10 +1,11 @@
 import { join } from 'node:path'
-import type { UpdateCheckResult } from '@shared/types'
+import type { UpdateCheckResult, WhatsNewInfo } from '@shared/types'
+import { whatsNewBetween, whatsNewFor } from '@shared/whatsNew'
 import { UPDATE_REPO } from '../brand'
 import { JsonStore } from '../storage/jsonStore'
 import { isAllowedReleaseUrl, parseRelease, pickAssets, type ParsedRelease } from './release'
 import type { RunModeInfo } from './runMode'
-import { isNewer, parseVersion } from './semver'
+import { compareVersions, isNewer, parseVersion } from './semver'
 
 /**
  * Checks GitHub Releases for a newer version. Only a GET of the public
@@ -41,13 +42,19 @@ export interface UpdatesState {
   dismissedVersion: string | null
   /** Release details of the last answer, to show the notice without asking again. */
   release: ParsedRelease | null
+  /** «Más tarde»: no automatic popup before this ISO date. */
+  snoozedUntil: string | null
+  /** Last version whose «novedades» popup was shown (or that started on a fresh profile). */
+  lastSeenVersion: string | null
 }
 
 const DEFAULT_STATE = (): UpdatesState => ({
   lastCheckedAt: null,
   latestVersion: null,
   dismissedVersion: null,
-  release: null
+  release: null,
+  snoozedUntil: null,
+  lastSeenVersion: null
 })
 
 /** Drops anything in a hand-edited or old updates.json that does not look right. */
@@ -59,6 +66,9 @@ export function sanitizeState(raw: unknown): UpdatesState {
     state.lastCheckedAt = r.lastCheckedAt
   if (parseVersion(r.latestVersion)) state.latestVersion = r.latestVersion as string
   if (parseVersion(r.dismissedVersion)) state.dismissedVersion = r.dismissedVersion as string
+  if (typeof r.snoozedUntil === 'string' && !Number.isNaN(Date.parse(r.snoozedUntil)))
+    state.snoozedUntil = r.snoozedUntil
+  if (parseVersion(r.lastSeenVersion)) state.lastSeenVersion = r.lastSeenVersion as string
   const rel = r.release as Partial<ParsedRelease> | null | undefined
   if (
     rel &&
@@ -136,6 +146,14 @@ export interface UpdateServiceOptions {
   autoNetwork?: boolean
 }
 
+export interface WhatsNewOptions {
+  /** The profile already had connections or settings before this start. */
+  profileHadData: boolean
+  /** Test switches (scratch profile only): pretend these versions. */
+  currentVersion?: string
+  previousVersion?: string
+}
+
 export class UpdateService {
   private readonly store: JsonStore<UpdatesState>
   private readonly now: () => number
@@ -178,6 +196,54 @@ export class UpdateService {
     this.store.update((s) => {
       s.dismissedVersion = version
     })
+  }
+
+  /** «Más tarde»: the automatic popup stays quiet for the next 6 hours. */
+  snooze(): void {
+    this.store.update((s) => {
+      s.snoozedUntil = new Date(this.now() + AUTO_CHECK_INTERVAL_MS).toISOString()
+    })
+  }
+
+  /**
+   * «Novedades» to show once after an update, or null. Never shown on a fresh
+   * profile (the version is just recorded), for the same version or after a
+   * downgrade. A profile with data but no recorded version (it ran a build
+   * older than this feature) gets the highlights of the current version only.
+   * The version is recorded as seen by markSeen() when the popup closes.
+   */
+  whatsNew(options: WhatsNewOptions): WhatsNewInfo | null {
+    const current = options.currentVersion ?? this.options.currentVersion
+    if (!parseVersion(current)) return null
+    const previous = options.previousVersion ?? this.store.get().lastSeenVersion
+    const releaseUrl = `https://github.com/${UPDATE_REPO.owner}/${UPDATE_REPO.name}/releases/tag/v${current}`
+    if (!previous) {
+      const entry = options.profileHadData ? whatsNewFor(current) : null
+      if (!entry) {
+        this.markSeen(current)
+        return null
+      }
+      return { currentVersion: current, previousVersion: null, entries: [entry], releaseUrl }
+    }
+    const entries = whatsNewBetween(previous, current)
+    if (!entries.length) {
+      // Downgrade, unknown versions or nothing curated: remember the running version quietly.
+      if (compareVersions(current, previous) !== 0) this.markSeen(current)
+      return null
+    }
+    return { currentVersion: current, previousVersion: previous, entries, releaseUrl }
+  }
+
+  markSeen(version: string): void {
+    if (!parseVersion(version)) throw new Error(`Versión no válida: ${String(version)}`)
+    this.store.update((s) => {
+      s.lastSeenVersion = version
+    })
+  }
+
+  private isSnoozed(): boolean {
+    const until = this.store.get().snoozedUntil
+    return !!until && Date.parse(until) > this.now()
   }
 
   private isFresh(state: UpdatesState): boolean {
@@ -281,7 +347,8 @@ export class UpdateService {
       notes: release.notes,
       ...(download ? { download } : {}),
       alternatives,
-      dismissed: this.store.get().dismissedVersion === release.version
+      dismissed: this.store.get().dismissedVersion === release.version,
+      ...(this.isSnoozed() ? { snoozed: true } : {})
     }
   }
 }

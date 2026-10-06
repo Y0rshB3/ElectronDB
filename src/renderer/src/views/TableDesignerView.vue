@@ -56,7 +56,7 @@ const plan = computed<DesignerAlter>(() => {
       draft.value.name && draft.value.columns.length
         ? [buildCreateTable(schema.value, draft.value)]
         : []
-    return { statements, risks: [], problems: [] }
+    return { statements, risks: [], problems: [], drops: [] }
   }
   return buildDesignerAlter(original.value, draft.value)
 })
@@ -146,6 +146,7 @@ async function save(): Promise<void> {
   if (!sql) return
   // Risky changes (drops, type narrowing, NOT NULL, renames) always ask; production always asks via useConfirm.
   const risks = plan.value.risks
+  const drops = plan.value.drops
   const ok = await confirmDestructive({
     connectionId: connectionId.value,
     title: isNew.value ? 'Crear tabla' : 'Modificar tabla',
@@ -154,7 +155,19 @@ async function save(): Promise<void> {
       : 'Se aplicarán los cambios de estructura.',
     details: sql,
     confirmText: risks.length ? 'Aplicar cambios' : undefined,
-    alwaysAsk: risks.length > 0
+    alwaysAsk: risks.length > 0,
+    destructive: drops.length
+      ? {
+          title:
+            drops.length === 1
+              ? `¿Eliminar 1 elemento de la tabla «${tableName.value}»?`
+              : `¿Eliminar ${drops.length} elementos de la tabla «${tableName.value}»?`,
+          message: `Revisa los cambios antes de aplicarlos. Esta operación no se puede deshacer:\n• ${risks.join('\n• ')}`,
+          items: drops.map((d) => ({ tag: `DROP ${d.kind}`, text: d.name })),
+          details: sql,
+          confirmText: 'Eliminar'
+        }
+      : undefined
   })
   if (!ok) return
 

@@ -313,6 +313,7 @@ describe('production guard can be disabled in settings', () => {
     })
     seedConnection('c1', 'production')
     useSettingsStore().settings.confirmProductionWrites = false
+    useSettingsStore().settings.confirmDestructiveEverywhere = false
     const tab = openTab({
       kind: 'query',
       title: 'q',
@@ -324,6 +325,34 @@ describe('production guard can be disabled in settings', () => {
     await flushPromises()
     expect(useUiStore().confirm.open).toBe(false)
     expect(invoke.mock.calls.some((c) => c[0] === 'db:execute')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('QueryView still asks (plain dialog) for a DELETE when only the production guard is off', async () => {
+    const pinia = setupDom()
+    const invoke = mockBridge({
+      'db:databases': () => [],
+      'db:tables': () => [],
+      'db:execute': okExecute
+    })
+    seedConnection('c1', 'production')
+    useSettingsStore().settings.confirmProductionWrites = false
+    const tab = openTab({
+      kind: 'query',
+      title: 'q',
+      connectionId: 'c1',
+      payload: { sql: 'DELETE FROM t' }
+    })
+    const wrapper = await mountView(QueryView, tab, pinia)
+    await wrapper.get('[data-test="run"]').trigger('click')
+    await flushPromises()
+    const ui = useUiStore()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.production).toBeFalsy()
+    expect(ui.confirm.danger).toBe(true)
+    ui.answer(false)
+    await flushPromises()
+    expect(invoke.mock.calls.some((c) => c[0] === 'db:execute')).toBe(false)
     wrapper.unmount()
   })
 })

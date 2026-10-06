@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { BackupFile, ConnectionConfig } from '@shared/types'
+import type { BackupFile, ConnectionConfig, Environment } from '@shared/types'
+
+/** One affected object or statement listed in a confirmation. */
+export interface ConfirmItem {
+  /** Object name or SQL statement (already truncated), shown in monospace. */
+  text: string
+  /** Short tag such as "DROP TABLE" or "Fila". */
+  tag?: string
+  /** Highlighted warning such as "sin WHERE: afecta a todas las filas". */
+  warning?: string
+}
 
 export interface ConfirmRequest {
   title: string
@@ -14,6 +24,12 @@ export interface ConfirmRequest {
   production?: boolean
   /** Information only: a single acknowledge button, no "Cancelar". */
   notice?: boolean
+  /** Destructive operation: red confirm button and "Cancelar" focused by default. */
+  danger?: boolean
+  /** Connection the operation runs on, shown with its environment pill. */
+  connection?: { name: string; environment: Environment }
+  /** Exact objects or statements affected, listed in a scrollable box. */
+  items?: ConfirmItem[]
 }
 
 export interface ConfirmState extends ConfirmRequest {

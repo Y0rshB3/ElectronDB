@@ -1,6 +1,7 @@
 import { app, net } from 'electron'
-import { readFileSync, statSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import type { WhatsNewInfo } from '@shared/types'
 import type { AppContext } from '../context'
 import { envVar } from '../env'
 import { getLogger } from '../log'
@@ -63,4 +64,31 @@ export function getUpdateService(ctx: AppContext): UpdateService {
     autoNetwork: envVar('SMOKE') !== '1'
   })
   return service
+}
+
+/** Profile state at start: decides between "fresh profile" and "updated from an older build". */
+let profileHadData: boolean | null = null
+
+/** Records, once and early, whether the profile already held data before this start. */
+export function rememberProfileState(ctx: AppContext): void {
+  profileHadData ??= ['connections.json', 'settings.json', 'jobs.json'].some((f) =>
+    existsSync(join(ctx.userDataPath, f))
+  )
+}
+
+/**
+ * «Novedades» after an update. Smoke and screenshot runs never show it unless
+ * ELECTRONDB_WHATS_NEW_FROM=<version> asks for it (scratch profile only);
+ * ELECTRONDB_WHATS_NEW_VERSION=<version> pretends the running version.
+ */
+export function whatsNewFor(ctx: AppContext): WhatsNewInfo | null {
+  rememberProfileState(ctx)
+  const from = ctx.isolatedProfile ? envVar('WHATS_NEW_FROM')?.trim() : undefined
+  const version = ctx.isolatedProfile ? envVar('WHATS_NEW_VERSION')?.trim() : undefined
+  if (!from && (envVar('SMOKE') === '1' || envVar('SCREENSHOTS'))) return null
+  return getUpdateService(ctx).whatsNew({
+    profileHadData: profileHadData === true,
+    ...(from ? { previousVersion: from } : {}),
+    ...(version ? { currentVersion: version } : {})
+  })
 }

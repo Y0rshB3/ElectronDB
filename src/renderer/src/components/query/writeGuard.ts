@@ -17,7 +17,7 @@ export interface WriteCheck {
  * placeholders, and executable comments (`/*! ... *\/`) are unwrapped because
  * MySQL runs their content.
  */
-function normalize(sql: string): string {
+export function normalize(sql: string): string {
   let out = ''
   let inExecutable = false
   let i = 0

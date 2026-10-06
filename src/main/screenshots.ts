@@ -121,6 +121,15 @@ const EDIT_RESULT = `
       await H.click('[data-test="add-row"]', 5000)
       await H.sleep(200)`
 
+/** Script of the destructive-query confirmation screen (cancelled: never executed). */
+const DESTRUCTIVE_SQL = [
+  'SELECT COUNT(*) FROM shot_orders;',
+  '-- limpieza',
+  'DELETE FROM shot_orders;',
+  'UPDATE shot_customers SET active = 0 WHERE id = 3;',
+  'DROP TABLE IF EXISTS shot_tmp;'
+].join('\n')
+
 const STEPS: Step[] = [
   {
     name: '01-home',
@@ -790,17 +799,65 @@ const STEPS: Step[] = [
   },
   // Update check screens: main answers from ELECTRONDB_UPDATES_FIXTURE (a fake v0.1.3).
   {
-    name: '18a-update-notice',
+    // Startup popup in source mode (unpackaged run) with «Cómo actualizar» expanded.
+    name: '18a-update-popup-source',
     script: `
       for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
       S.workspace.showObjects()
       await S.updates.runStartupCheck()
       if (S.updates.result?.status !== 'available')
         throw new Error('no update available: run with ELECTRONDB_UPDATES_FIXTURE (see npm run screenshots)')
-      if (!S.updates.noticeOpen) throw new Error('update notice not shown')
-      await H.waitFor('[data-test="update-notice"]', 5000)
+      await H.until(() => S.updates.noticeOpen, 8000)
+      await H.click('[data-test="update-notice-howto"]', 5000)
+      await H.waitFor('[data-test="update-notice-commands"]', 5000)
       await H.settle(S, 700)`,
     cleanup: `S.updates.hideNotice()`
+  },
+  {
+    // Needs ELECTRONDB_WHATS_NEW_FROM=0.1.2 and ELECTRONDB_WHATS_NEW_VERSION=0.1.4 (npm run screenshots sets them).
+    name: '18f-whats-new',
+    script: `
+      await S.whatsNew.load()
+      if (!S.whatsNew.info) throw new Error('nothing to show: run with ELECTRONDB_WHATS_NEW_FROM (see npm run screenshots)')
+      await H.until(() => S.whatsNew.open, 8000)
+      await H.waitFor('[data-test="whats-new"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.whatsNew.open = false`
+  },
+  // Destructive confirmation on a non-production connection (cancelled: nothing is dropped).
+  {
+    name: '19a-drop-table-confirm',
+    script: `
+      const c = H.local(S)
+      void S.objectActions.dropObject({ id: 'shot-drop', kind: 'object', label: 'shot_customers',
+        connectionId: c.id, schema: '${SCHEMA}', group: 'tables', name: 'shot_customers', parentId: null })
+      await H.waitFor('.v-dialog [data-test="confirm-items"]', 5000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.answer(false)`
+  },
+  {
+    name: '19b-query-destructive-confirm',
+    script: `
+      const c = H.local(S)
+      const sql = ${JSON.stringify(DESTRUCTIVE_SQL)}
+      S.workspace.openQuery(c.id, '${SCHEMA}', { sql, name: 'Limpieza' })
+      await H.sleep(900)
+      await H.click('[data-test="run"]', 10000)
+      await H.waitFor('.v-dialog [data-test="confirm-items"]', 5000)
+      await H.sleep(700)`,
+    cleanup: `
+      S.ui.answer(false)
+      await H.sleep(300)
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)`
+  },
+  {
+    name: '19c-settings-security',
+    script: `
+      S.ui.openSettingsDialog()
+      const el = await H.waitFor('[data-test="settings-confirm-destructive"]', 5000)
+      el.scrollIntoView({ block: 'center' })
+      await H.settle(S, 900)`,
+    cleanup: `S.ui.settingsDialog = false`
   },
   {
     // Not packaged here, so main reports the source mode; the packaged view uses the same answer.

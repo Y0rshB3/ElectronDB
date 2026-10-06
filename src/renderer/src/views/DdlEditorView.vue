@@ -11,12 +11,17 @@ import {
   parseObjectName,
   type DdlObjectType
 } from '@renderer/components/designer/ddl'
-import { useConfirm } from '@renderer/composables/useConfirm'
+import {
+  analyzeDestructiveScript,
+  destructiveItems,
+  destructiveTitle
+} from '@renderer/components/query/destructiveGuard'
+import { useConfirm, type DestructiveDetails } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { tabTitle, useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { useTreeStore } from '@renderer/stores/tree'
-import { OBJECT_TYPE_LABELS } from '@renderer/utils/objectTypes'
+import { OBJECT_TYPE_LABELS, OBJECT_TYPE_WITH_ARTICLE } from '@renderer/utils/objectTypes'
 import type { GroupKind } from '@renderer/utils/objectTypes'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
@@ -105,12 +110,29 @@ async function apply(): Promise<void> {
     : replaces
       ? `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
       : 'Se ejecutará el siguiente SQL.'
+  // DROP + CREATE of routines/events/triggers, renamed views, or DROPs written by the user.
+  const drops = analyzeDestructiveScript(script.value)
+  const article = OBJECT_TYPE_WITH_ARTICLE[objectType.value]
+  const destructive: DestructiveDetails | undefined = drops.length
+    ? {
+        title: rename
+          ? `¿Reemplazar ${article} «${objectName.value}» por «${newName}»?`
+          : replaces
+            ? `¿Eliminar y volver a crear ${article} «${objectName.value}»?`
+            : destructiveTitle(drops.length),
+        message,
+        items: destructiveItems(drops),
+        details: script.value,
+        confirmText: 'Ejecutar'
+      }
+    : undefined
   const ok = await confirmDestructive({
     connectionId: connectionId.value,
     title: objectName.value ? `Aplicar cambios en ${typeLabel.value}` : `Crear ${typeLabel.value}`,
     message,
     details: script.value,
-    alwaysAsk: replaces
+    alwaysAsk: replaces,
+    destructive
   })
   if (!ok) return
 

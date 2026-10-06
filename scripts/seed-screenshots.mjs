@@ -247,6 +247,7 @@ const settings = {
   defaultRowLimit: 1000,
   theme: 'dark',
   confirmProductionWrites: true,
+  confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true
 }
 

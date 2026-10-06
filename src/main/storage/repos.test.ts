@@ -103,6 +103,31 @@ describe('repos', () => {
     expect(jobs.get(job.id)?.lastRunAt).toBe('2026-09-14T00:00:00.000Z')
   })
 
+  it('confirms destructive operations everywhere by default, also for older profiles', () => {
+    expect(DEFAULT_SETTINGS('/data', '/home/test', 'linux').confirmDestructiveEverywhere).toBe(true)
+    expect(
+      new SettingsRepo(join(dir, 'fresh'), '/home/test').get().confirmDestructiveEverywhere
+    ).toBe(true)
+    // settings.json written before the option existed: missing means on
+    writeFileSync(
+      join(dir, 'settings.json'),
+      JSON.stringify({ defaultRowLimit: 50, theme: 'light', confirmProductionWrites: false })
+    )
+    const old = new SettingsRepo(dir, '/home/test')
+    expect(old.get().confirmDestructiveEverywhere).toBe(true)
+    expect(old.get().confirmProductionWrites).toBe(false)
+    expect(old.get().defaultRowLimit).toBe(50)
+    // an invalid value is not taken as "off"
+    writeFileSync(
+      join(dir, 'settings.json'),
+      JSON.stringify({ confirmDestructiveEverywhere: 'no' })
+    )
+    expect(new SettingsRepo(dir, '/home/test').get().confirmDestructiveEverywhere).toBe(true)
+    // an explicit false sticks across restarts
+    new SettingsRepo(dir, '/home/test').update({ confirmDestructiveEverywhere: false })
+    expect(new SettingsRepo(dir, '/home/test').get().confirmDestructiveEverywhere).toBe(false)
+  })
+
   it('defaults the Navicat folder to the macOS path only on macOS', () => {
     expect(defaultNavicatRootPath('/Users/test', 'darwin')).toContain('Navicat CC')
     for (const os of ['win32', 'linux'] as const) {

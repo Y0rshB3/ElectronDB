@@ -3,6 +3,8 @@
  * Keep this file free of Node/Electron/browser-only imports.
  */
 
+import type { WhatsNewEntry } from './whatsNew'
+
 export type Environment = 'local' | 'staging' | 'production' | 'other'
 
 export type SshAuthType = 'password' | 'key'
@@ -711,6 +713,12 @@ export interface AppSettings {
   defaultRowLimit: number
   theme: 'dark' | 'light'
   confirmProductionWrites: boolean
+  /**
+   * Ask before DROP / TRUNCATE / DELETE (and deleting rows or objects) on any
+   * connection, not only production. Renderer-only convenience: main does not
+   * enforce it. Defaults to true, also for profiles saved before it existed.
+   */
+  confirmDestructiveEverywhere: boolean
   /** Look for a new release on GitHub a few seconds after start (at most every 6 hours). */
   checkUpdatesOnStartup: boolean
 }
@@ -757,10 +765,23 @@ export interface UpdateCheckResult {
   source?: SourceUpdateInfo
   /** The user chose «Omitir esta versión» for latestVersion. */
   dismissed?: boolean
+  /** «Más tarde» was chosen less than 6 hours ago: no automatic popup. */
+  snoozed?: boolean
   /** ISO date of the GitHub data used (fresh fetch or the cached one). */
   checkedAt?: string
   /** Spanish, actionable message when status is 'error'. */
   error?: string
+}
+
+/** «Novedades» popup shown once after updating (see src/shared/whatsNew.ts). */
+export interface WhatsNewInfo {
+  currentVersion: string
+  /** Version seen before the update; null when unknown (profile from an older build). */
+  previousVersion: string | null
+  /** Curated entries in the range, newest first. */
+  entries: WhatsNewEntry[]
+  /** Release page of the current version (allowlisted for app:openExternal). */
+  releaseUrl: string
 }
 
 /* ---------- Progress events ---------- */

@@ -9,6 +9,7 @@ const DEFAULTS: AppSettings = {
   defaultRowLimit: 1000,
   theme: 'dark',
   confirmProductionWrites: true,
+  confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true
 }
 

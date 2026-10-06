@@ -96,7 +96,16 @@ async function run(action: UserAction, form: UserActionForm): Promise<void> {
         : 'Se ejecutará el siguiente SQL.',
     details: preview,
     confirmText: action === 'drop' ? 'Eliminar' : 'Ejecutar',
-    alwaysAsk: !dialogOpen.value
+    alwaysAsk: !dialogOpen.value,
+    destructive:
+      action === 'drop'
+        ? {
+            title: `¿Eliminar el usuario «${form.user}@${form.host}»?`,
+            message: 'Se eliminará la cuenta y sus privilegios. Esta acción no se puede deshacer.',
+            items: [{ tag: 'DROP USER', text: `${form.user}@${form.host}` }],
+            confirmText: 'Eliminar'
+          }
+        : undefined
   })
   if (!ok) return
   busy.value = true

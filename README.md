@@ -48,6 +48,9 @@ La interfaz está en español. El código y los comentarios están en inglés.
   lectura: no modifica nada de Navicat.
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide confirmación
   explícita.
+- **Confirmación antes de borrar en cualquier conexión**: DROP, TRUNCATE, DELETE y eliminar filas, tablas,
+  vistas, rutinas, eventos o bases de datos piden confirmación también en Local o Staging
+  ([Producción y confirmaciones](#producción-y-confirmaciones)).
 - **Aviso de versiones nuevas** publicadas en GitHub, con la descarga para tu sistema o los comandos para
   actualizar la carpeta del código ([Actualizaciones](#actualizaciones)).
 - Tema oscuro y claro.
@@ -275,7 +278,26 @@ no existen en otro equipo.
 En una conexión con entorno **Producción**, restaurar, borrar, crear bases de datos, editar filas o ejecutar
 sentencias que escriben exige escribir el nombre de la conexión para confirmar. El proceso principal también lo
 comprueba y rechaza la operación si la interfaz no envió la confirmación. Puedes desactivarlo en **Otros →
-Ajustes…**, pero no se recomienda.
+Ajustes… → Seguridad**, pero no se recomienda.
+
+En **cualquier otra conexión** (Local, Staging, Otro), con **Ajustes → Seguridad → Confirmar antes de borrar o
+eliminar en cualquier conexión** activado (lo está por defecto, también en perfiles anteriores), ElectronDB pide
+una confirmación sencilla, sin escribir el nombre, antes de:
+
+- eliminar una tabla, vista, función, procedimiento, evento o base de datos, o vaciar una tabla (árbol de
+  conexiones, lista de objetos y menús contextuales);
+- **Aplicar** cambios de una tabla o de un resultado editable que **eliminan filas** (dice cuántas y cuáles);
+- ejecutar una consulta con `DROP`, `TRUNCATE`, `DELETE`, `ALTER TABLE … DROP` (columna, índice, clave,
+  restricción o partición) o un `UPDATE` sin `WHERE`. El diálogo lista las sentencias y marca las que no tienen
+  `WHERE` («sin WHERE: afecta a todas las filas»). Las palabras dentro de comentarios o cadenas no cuentan, y un
+  `SELECT`, un `INSERT` o un `UPDATE … WHERE` no preguntan;
+- aplicar el editor DDL cuando elimina y vuelve a crear el objeto, guardar el diseñador de tablas cuando elimina
+  campos, índices o claves, y eliminar un usuario.
+
+El diálogo muestra la conexión con su entorno, lo que se va a borrar, y deja el foco en **Cancelar** (Intro no
+borra nada). En una conexión de Producción se muestra solo la confirmación de producción, nunca las dos. Es una
+ayuda de la interfaz: el proceso principal no la exige (la de producción sí). Si la desactivas, todo vuelve a
+funcionar como antes: las conexiones que no son de producción solo preguntan donde ya preguntaban.
 
 ### Atajos de teclado
 
@@ -627,14 +649,22 @@ ElectronDB comprueba si hay una versión nueva en las
 anónima a la API pública de GitHub (sin cuenta ni datos tuyos) y **nunca descarga ni instala nada por su
 cuenta**: las versiones no están firmadas, así que la actualización la haces tú.
 
-- **Al iniciar**: unos segundos después de abrir la app, si hay una versión nueva aparece un aviso abajo a la
-  derecha con **Ver novedades**, **Descargar** (o **Cómo actualizar**) y **Omitir esta versión**. Se consulta
-  GitHub como mucho una vez cada 6 horas; si no hay conexión, no avisa de nada. Se desactiva en **Ajustes →
-  Actualizaciones → Buscar actualizaciones al iniciar**.
+- **Al iniciar**: unos segundos después de abrir la app, si hay una versión nueva aparece la ventana **Hay una
+  nueva actualización** con lo más destacado (como mucho 5 puntos: la sección «Destacado» de la versión o, si no
+  la tiene, los títulos de «Novedades») y los botones **Descargar** (o **Cómo actualizar**, que muestra los
+  comandos con **Copiar comandos**), **Ver todas las novedades**, **Más tarde** y **Omitir esta versión**. Sale
+  como mucho una vez por arranque y espera a que se cierre cualquier otra ventana. **Más tarde** la oculta hasta
+  un arranque pasadas 6 horas. Se consulta GitHub como mucho una vez cada 6 horas; si no hay conexión, no avisa
+  de nada. Se desactiva en **Ajustes → Actualizaciones → Buscar actualizaciones al iniciar**.
 - **A mano**: **Otros → Buscar actualizaciones…** (o el menú de la app en macOS) siempre consulta GitHub y muestra
   la versión instalada, la última publicada, sus notas y cómo actualizar. La versión instalada también aparece en
   **Ajustes**.
 - **Omitir esta versión** deja de avisar de esa versión al iniciar; la siguiente sí se avisa.
+- **Después de actualizar**: el primer arranque de una versión nueva muestra una vez **ElectronDB se actualizó a
+  x.y.z** con lo importante de cada versión desde la que tenías (por ejemplo, de 0.1.2 a 0.1.4 verás la 0.1.3 y
+  la 0.1.4). La lista viene con la app (`src/shared/whatsNew.ts`), así que funciona sin Internet. **Ver todas las
+  novedades en GitHub** abre la página de la versión. En un perfil nuevo o al volver a una versión anterior no
+  sale nada. La última versión vista se guarda en `updates.json` del perfil.
 
 ### Si instalaste la app (instalador de GitHub)
 
@@ -776,10 +806,12 @@ ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 
 `npm run screenshots` siembra un perfil de prueba y el MySQL desechable (tablas `shot_*` en `navidog_test`),
 compila y abre la app en una ventana de 1600×1000 que recorre las pantallas principales. Guarda `01-home.png` …
-`18e-update-dialog-error.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
+`19c-settings-security.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
 («Restaurar todo en Local» y «Restaurar paquete en Local») usan también el MySQL 5.7 desechable como staging
-(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (aviso y diálogo de actualizaciones)
-responden con una versión ficticia de `tests/fixtures/updates/latest-release.json` en vez de consultar GitHub. Nunca usa tu perfil real y se niega a
+(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (ventanas de actualización)
+responden con una versión ficticia de `tests/fixtures/updates/latest-release.json` en vez de consultar GitHub, y
+`18f-whats-new` simula una actualización de 0.1.2 a 0.1.4. Los pasos `19*` muestran las confirmaciones de borrado
+en Local (se cancelan: no se borra nada) y la sección Seguridad de Ajustes. Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
 
@@ -809,6 +841,8 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                |
 | `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error). |
 | `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                |
+| `ELECTRONDB_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).            |
+| `ELECTRONDB_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                   |
 
 Prueba de humo del binario compilado sin tocar tus datos:
 
@@ -858,4 +892,4 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 - El registro no guarda datos de consultas, contraseñas ni contenido de copias. De los errores de MySQL solo
   guarda el canal y el código.
 - Las conexiones de Producción exigen confirmación para cualquier escritura, tanto en la interfaz como en el
-  proceso principal.
+  proceso principal. La confirmación de borrado en las demás conexiones es solo de la interfaz.

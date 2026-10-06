@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { TableDataPage } from '@shared/types'
 import { useNotify } from '@renderer/composables/useNotify'
 import { useTabsStore } from '@renderer/stores/tabs'
+import { useUiStore } from '@renderer/stores/ui'
 import TableDataView from '../TableDataView.vue'
 import { mockBridge, mountView, openTab, setupDom } from './helpers'
 
@@ -82,6 +83,13 @@ describe('TableDataView', () => {
     await newInput.trigger('keydown', { key: 'Enter' })
 
     await wrapper.get('[data-test="apply"]').trigger('click')
+    await flushPromises()
+    // The batch deletes a row: confirmDestructiveEverywhere (default on) asks first.
+    const ui = useUiStore()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.title).toBe('¿Eliminar 1 fila de «items»?')
+    expect(ui.confirm.items).toEqual([{ tag: 'DELETE', text: 'id = 2' }])
+    ui.answer(true)
     await flushPromises()
 
     const call = invoke.mock.calls.find((c) => c[0] === 'db:applyRowChanges')

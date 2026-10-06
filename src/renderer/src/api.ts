@@ -92,7 +92,10 @@ export const api = {
   updates: {
     /** Never throws for network problems: they come back as status 'error'. */
     check: (manual: boolean) => invokeSilent('updates:check', manual),
-    dismiss: (version: string) => invoke('updates:dismiss', version)
+    dismiss: (version: string) => invoke('updates:dismiss', version),
+    snooze: () => invokeSilent('updates:snooze'),
+    whatsNew: () => invokeSilent('updates:whatsNew'),
+    markSeen: (version: string) => invokeSilent('updates:markSeen', version)
   },
   settings: {
     get: () => invoke('settings:get'),

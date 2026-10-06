@@ -23,12 +23,15 @@ import BackupDialog from '@renderer/components/dialogs/BackupDialog.vue'
 import RestoreDialog from '@renderer/components/dialogs/RestoreDialog.vue'
 import UpdateDialog from '@renderer/components/updates/UpdateDialog.vue'
 import UpdateNotice from '@renderer/components/updates/UpdateNotice.vue'
+import WhatsNewDialog from '@renderer/components/updates/WhatsNewDialog.vue'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useWhatsNewStore } from '@renderer/stores/whatsNew'
 
 const ui = useUiStore()
 const settings = useSettingsStore()
 const theme = useTheme()
 const updates = useUpdatesStore()
+const whatsNew = useWhatsNewStore()
 
 useShortcuts()
 
@@ -42,14 +45,16 @@ let unsubscribe: (() => void) | null = null
 let cancelUpdateCheck: (() => void) | null = null
 let unmounted = false
 
-/** The screenshot harness triggers the update check itself (it would cover other screens). */
+/** The screenshot harness triggers the update check and «novedades» itself (they would cover other screens). */
 const screenshotMode = new URLSearchParams(window.location.search).get('nd-screenshots') === '1'
 
 onMounted(() => {
   unsubscribe = subscribeToMainEvents()
   // The automatic update check waits for the settings (its switch) and a few seconds more.
   void loadInitialData().then(() => {
-    if (!unmounted && !screenshotMode) cancelUpdateCheck = updates.scheduleStartupCheck()
+    if (unmounted || screenshotMode) return
+    void whatsNew.load()
+    cancelUpdateCheck = updates.scheduleStartupCheck()
   })
 })
 
@@ -107,6 +112,7 @@ onBeforeUnmount(() => {
     <RestoreDialog />
     <UpdateDialog />
     <UpdateNotice />
+    <WhatsNewDialog />
   </v-app>
 </template>
 

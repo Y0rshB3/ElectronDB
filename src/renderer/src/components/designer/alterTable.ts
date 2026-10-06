@@ -25,6 +25,13 @@ export interface DesignerAlter {
   risks: string[]
   /** Changes that cannot be expressed safely; saving is refused while any is present. */
   problems: string[]
+  /** Columns, keys and indexes removed for good (a changed index that is re-added is not listed). */
+  drops: DesignerDrop[]
+}
+
+export interface DesignerDrop {
+  kind: 'COLUMN' | 'PRIMARY KEY' | 'INDEX' | 'FOREIGN KEY'
+  name: string
 }
 
 interface ParsedDefinition {
@@ -235,6 +242,7 @@ export function buildDesignerAlter(original: TableStructure, draft: TableDraft):
   const parsed = parseCreateColumns(original.createSql ?? '')
   const risks: string[] = []
   const problems: string[] = []
+  const drops: DesignerDrop[] = []
   const clauses: string[] = []
   const origOf = (name: string): Original | null => {
     const idx = base.columns.findIndex((c) => c.originalName === name)
@@ -250,6 +258,7 @@ export function buildDesignerAlter(original: TableStructure, draft: TableDraft):
     if (!draft.columns.some((d) => d.originalName === c.originalName)) {
       clauses.push(`DROP COLUMN ${quoteIdent(c.name)}`)
       risks.push(`Se elimina el campo "${c.name}" y todos sus datos`)
+      drops.push({ kind: 'COLUMN', name: c.name })
     }
   }
 
@@ -303,6 +312,7 @@ export function buildDesignerAlter(original: TableStructure, draft: TableDraft):
     if (basePk.length) {
       clauses.push('DROP PRIMARY KEY')
       risks.push('Se elimina o redefine la clave primaria')
+      drops.push({ kind: 'PRIMARY KEY', name: 'PRIMARY' })
     }
     if (draftPk.length)
       clauses.push(`ADD PRIMARY KEY (${draftPk.map((c) => quoteIdent(c.name)).join(', ')})`)
@@ -327,10 +337,11 @@ export function buildDesignerAlter(original: TableStructure, draft: TableDraft):
       const kept = m[1].startsWith('DROP INDEX')
         ? draft.indexes.some((i) => i.originalName === name)
         : draft.foreignKeys.some((f) => f.originalName === name)
-      if (!kept)
-        risks.push(
-          `Se elimina ${m[1].startsWith('DROP INDEX') ? 'el índice' : 'la clave foránea'} "${name}"`
-        )
+      if (!kept) {
+        const index = m[1].startsWith('DROP INDEX')
+        risks.push(`Se elimina ${index ? 'el índice' : 'la clave foránea'} "${name}"`)
+        drops.push({ kind: index ? 'INDEX' : 'FOREIGN KEY', name })
+      }
     }
   }
 
@@ -343,5 +354,5 @@ export function buildDesignerAlter(original: TableStructure, draft: TableDraft):
     else
       statements.splice(statements.findIndex(isFkDrop) + 1, 0, `${head}${clauses.join(',\n  ')};`)
   }
-  return { statements, risks, problems }
+  return { statements, risks, problems, drops }
 }

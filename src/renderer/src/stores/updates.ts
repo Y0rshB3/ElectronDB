@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { UpdateAsset, UpdateCheckResult } from '@shared/types'
 import { api } from '@renderer/api'
+import { showWhenFree } from '@renderer/composables/useModalQueue'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from './settings'
 
@@ -10,15 +11,24 @@ export const STARTUP_CHECK_DELAY_MS = 5000
 
 /**
  * New-version check. Main talks to GitHub; this store keeps the last answer,
- * the startup notice and the «Buscar actualizaciones» dialog state. Nothing is
+ * the startup popup and the «Buscar actualizaciones» dialog state. Nothing is
  * downloaded or run: «Descargar» opens the browser on the release asset.
+ *
+ * The automatic popup («Hay una nueva actualización») appears at most once per
+ * app start and waits until no other modal is open.
  */
 export const useUpdatesStore = defineStore('updates', () => {
   const notify = useNotify()
   const result = ref<UpdateCheckResult | null>(null)
   const checking = ref(false)
   const dialogOpen = ref(false)
+  /** The startup popup is on screen. */
   const noticeOpen = ref(false)
+  /** The startup popup is queued behind another modal. */
+  const noticePending = ref(false)
+  /** The popup already appeared during this app start (never twice). */
+  let noticeShown = false
+  let cancelQueue: (() => void) | null = null
   const appVersion = ref('')
 
   const available = computed(() => result.value?.status === 'available')
@@ -39,7 +49,29 @@ export const useUpdatesStore = defineStore('updates', () => {
     if (next.currentVersion) appVersion.value = next.currentVersion
   }
 
-  /** Automatic check: quiet on errors; shows the notice for a new, not skipped version. */
+  /** Queues the startup popup; it opens once no other modal is on screen. */
+  function queueNotice(): void {
+    if (noticeShown || noticePending.value) return
+    noticePending.value = true
+    cancelQueue = showWhenFree(
+      () => {
+        noticePending.value = false
+        cancelQueue = null
+        if (dialogOpen.value) return
+        noticeShown = true
+        noticeOpen.value = true
+      },
+      () => noticePending.value && !dialogOpen.value
+    )
+  }
+
+  function cancelPending(): void {
+    noticePending.value = false
+    cancelQueue?.()
+    cancelQueue = null
+  }
+
+  /** Automatic check: quiet on errors; queues the popup for a new, not skipped/snoozed version. */
   async function runStartupCheck(): Promise<void> {
     let next: UpdateCheckResult
     try {
@@ -51,7 +83,8 @@ export const useUpdatesStore = defineStore('updates', () => {
     if (checking.value) return
     if (!next || next.status === 'error') return
     remember(next)
-    noticeOpen.value = next.status === 'available' && !next.dismissed && !dialogOpen.value
+    if (next.status === 'available' && !next.dismissed && !next.snoozed && !dialogOpen.value)
+      queueNotice()
   }
 
   /**
@@ -80,12 +113,16 @@ export const useUpdatesStore = defineStore('updates', () => {
     } finally {
       checking.value = false
     }
-    if (result.value?.status !== 'available') noticeOpen.value = false
+    if (result.value?.status !== 'available') {
+      noticeOpen.value = false
+      cancelPending()
+    }
   }
 
   /** «Buscar actualizaciones…» (toolbar, app menu, settings). */
   function openDialog(): void {
     noticeOpen.value = false
+    cancelPending()
     dialogOpen.value = true
     void loadAppVersion()
     void checkNow()
@@ -94,11 +131,23 @@ export const useUpdatesStore = defineStore('updates', () => {
   /** From the notice: shows the answer already in hand without asking GitHub again. */
   function showDetails(): void {
     noticeOpen.value = false
+    cancelPending()
     dialogOpen.value = true
   }
 
   function hideNotice(): void {
     noticeOpen.value = false
+  }
+
+  /** «Más tarde»: closes the popup; no automatic popup again for 6 hours. */
+  async function later(): Promise<void> {
+    noticeOpen.value = false
+    try {
+      await api.updates.snooze()
+    } catch {
+      /* best effort: at worst the popup shows again on the next start */
+    }
+    if (result.value) result.value = { ...result.value, snoozed: true }
   }
 
   async function dismissVersion(): Promise<void> {
@@ -149,6 +198,7 @@ export const useUpdatesStore = defineStore('updates', () => {
     checking,
     dialogOpen,
     noticeOpen,
+    noticePending,
     appVersion,
     available,
     latestVersion,
@@ -159,6 +209,7 @@ export const useUpdatesStore = defineStore('updates', () => {
     openDialog,
     showDetails,
     hideNotice,
+    later,
     dismissVersion,
     openRelease,
     download,

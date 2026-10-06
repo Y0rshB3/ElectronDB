@@ -109,4 +109,39 @@ describe('ConfirmHost production confirmation', () => {
     await expect(answer).resolves.toBe(true)
     wrapper.unmount()
   })
+
+  it('destructive confirmations show the connection, the affected items and focus Cancelar', async () => {
+    const wrapper = mount(ConfirmHost, {
+      global: { plugins: [createTestVuetify()] },
+      attachTo: document.body
+    })
+    const answer = useUiStore().ask({
+      title: '¿Ejecutar 1 sentencia destructiva?',
+      message: 'Revisa lo que se va a borrar.',
+      danger: true,
+      color: 'error',
+      confirmText: 'Ejecutar',
+      connection: { name: 'Local dev', environment: 'local' },
+      items: [
+        { tag: 'DELETE', text: 'DELETE FROM log', warning: 'sin WHERE: afecta a todas las filas' }
+      ]
+    })
+    await flush()
+    await flush()
+    expect(q('[data-test="confirm-connection"]')!.textContent).toContain('Local dev')
+    expect(q('[data-test="confirm-connection"] .nd-pill')!.textContent).toContain('Local')
+    expect(q('[data-test="confirm-items"]')!.textContent).toContain('DELETE FROM log')
+    expect(q('[data-test="confirm-item-warning"]')!.textContent).toContain(
+      'afecta a todas las filas'
+    )
+    expect(q('[data-test="confirm-typed"]')).toBeNull()
+    const cancel = q<HTMLButtonElement>('[data-test="confirm-cancel"]')!
+    const ok = q<HTMLButtonElement>('[data-test="confirm-ok"]')!
+    expect(ok.textContent).toContain('Ejecutar')
+    expect(cancel.hasAttribute('autofocus')).toBe(true)
+    expect(ok.hasAttribute('autofocus')).toBe(false)
+    cancel.click()
+    await expect(answer).resolves.toBe(false)
+    wrapper.unmount()
+  })
 })

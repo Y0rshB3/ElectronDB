@@ -18,6 +18,11 @@ import EditableResult from '@renderer/components/query/EditableResult.vue'
 import QueryConnectionPicker from '@renderer/components/query/QueryConnectionPicker.vue'
 import QueryMessages from '@renderer/components/query/QueryMessages.vue'
 import { beautifySql } from '@renderer/components/query/beautifySql'
+import {
+  analyzeDestructiveScript,
+  destructiveItems,
+  destructiveTitle
+} from '@renderer/components/query/destructiveGuard'
 import { analyzeWrites } from '@renderer/components/query/writeGuard'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { useWorkspace } from '@renderer/composables/useWorkspace'
@@ -251,13 +256,30 @@ async function run(selectionOnly = false): Promise<void> {
   const production =
     connections.isProduction(connectionId.value) && settings.settings.confirmProductionWrites
   const confirmProduction = production && check.writes
-  if (confirmProduction) {
+  // DROP / TRUNCATE / DELETE / ALTER … DROP / UPDATE without WHERE ask on any connection (setting).
+  const drops = settings.settings.confirmDestructiveEverywhere
+    ? analyzeDestructiveScript(script)
+    : []
+  if (confirmProduction || drops.length) {
+    const allRows = drops.filter((d) => d.allRows).length
     const ok = await confirmDestructive({
       connectionId: connectionId.value,
       title: 'Ejecutar en producción',
       message: `La consulta puede modificar datos, estructura o estado del servidor (${check.reasons.join(', ')}).`,
       details: script.length > 2000 ? script.slice(0, 2000) + '…' : script,
-      alwaysAsk: false
+      alwaysAsk: false,
+      destructive: drops.length
+        ? {
+            title: destructiveTitle(drops.length),
+            message:
+              'Revisa lo que se va a borrar o eliminar. Esta acción no se puede deshacer.' +
+              (allRows
+                ? `\n${allRows === 1 ? 'Una sentencia no tiene' : `${allRows} sentencias no tienen`} WHERE y afecta a todas las filas.`
+                : ''),
+            items: destructiveItems(drops),
+            confirmText: 'Ejecutar'
+          }
+        : undefined
     })
     if (!ok) return
   }

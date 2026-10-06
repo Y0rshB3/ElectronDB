@@ -159,7 +159,7 @@ async function save(): Promise<void> {
 
         <section class="settings-section settings-section--danger" aria-label="Seguridad">
           <div class="settings-section__title">
-            <v-icon icon="mdi-shield-alert-outline" size="15" aria-hidden="true" />Producción
+            <v-icon icon="mdi-shield-alert-outline" size="15" aria-hidden="true" />Seguridad
           </div>
           <v-switch
             v-model="form.confirmProductionWrites"
@@ -167,6 +167,17 @@ async function save(): Promise<void> {
             label="Pedir confirmación escribiendo el nombre antes de escribir en conexiones de producción"
             density="compact"
             hide-details
+            data-test="settings-confirm-production"
+          />
+          <v-switch
+            v-model="form.confirmDestructiveEverywhere"
+            color="error"
+            label="Confirmar antes de borrar o eliminar en cualquier conexión"
+            hint="DROP, TRUNCATE, DELETE y eliminar filas, tablas, vistas, rutinas, eventos o bases de datos"
+            persistent-hint
+            density="compact"
+            data-test="settings-confirm-destructive"
+            class="settings-dialog__switch"
           />
         </section>
         <v-alert v-if="error" type="error">{{ error }}</v-alert>

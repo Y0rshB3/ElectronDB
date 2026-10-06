@@ -11,6 +11,8 @@ import { useSettingsStore } from './stores/settings'
 import { useTabsStore } from './stores/tabs'
 import { useTreeStore } from './stores/tree'
 import { useUiStore } from './stores/ui'
+import { useWhatsNewStore } from './stores/whatsNew'
+import { useObjectActions } from './composables/useObjectActions'
 import { useUpdatesStore } from './stores/updates'
 import { useWorkspace } from './composables/useWorkspace'
 import { applyPlatformClass } from './utils/platform'
@@ -57,6 +59,8 @@ if (new URLSearchParams(window.location.search).get('nd-screenshots') === '1') {
     jobs: useJobsStore(pinia),
     jobLogs: useJobLogsStore(pinia),
     updates: useUpdatesStore(pinia),
+    whatsNew: useWhatsNewStore(pinia),
+    objectActions: useObjectActions(),
     workspace: useWorkspace()
   }
 }

@@ -5,7 +5,7 @@ import { useQueriesStore } from '@renderer/stores/queries'
 import { useTabsStore } from '@renderer/stores/tabs'
 import { useTreeStore, type TreeNode } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
-import { OBJECT_TYPE_LABELS } from '@renderer/utils/objectTypes'
+import { OBJECT_TYPE_LABELS, OBJECT_TYPE_WITH_ARTICLE } from '@renderer/utils/objectTypes'
 import { qualified } from '@renderer/utils/sql'
 import { useConfirm } from './useConfirm'
 import { useNotify } from './useNotify'
@@ -62,7 +62,13 @@ export function useObjectActions() {
       connectionId: node.connectionId,
       title: `Eliminar ${OBJECT_TYPE_LABELS[type]}`,
       message: `Se eliminará ${OBJECT_TYPE_LABELS[type]} ${qualified(node.schema, node.name)} de forma permanente.`,
-      confirmText: 'Eliminar'
+      confirmText: 'Eliminar',
+      destructive: {
+        title: `¿Eliminar ${OBJECT_TYPE_WITH_ARTICLE[type]} «${node.name}»?`,
+        message: 'Se eliminará de forma permanente. Esta acción no se puede deshacer.',
+        items: [{ tag: `DROP ${type.toUpperCase()}`, text: qualified(node.schema, node.name) }],
+        confirmText: 'Eliminar'
+      }
     })
     if (!ok) return
     await api.db.dropObject(node.connectionId, node.schema, type, node.name, {
@@ -80,7 +86,13 @@ export function useObjectActions() {
       title: 'Truncar tabla',
       message: `Se borrarán todas las filas de ${qualified(node.schema, node.name)}. Esta acción no se puede deshacer.`,
       details: sql,
-      confirmText: 'Truncar'
+      confirmText: 'Truncar',
+      destructive: {
+        title: `¿Vaciar la tabla «${node.name}»?`,
+        message: 'Se borrarán todas sus filas. Esta acción no se puede deshacer.',
+        items: [{ tag: 'TRUNCATE TABLE', text: qualified(node.schema, node.name) }],
+        confirmText: 'Eliminar'
+      }
     })
     if (!ok) return
     const [result] = await api.db.execute(node.connectionId, sql, { confirmProduction: true })
@@ -153,7 +165,14 @@ export function useObjectActions() {
       title: 'Eliminar base de datos',
       message: `Se eliminará la base de datos ${node.schema} con todos sus objetos y datos.`,
       details: `DROP DATABASE \`${node.schema}\``,
-      confirmText: 'Eliminar base de datos'
+      confirmText: 'Eliminar base de datos',
+      destructive: {
+        title: `¿Eliminar la base de datos «${node.schema}»?`,
+        message:
+          'Se eliminarán todas sus tablas, vistas, rutinas, eventos y datos. Esta acción no se puede deshacer.',
+        items: [{ tag: 'DROP DATABASE', text: qualified(null, node.schema) }],
+        confirmText: 'Eliminar'
+      }
     })
     if (!ok) return
     await api.db.dropDatabase(node.connectionId, node.schema, { confirmProduction: true })

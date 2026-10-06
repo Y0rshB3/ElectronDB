@@ -270,10 +270,93 @@ describe('UpdateService', () => {
       lastCheckedAt: null,
       latestVersion: null,
       dismissedVersion: null,
-      release: null
+      release: null,
+      snoozedUntil: null,
+      lastSeenVersion: null
     })
     await svc.check(false)
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(sanitizeState('nope').release).toBeNull()
+  })
+
+  describe('«Más tarde»', () => {
+    it('marks automatic answers as snoozed for 6 hours, then shows again', async () => {
+      const fetch = okFetch()
+      const svc = service(fetch, { currentVersion: '0.1.2' })
+      expect((await svc.check(false)).snoozed).toBeUndefined()
+      svc.snooze()
+      expect((await svc.check(false)).snoozed).toBe(true)
+      expect(JSON.parse(readFileSync(join(dir, UPDATES_FILE), 'utf8')).snoozedUntil).toBe(
+        new Date(T0 + AUTO_CHECK_INTERVAL_MS).toISOString()
+      )
+      now = T0 + AUTO_CHECK_INTERVAL_MS + 1
+      const later = await service(fetch, { currentVersion: '0.1.2' }).check(false)
+      expect(later.status).toBe('available')
+      expect(later.snoozed).toBeUndefined()
+    })
+  })
+
+  describe('«novedades» after an update', () => {
+    const svcAt = (version: string) => service(okFetch(), { currentVersion: version })
+    const stored = () => JSON.parse(readFileSync(join(dir, UPDATES_FILE), 'utf8')).lastSeenVersion
+
+    it('fresh profile: records the version and shows nothing', () => {
+      expect(svcAt('0.1.4').whatsNew({ profileHadData: false })).toBeNull()
+      expect(stored()).toBe('0.1.4')
+      expect(svcAt('0.1.4').whatsNew({ profileHadData: false })).toBeNull()
+    })
+
+    it('profile from a build without the feature: highlights of the current version only', () => {
+      const info = svcAt('0.1.4').whatsNew({ profileHadData: true })
+      expect(info?.previousVersion).toBeNull()
+      expect(info?.entries.map((e) => e.version)).toEqual(['0.1.4'])
+      expect(info?.releaseUrl).toBe('https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.4')
+    })
+
+    it('upgrade over several versions lists each one, newest first, until marked seen', () => {
+      svcAt('0.1.2').markSeen('0.1.2')
+      const svc = svcAt('0.1.4')
+      const info = svc.whatsNew({ profileHadData: true })
+      expect(info?.previousVersion).toBe('0.1.2')
+      expect(info?.entries.map((e) => e.version)).toEqual(['0.1.4', '0.1.3'])
+      // not seen yet: a restart before closing the popup shows it again
+      expect(svcAt('0.1.4').whatsNew({ profileHadData: true })).not.toBeNull()
+      svc.markSeen('0.1.4')
+      expect(stored()).toBe('0.1.4')
+      expect(svcAt('0.1.4').whatsNew({ profileHadData: true })).toBeNull()
+    })
+
+    it('same version, downgrade and versions without curated notes show nothing', () => {
+      svcAt('0.1.3').markSeen('0.1.3')
+      expect(svcAt('0.1.3').whatsNew({ profileHadData: true })).toBeNull()
+      expect(svcAt('0.1.2').whatsNew({ profileHadData: true })).toBeNull()
+      expect(stored()).toBe('0.1.2')
+      // 0.1.2 -> 9.0.0 has curated entries (0.1.3, 0.1.4) in between
+      expect(svcAt('9.0.0').whatsNew({ profileHadData: true })?.entries.length).toBeGreaterThan(0)
+      svcAt('9.0.0').markSeen('9.0.0')
+      expect(svcAt('9.0.1').whatsNew({ profileHadData: true })).toBeNull()
+      expect(stored()).toBe('9.0.1')
+    })
+
+    it('accepts test overrides and rejects invalid versions', () => {
+      const info = svcAt('0.1.3').whatsNew({
+        profileHadData: true,
+        currentVersion: '0.1.4',
+        previousVersion: '0.1.2'
+      })
+      expect(info?.currentVersion).toBe('0.1.4')
+      expect(info?.entries.map((e) => e.version)).toEqual(['0.1.4', '0.1.3'])
+      expect(() => svcAt('0.1.3').markSeen('nope')).toThrow(/no válida/)
+      writeFileSync(
+        join(dir, UPDATES_FILE),
+        JSON.stringify({ lastSeenVersion: 'x', snoozedUntil: 5 })
+      )
+      expect(
+        sanitizeState(JSON.parse(readFileSync(join(dir, UPDATES_FILE), 'utf8')))
+      ).toMatchObject({
+        lastSeenVersion: null,
+        snoozedUntil: null
+      })
+    })
   })
 })

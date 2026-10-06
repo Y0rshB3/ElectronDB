@@ -3,7 +3,9 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { UpdateCheckResult } from '@shared/types'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useUiStore } from '@renderer/stores/ui'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { MODAL_RETRY_MS } from '@renderer/composables/useModalQueue'
 import { useNotify } from '@renderer/composables/useNotify'
 import {
   createTestVuetify,
@@ -65,6 +67,7 @@ describe('updates UI', () => {
     bridge = installBridge({
       'updates:check': check,
       'updates:dismiss': undefined,
+      'updates:snooze': undefined,
       'app:openExternal': undefined,
       'app:info': { version: '0.1.2' },
       'settings:get': { checkUpdatesOnStartup: true, ...settings }
@@ -93,17 +96,29 @@ describe('updates UI', () => {
     vi.useRealTimers()
   })
 
-  describe('startup notice', () => {
-    it('checks automatically after the delay and shows the notice', async () => {
+  describe('startup popup', () => {
+    it('checks automatically after the delay and shows the centered popup with the highlights', async () => {
       vi.useFakeTimers()
-      const store = await setup(available())
+      const store = await setup(
+        available({
+          notes:
+            '## Novedades\n\n- **Buscar actualizaciones**: aviso al iniciar.\n- Filtro **visual**\n\n## Correcciones\n\n- Arreglo'
+        })
+      )
       store.scheduleStartupCheck()
       expect(check).not.toHaveBeenCalled()
       await vi.advanceTimersByTimeAsync(5000)
       vi.useRealTimers()
       await settle()
       expect(check).toHaveBeenCalledWith(false)
-      expect(text('[data-test="update-notice"] h2')).toBe('Nueva versión 0.1.3 disponible')
+      expect(text('[data-test="update-notice"] h2')).toBe('Hay una nueva actualización')
+      expect(text('[data-test="update-notice-subtitle"]')).toBe(
+        'ElectronDB 0.1.3 ya está disponible (tienes 0.1.2)'
+      )
+      const items = [...document.querySelectorAll('[data-test="update-highlights"] li')].map((li) =>
+        li.textContent!.trim()
+      )
+      expect(items).toEqual(['Buscar actualizaciones', 'Filtro visual'])
       expect(q('[data-test="update-notice-download"]')).not.toBeNull()
       expect(q('[data-test="update-notice-howto"]')).toBeNull()
     })
@@ -116,9 +131,10 @@ describe('updates UI', () => {
       expect(check).not.toHaveBeenCalled()
     })
 
-    it('stays hidden for a dismissed version, when up to date and on errors', async () => {
+    it('stays hidden for a dismissed or snoozed version, when up to date and on errors', async () => {
       for (const answer of [
         available({ dismissed: true }),
+        available({ snoozed: true }),
         { status: 'up-to-date', currentVersion: '0.1.2', runMode: 'packaged' } as UpdateCheckResult,
         {
           status: 'error',
@@ -132,12 +148,64 @@ describe('updates UI', () => {
         const store = await setup(answer)
         await store.runStartupCheck()
         await settle()
+        expect(store.noticeOpen).toBe(false)
         expect(q('[data-test="update-notice"]')).toBeNull()
         expect(useNotify().queue).toHaveLength(0)
       }
     })
 
-    it('«Descargar» opens the asset; «Omitir esta versión» remembers it', async () => {
+    it('appears only once per app start', async () => {
+      const store = await setup(available())
+      await store.runStartupCheck()
+      await settle()
+      expect(store.noticeOpen).toBe(true)
+      store.hideNotice()
+      await store.runStartupCheck()
+      await settle()
+      expect(store.noticeOpen).toBe(false)
+      expect(store.noticePending).toBe(false)
+    })
+
+    it('waits while another modal is open and opens once it closes', async () => {
+      vi.useFakeTimers()
+      const store = await setup(available())
+      const ui = useUiStore()
+      const answer = ui.ask({ title: 'Otra cosa', message: '…' })
+      await store.runStartupCheck()
+      expect(store.noticePending).toBe(true)
+      expect(store.noticeOpen).toBe(false)
+      await vi.advanceTimersByTimeAsync(MODAL_RETRY_MS * 3)
+      expect(store.noticeOpen).toBe(false)
+      ui.answer(false)
+      await answer
+      await vi.advanceTimersByTimeAsync(MODAL_RETRY_MS)
+      expect(store.noticeOpen).toBe(true)
+      expect(store.noticePending).toBe(false)
+    })
+
+    it('«Más tarde» closes and snoozes; «Omitir esta versión» remembers the version', async () => {
+      const store = await setup(available())
+      await store.runStartupCheck()
+      await settle()
+      q<HTMLButtonElement>('[data-test="update-notice-later"]')!.click()
+      await settle()
+      expect(store.noticeOpen).toBe(false)
+      expect(bridge.invoke).toHaveBeenCalledWith('updates:snooze')
+      expect(bridge.invoke).not.toHaveBeenCalledWith('updates:dismiss', '0.1.3')
+
+      setActivePinia(createPinia())
+      document.body.innerHTML = ''
+      const again = await setup(available())
+      await again.runStartupCheck()
+      await settle()
+      q<HTMLButtonElement>('[data-test="update-notice-skip"]')!.click()
+      await settle()
+      expect(bridge.invoke).toHaveBeenCalledWith('updates:dismiss', '0.1.3')
+      expect(bridge.invoke).not.toHaveBeenCalledWith('updates:snooze')
+      expect(again.noticeOpen).toBe(false)
+    })
+
+    it('«Descargar» opens the asset; «Ver todas las novedades» opens the full dialog', async () => {
       const store = await setup(available())
       await store.runStartupCheck()
       await settle()
@@ -147,21 +215,24 @@ describe('updates UI', () => {
         'app:openExternal',
         `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-arm64.dmg`
       )
-      q<HTMLButtonElement>('[data-test="update-notice-skip"]')!.click()
+      q<HTMLButtonElement>('[data-test="update-notice-notes"]')!.click()
       await settle()
-      expect(bridge.invoke).toHaveBeenCalledWith('updates:dismiss', '0.1.3')
-      expect(q('[data-test="update-notice"]')).toBeNull()
+      expect(store.noticeOpen).toBe(false)
+      expect(store.dialogOpen).toBe(true)
+      expect(check).toHaveBeenCalledTimes(1)
     })
 
-    it('in source mode offers «Cómo actualizar», which opens the dialog without asking again', async () => {
+    it('in source mode «Cómo actualizar» shows the commands inline with «Copiar comandos»', async () => {
       const store = await setup(available({ runMode: 'source', source: SOURCE }))
       await store.runStartupCheck()
       await settle()
+      expect(q('[data-test="update-notice-commands"]')).toBeNull()
       q<HTMLButtonElement>('[data-test="update-notice-howto"]')!.click()
       await settle()
-      expect(store.dialogOpen).toBe(true)
+      expect(store.dialogOpen).toBe(false)
+      expect(text('[data-test="update-notice-commands"]')).toContain('git pull')
+      expect(q('[data-test="update-notice-copy"]')).not.toBeNull()
       expect(check).toHaveBeenCalledTimes(1)
-      expect(q('[data-test="update-source"]')).not.toBeNull()
     })
   })
 

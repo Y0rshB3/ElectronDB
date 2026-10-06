@@ -31,6 +31,16 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   trigger: 'trigger'
 }
 
+/** Label with its article, for questions such as "¿Eliminar la tabla «x»?". */
+export const OBJECT_TYPE_WITH_ARTICLE: Record<ObjectType, string> = {
+  table: 'la tabla',
+  view: 'la vista',
+  function: 'la función',
+  procedure: 'el procedimiento',
+  event: 'el evento',
+  trigger: 'el trigger'
+}
+
 export const OBJECT_ICONS: Record<ObjectType, string> = {
   table: 'mdi-table',
   view: 'mdi-table-eye',

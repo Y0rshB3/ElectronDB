@@ -154,6 +154,7 @@ export const DEFAULT_SETTINGS = (
   defaultRowLimit: 1000,
   theme: 'dark',
   confirmProductionWrites: true,
+  confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true
 })
 
@@ -168,7 +169,12 @@ export class SettingsRepo {
     this.staleMacDefault = platform === 'darwin' ? null : macNavicatRootPath(home)
   }
   get(): AppSettings {
-    const settings = this.store.get()
+    const stored = this.store.get()
+    // Only an explicit false turns the destructive confirmation off (missing or invalid: on).
+    const settings =
+      stored.confirmDestructiveEverywhere === false || stored.confirmDestructiveEverywhere === true
+        ? stored
+        : { ...stored, confirmDestructiveEverywhere: true }
     return settings.navicatRootPath === this.staleMacDefault
       ? { ...settings, navicatRootPath: '' }
       : settings

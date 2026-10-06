@@ -1,11 +1,21 @@
 import { shell } from 'electron'
 import type { AppContext } from '../context'
-import { getUpdateService, isAllowedReleaseUrl } from '../updates'
+import {
+  getUpdateService,
+  isAllowedReleaseUrl,
+  rememberProfileState,
+  whatsNewFor
+} from '../updates'
 import { handle } from './typed'
 
 export function registerUpdatesHandlers(ctx: AppContext): void {
+  // Before any write of this start: a profile with data but no seen version was updated.
+  rememberProfileState(ctx)
   handle('updates:check', (manual) => getUpdateService(ctx).check(manual === true))
   handle('updates:dismiss', (version) => getUpdateService(ctx).dismiss(version))
+  handle('updates:snooze', () => getUpdateService(ctx).snooze())
+  handle('updates:whatsNew', () => whatsNewFor(ctx))
+  handle('updates:markSeen', (version) => getUpdateService(ctx).markSeen(version))
   handle('app:openExternal', async (url) => {
     // Only this repository's release pages/downloads: the renderer never opens arbitrary URLs.
     if (!isAllowedReleaseUrl(url))

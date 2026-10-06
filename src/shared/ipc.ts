@@ -44,6 +44,7 @@ import type {
   TableStructure,
   TriggerInfo,
   UpdateCheckResult,
+  WhatsNewInfo,
   UserInfo,
   ViewInfo,
   WriteOptions
@@ -76,6 +77,12 @@ export interface IpcInvokeMap {
   'updates:check': { args: [manual: boolean]; result: UpdateCheckResult }
   /** «Omitir esta versión»: no automatic notice for that version. */
   'updates:dismiss': { args: [version: string]; result: void }
+  /** «Más tarde»: no automatic update popup for the next 6 hours. */
+  'updates:snooze': { args: []; result: void }
+  /** «Novedades» to show once after an update (null: nothing to show). */
+  'updates:whatsNew': { args: []; result: WhatsNewInfo | null }
+  /** The «novedades» popup of `version` was closed. */
+  'updates:markSeen': { args: [version: string]; result: void }
 
   'settings:get': { args: []; result: AppSettings }
   'settings:update': { args: [patch: Partial<AppSettings>]; result: AppSettings }
@@ -253,6 +260,9 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'app:openExternal',
   'updates:check',
   'updates:dismiss',
+  'updates:snooze',
+  'updates:whatsNew',
+  'updates:markSeen',
   'settings:get',
   'settings:update',
   'connections:list',
