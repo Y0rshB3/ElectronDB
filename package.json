@@ -2,11 +2,11 @@
   "name": "electrondb",
   "productName": "ElectronDB",
   "version": "0.1.5",
-  "description": "ElectronDB: private Navicat-compatible desktop MySQL client (connections, object explorer, query editor, .nb3 backups and automation).",
+  "description": "ElectronDB: open-source desktop MySQL client inspired by other database managers (connections, object explorer, query editor, backups and automation).",
   "private": true,
   "main": "./out/main/index.js",
   "author": "Y0rshB3",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=22.12"
   },

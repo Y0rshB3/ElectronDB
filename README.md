@@ -1,13 +1,11 @@
 # ElectronDB
 
-Cliente MySQL de escritorio (Electron + Vue 3 + TypeScript) capaz de leer los datos de Navicat for MySQL:
-importa conexiones, colores y trabajos por lotes desde la carpeta de configuración de Navicat, lee y escribe
-copias de seguridad en el mismo formato `.nb3` y automatiza backups y restauraciones entre entornos. Funciona
-por su cuenta: no necesita Navicat instalado ni los clientes `mysql`/`mysqldump`, porque usa su propio driver.
-
-> ElectronDB es un proyecto independiente, sin relación con PremiumSoft CyberTech Ltd. ni con Navicat, que no lo
-> patrocinan ni lo respaldan. Navicat es una marca registrada de su propietario y se menciona solo para describir
-> la compatibilidad de formatos.
+Gestor de bases de datos MySQL de escritorio, de código abierto (Electron + Vue 3 + TypeScript), inspirado en
+otros gestores de bases de datos. Explora y edita datos, escribe consultas con autocompletado, diseña tablas, saca
+copias de seguridad y automatiza backups y restauraciones entre entornos (por ejemplo, de staging a local).
+Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. También puede
+importar conexiones y copias que ya tengas en otros gestores (ver
+[Importar desde otros gestores](#importar-desde-otros-gestores-macos)).
 
 La interfaz está en español. El código y los comentarios están en inglés.
 
@@ -26,6 +24,8 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - [Solución de problemas](#solución-de-problemas)
 - [Desarrollo](#desarrollo)
 - [Seguridad](#seguridad)
+- [Licencia](#licencia)
+- [Marcas](#marcas)
 
 ## Funciones
 
@@ -35,17 +35,17 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - **Editor de consultas** con autocompletado, formateo de SQL, varias sentencias y resultados editables cuando
   vienen de una sola tabla con clave primaria. La conexión se puede cambiar desde la propia pestaña.
 - **Vista de datos** con edición de celdas, `NULL`, alta y baja de filas; los cambios se aplican en una
-  transacción y se deshacen todos si falla uno. Filtro visual estilo Navicat con paréntesis y perfiles,
+  transacción y se deshacen todos si falla uno. Filtro visual por condiciones con paréntesis y perfiles,
   selector de fecha y hora, columnas redimensionables y panel **Texto** con el valor completo de la celda.
 - **Diseñador de tablas** (columnas, índices, claves foráneas) y editor DDL de vistas y rutinas.
-- **Copias de seguridad `.nb3`**: crear, listar (incluidas las de Navicat, en solo lectura), restaurar en
+- **Copias de seguridad `.nb3`**: crear, listar (incluidas las importadas de otros gestores, en solo lectura), restaurar en
   cualquier conexión y "rollback a local".
 - **Automatización**: trabajos con pasos de backup, de SQL y de restauración, programador tipo cron, historial
   y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
   sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
-  la lista de copias de seguridad con un paquete entero (también los lotes de Navicat).
-- **Importación desde Navicat**: conexiones, colores, trabajos por lotes y copias existentes. Es de solo
-  lectura: no modifica nada de Navicat.
+  la lista de copias de seguridad con un paquete entero (también los lotes importados de otros gestores).
+- **Importación desde otros gestores**: conexiones, colores, trabajos por lotes y copias existentes de
+  Navicat for MySQL (formato `.nb3`). Es de solo lectura: no modifica nada del otro programa.
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide escribir su
   nombre. En **Ajustes › Seguridad** puedes extenderlo a Staging, Local u Otro.
 - **Confirmación antes de borrar en cualquier conexión**: DROP, TRUNCATE, DELETE y eliminar filas, tablas,
@@ -249,7 +249,9 @@ primera vez:
 3. Opcional: túnel SSH (contraseña o archivo de clave privada) y SSL (CA, certificado y clave de cliente).
 4. **Probar conexión** y guarda.
 
-### Importar desde Navicat (macOS)
+### Importar desde otros gestores (macOS)
+
+Hoy se puede importar desde Navicat for MySQL.
 
 1. **Conexión → Importar desde Navicat…**. Se propone la carpeta
    `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC` (la ruta es editable).
@@ -510,7 +512,7 @@ conexión aparece con su color, su nombre y su entorno (Producción en rojo). Al
 ### Filtrar datos de una tabla
 
 El botón **Filtro** de la vista de datos muestra u oculta el panel de filtro; con un filtro aplicado el botón
-muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee como frases, igual que en Navicat:
+muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee como frases:
 
 ```
 ☑ email contiene jorge y
@@ -543,7 +545,7 @@ muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee 
 Cómo se interpreta, para que no haya sorpresas:
 
 - `y` tiene prioridad sobre `o`, como en SQL: `a o b y c` es `a o (b y c)`. Usa paréntesis para otro orden.
-- **está vacío** es `(columna = '' OR columna IS NULL)` (como Navicat); **no está vacío** es lo contrario.
+- **está vacío** es `(columna = '' OR columna IS NULL)`; **no está vacío** es lo contrario.
 - `!=`, **no contiene**, **no está en la lista**, etc. siguen a SQL: las filas con `NULL` en esa columna no
   aparecen. Usa **es nulo** si también las quieres.
 - **contiene / empieza por / termina en** buscan el texto literal: `%`, `_` y `\` no son comodines.
@@ -899,7 +901,7 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 - **Búsqueda de actualizaciones**: lo único que la app envía a Internet por su cuenta es una petición anónima
   (`GET`) a `api.github.com` para leer la última versión publicada; no lleva identificadores ni datos tuyos. Solo
   abre en el navegador enlaces de las versiones de ElectronDB en GitHub. Se desactiva en **Ajustes**.
-- **Las copias `.nb3` no van cifradas** (igual que las de Navicat). Se escriben con permisos `0600` en tu
+- **Las copias `.nb3` no van cifradas.** Se escriben con permisos `0600` en tu
   carpeta de usuario, pero cualquiera que copie el archivo puede leer los datos. Trátalas como datos sensibles y
   no las subas a repositorios ni carpetas compartidas.
 - Los archivos JSON del perfil se escriben con permisos `0600`. En Windows quedan protegidos por los permisos de tu
@@ -914,3 +916,13 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
   nombre para cualquier escritura, tanto en la interfaz como en el proceso principal; Producción no se puede
   quitar de la lista, ni editando `settings.json`. La confirmación de borrado en las demás conexiones es solo de
   la interfaz.
+
+## Licencia
+
+ElectronDB es software libre con licencia [MIT](LICENSE): puedes usarlo, copiarlo, modificarlo y distribuirlo,
+también con fines comerciales, siempre que conserves el aviso de copyright y la licencia.
+
+## Marcas
+
+ElectronDB es un proyecto independiente. No está afiliado, patrocinado ni respaldado por PremiumSoft CyberTech Ltd.
+Navicat es una marca de su propietario y se nombra solo para indicar con qué archivos es compatible la importación.
