@@ -14,7 +14,7 @@ Private desktop MySQL client (macOS first, also Windows/Linux) compatible with N
 ## Layout
 
 - `src/shared/` — domain types (`types.ts`) and the typed IPC contract (`ipc.ts`). **The IPC map is the only API between renderer and main.** Add a channel there first, then implement `src/main/ipc/<area>.ts`, then use it from the renderer through `window.electronDB.invoke`.
-- `src/main/` — Electron main. Modules: `navicat/` (import), `mysql/` (connections, introspection, queries), `backup/` (.nb3 read/write/restore), `automation/` (jobs, scheduler, launchd), `credentials/`, `storage/` (JSON repos in userData), `migration/` (one-time Navidog -> ElectronDB profile and secret migration).
+- `src/main/` — Electron main. Modules: `navicat/` (import), `mysql/` (connections, introspection, queries), `backup/` (.nb3 read/write/restore), `automation/` (jobs, scheduler, launchd), `credentials/`, `storage/` (JSON repos in userData), `migration/` (one-time Navidog -> ElectronDB profile and secret migration), `updates/` (checks GitHub Releases for a newer version: notify only, never downloads or installs; network calls stay in main via `net.fetch`; `app:openExternal` only allows `https://github.com/Y0rshB3/ElectronDB/releases/...`).
 - `src/preload/` — contextBridge only, no logic.
 - `src/renderer/` — Vue 3 + Vuetify 3 + Pinia. Views under `src/views`, reusable components under `src/components`, stores under `src/stores`, `src/api.ts` wraps `window.electronDB`.
 - `tests/fixtures/navicat/` — anonymised Navicat files + a synthetic `.nb3`. Never add real hosts, users or data.

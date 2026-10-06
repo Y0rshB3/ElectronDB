@@ -43,6 +43,7 @@ import type {
   TableInfo,
   TableStructure,
   TriggerInfo,
+  UpdateCheckResult,
   UserInfo,
   ViewInfo,
   WriteOptions
@@ -65,6 +66,16 @@ export interface IpcInvokeMap {
   /** One-off messages for the user after start (e.g. passwords to type again after the rename). */
   'app:startupNotices': { args: []; result: StartupNotice[] }
   'app:dismissStartupNotice': { args: [id: string]; result: void }
+  /**
+   * Opens a URL in the default browser. Main only accepts this repository's
+   * GitHub release pages and downloads (https://github.com/<owner>/<repo>/releases/...).
+   */
+  'app:openExternal': { args: [url: string]; result: void }
+
+  /** Looks for a newer GitHub release. Automatic checks (manual=false) use a 6-hour cache. */
+  'updates:check': { args: [manual: boolean]; result: UpdateCheckResult }
+  /** «Omitir esta versión»: no automatic notice for that version. */
+  'updates:dismiss': { args: [version: string]; result: void }
 
   'settings:get': { args: []; result: AppSettings }
   'settings:update': { args: [patch: Partial<AppSettings>]; result: AppSettings }
@@ -225,6 +236,8 @@ export interface IpcEventMap {
   'event:log': LogEvent
   'event:connectionClosed': { connectionId: string; reason: string }
   'event:jobLog': JobLogEvent
+  /** App menu «Buscar actualizaciones…»: the renderer opens its updates dialog. */
+  'event:checkUpdates': null
 }
 
 export type IpcEventChannel = keyof IpcEventMap
@@ -237,6 +250,9 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'app:pickFile',
   'app:startupNotices',
   'app:dismissStartupNotice',
+  'app:openExternal',
+  'updates:check',
+  'updates:dismiss',
   'settings:get',
   'settings:update',
   'connections:list',
@@ -302,7 +318,8 @@ export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'event:jobRun',
   'event:log',
   'event:connectionClosed',
-  'event:jobLog'
+  'event:jobLog',
+  'event:checkUpdates'
 ] as const
 
 /** Typed API surface exposed on window.electronDB by the preload script. */

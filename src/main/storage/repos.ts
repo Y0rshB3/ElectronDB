@@ -153,7 +153,8 @@ export const DEFAULT_SETTINGS = (
   backupsRootDir: join(userData, 'backups'),
   defaultRowLimit: 1000,
   theme: 'dark',
-  confirmProductionWrites: true
+  confirmProductionWrites: true,
+  checkUpdatesOnStartup: true
 })
 
 export class SettingsRepo {

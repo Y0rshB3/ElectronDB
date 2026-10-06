@@ -1,0 +1,52 @@
+{
+  "_comment": "Synthetic GitHub /releases/latest answer for the screenshot harness (ELECTRONDB_UPDATES_FIXTURE). Not a real release.",
+  "tag_name": "v0.1.3",
+  "name": "ElectronDB v0.1.3 — actualizaciones y mejoras del filtro",
+  "draft": false,
+  "prerelease": false,
+  "html_url": "https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.3",
+  "published_at": "2026-10-05T16:30:00Z",
+  "body": "## Novedades\n\n- **Buscar actualizaciones**: aviso al iniciar cuando hay una versión nueva y opción *Buscar actualizaciones…* en el menú **Otros**.\n- El filtro visual recuerda el último perfil usado en cada tabla.\n- `Copiar como INSERT` en el menú contextual de la cuadrícula.\n\n## Correcciones\n\n- La restauración de copias `.nb3` con vistas dependientes ya no falla en MySQL 5.7.\n- El selector de fecha respeta la zona horaria de la sesión.\n\n> Datos de ejemplo para las capturas de pantalla: esta versión no existe.\n",
+  "assets": [
+    {
+      "name": "ElectronDB-0.1.3-arm64-mac.zip",
+      "size": 149300000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-arm64-mac.zip"
+    },
+    {
+      "name": "ElectronDB-0.1.3-arm64.dmg",
+      "size": 149100000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-arm64.dmg"
+    },
+    {
+      "name": "ElectronDB-0.1.3-x64-mac.zip",
+      "size": 156600000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-x64-mac.zip"
+    },
+    {
+      "name": "ElectronDB-0.1.3-x64-portable.exe",
+      "size": 127100000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-x64-portable.exe"
+    },
+    {
+      "name": "ElectronDB-0.1.3-x64-setup.exe",
+      "size": 127300000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-x64-setup.exe"
+    },
+    {
+      "name": "ElectronDB-0.1.3-x64.dmg",
+      "size": 156400000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-x64.dmg"
+    },
+    {
+      "name": "ElectronDB-0.1.3-x86_64.AppImage",
+      "size": 137000000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/ElectronDB-0.1.3-x86_64.AppImage"
+    },
+    {
+      "name": "electrondb_0.1.3_amd64.deb",
+      "size": 114400000,
+      "browser_download_url": "https://github.com/Y0rshB3/ElectronDB/releases/download/v0.1.3/electrondb_0.1.3_amd64.deb"
+    }
+  ]
+}

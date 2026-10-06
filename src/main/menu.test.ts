@@ -35,4 +35,16 @@ describe('buildAppMenuTemplate', () => {
     expect(roles).toContain('paste')
     expect(roles).toContain('quit')
   })
+  it('offers «Buscar actualizaciones…» in the app menu when a handler is given', () => {
+    let calls = 0
+    const items = flatten(
+      buildAppMenuTemplate({ appName: 'ElectronDB', dev: false, onCheckUpdates: () => calls++ })
+    )
+    const item = items.find((i) => i.label === 'Buscar actualizaciones…')
+    expect(item).toBeTruthy()
+    ;(item!.click as () => void)()
+    expect(calls).toBe(1)
+    const without = flatten(buildAppMenuTemplate({ appName: 'ElectronDB', dev: false }))
+    expect(without.some((i) => i.label === 'Buscar actualizaciones…')).toBe(false)
+  })
 })

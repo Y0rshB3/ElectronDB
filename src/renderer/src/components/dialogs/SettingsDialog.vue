@@ -5,6 +5,7 @@ import type { AppSettings } from '@shared/types'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
+import { useUpdatesStore } from '@renderer/stores/updates'
 import PathPicker from '@renderer/components/common/PathPicker.vue'
 import './pathField.css'
 import { vPathTail } from './pathTail'
@@ -14,6 +15,7 @@ const ui = useUiStore()
 const settingsStore = useSettingsStore()
 const theme = useTheme()
 const notify = useNotify()
+const updates = useUpdatesStore()
 
 const form = ref<AppSettings>({ ...settingsStore.settings })
 const saving = ref(false)
@@ -32,6 +34,7 @@ watch(
     if (!value) return
     form.value = { ...settingsStore.settings }
     error.value = ''
+    void updates.loadAppVersion()
   },
   { immediate: true }
 )
@@ -123,6 +126,37 @@ async function save(): Promise<void> {
           </div>
         </section>
 
+        <section class="settings-section" aria-label="Actualizaciones">
+          <div class="settings-section__title">
+            <v-icon icon="mdi-update" size="15" aria-hidden="true" />Actualizaciones
+          </div>
+          <div class="settings-row">
+            <span class="settings-row__label">
+              Versión instalada
+              <span class="nd-mono settings-version" data-test="settings-version">{{
+                updates.appVersion || '—'
+              }}</span>
+            </span>
+            <v-btn
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-update"
+              data-test="settings-check-updates"
+              @click="updates.openDialog()"
+              >Buscar ahora</v-btn
+            >
+          </div>
+          <v-switch
+            v-model="form.checkUpdatesOnStartup"
+            color="primary"
+            label="Buscar actualizaciones al iniciar"
+            density="compact"
+            hide-details
+            data-test="settings-check-updates-startup"
+            class="settings-dialog__switch"
+          />
+        </section>
+
         <section class="settings-section settings-section--danger" aria-label="Seguridad">
           <div class="settings-section__title">
             <v-icon icon="mdi-shield-alert-outline" size="15" aria-hidden="true" />Producción
@@ -197,6 +231,13 @@ async function save(): Promise<void> {
 }
 .settings-row__label {
   color: var(--nd-text);
+}
+.settings-dialog__switch {
+  margin-top: 8px;
+}
+.settings-version {
+  margin-left: 6px;
+  color: var(--nd-accent);
 }
 .settings-section--danger {
   border-color: color-mix(in srgb, var(--nd-error) 22%, transparent);

@@ -711,6 +711,56 @@ export interface AppSettings {
   defaultRowLimit: number
   theme: 'dark' | 'light'
   confirmProductionWrites: boolean
+  /** Look for a new release on GitHub a few seconds after start (at most every 6 hours). */
+  checkUpdatesOnStartup: boolean
+}
+
+/* ---------- Updates ---------- */
+
+/** How this copy runs: an installer build, or `npm run dev` / `electron .` from a folder. */
+export type UpdateRunMode = 'packaged' | 'source'
+
+export interface UpdateAsset {
+  url: string
+  fileName: string
+  sizeBytes: number
+  /** Short Spanish label for buttons ("Instalador", "Portable", ".deb"...). */
+  label: string
+}
+
+/** How to update a copy that runs from a git checkout. */
+export interface SourceUpdateInfo {
+  /** Folder holding the checkout (where the commands must run). */
+  dir: string
+  /** False when no `.git` was found (a copied folder): `git pull` cannot update it. */
+  isGit: boolean
+  /** Current branch read from .git/HEAD; null when detached or unknown. */
+  branch: string | null
+  /** Commands to paste into a terminal, one per line. */
+  commands: string[]
+}
+
+export interface UpdateCheckResult {
+  status: 'up-to-date' | 'available' | 'error'
+  currentVersion: string
+  latestVersion?: string
+  releaseName?: string
+  releaseUrl?: string
+  publishedAt?: string
+  /** Release notes (markdown, truncated to ~4000 characters). */
+  notes?: string
+  /** Best download for this OS/architecture (packaged copies). */
+  download?: UpdateAsset
+  alternatives?: UpdateAsset[]
+  runMode: UpdateRunMode
+  /** Present in source mode: the folder and the commands to update it. */
+  source?: SourceUpdateInfo
+  /** The user chose «Omitir esta versión» for latestVersion. */
+  dismissed?: boolean
+  /** ISO date of the GitHub data used (fresh fetch or the cached one). */
+  checkedAt?: string
+  /** Spanish, actionable message when status is 'error'. */
+  error?: string
 }
 
 /* ---------- Progress events ---------- */

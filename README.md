@@ -22,7 +22,7 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - [Copias de seguridad y rollback a local](#copias-de-seguridad-y-rollback-a-local)
 - [Automatización](#automatización)
 - [Dónde se guardan los datos](#dónde-se-guardan-los-datos)
-- [Actualizar](#actualizar)
+- [Actualizaciones](#actualizaciones)
 - [Solución de problemas](#solución-de-problemas)
 - [Desarrollo](#desarrollo)
 - [Seguridad](#seguridad)
@@ -48,6 +48,8 @@ La interfaz está en español. El código y los comentarios están en inglés.
   lectura: no modifica nada de Navicat.
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide confirmación
   explícita.
+- **Aviso de versiones nuevas** publicadas en GitHub, con la descarga para tu sistema o los comandos para
+  actualizar la carpeta del código ([Actualizaciones](#actualizaciones)).
 - Tema oscuro y claro.
 
 ## Compatibilidad por sistema operativo
@@ -618,16 +620,43 @@ funcionar si lo desinstalas, y la app avisa una vez con sus nombres. Crea esos t
 borra después los archivos antiguos de `~/Library/LaunchAgents`. No vuelvas a abrir Navidog: volvería a crear
 sus agentes y esos trabajos se ejecutarían dos veces.
 
-## Actualizar
+## Actualizaciones
+
+ElectronDB comprueba si hay una versión nueva en las
+[versiones publicadas en GitHub](https://github.com/Y0rshB3/ElectronDB/releases). Solo hace una consulta
+anónima a la API pública de GitHub (sin cuenta ni datos tuyos) y **nunca descarga ni instala nada por su
+cuenta**: las versiones no están firmadas, así que la actualización la haces tú.
+
+- **Al iniciar**: unos segundos después de abrir la app, si hay una versión nueva aparece un aviso abajo a la
+  derecha con **Ver novedades**, **Descargar** (o **Cómo actualizar**) y **Omitir esta versión**. Se consulta
+  GitHub como mucho una vez cada 6 horas; si no hay conexión, no avisa de nada. Se desactiva en **Ajustes →
+  Actualizaciones → Buscar actualizaciones al iniciar**.
+- **A mano**: **Otros → Buscar actualizaciones…** (o el menú de la app en macOS) siempre consulta GitHub y muestra
+  la versión instalada, la última publicada, sus notas y cómo actualizar. La versión instalada también aparece en
+  **Ajustes**.
+- **Omitir esta versión** deja de avisar de esa versión al iniciar; la siguiente sí se avisa.
+
+### Si instalaste la app (instalador de GitHub)
+
+**Descargar** abre en el navegador el archivo de tu sistema (`.dmg` de tu Mac, Apple Silicon o Intel; el
+instalador `-setup.exe` de Windows, o el portable; el `AppImage` de Linux, o el `.deb`). Cierra ElectronDB e
+instala la versión nueva igual que la primera vez (ver [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque)).
+Tus conexiones, trabajos y ajustes están en el perfil y no se tocan al actualizar ni al reinstalar.
+
+### Si la usas desde la carpeta del código (`npm run dev`)
+
+El aviso muestra **Cómo actualizar** con los comandos exactos para tu carpeta y un botón **Copiar comandos**.
+Cierra la app y ejecuta:
 
 ```sh
-cd ElectronDB
+cd ElectronDB      # tu carpeta
 git pull
-npm ci
+npm install        # solo hace algo si cambiaron las dependencias
 npm run dev        # o vuelve a generar el instalador: npm run dist
 ```
 
-Cierra la app antes de actualizar. El perfil no se toca al actualizar ni al reinstalar.
+Si estás en otra rama distinta de `main`, el diálogo te lo indica: `git pull` trae los cambios de esa rama. El
+perfil no se toca al actualizar.
 
 ## Solución de problemas
 
@@ -747,9 +776,10 @@ ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 
 `npm run screenshots` siembra un perfil de prueba y el MySQL desechable (tablas `shot_*` en `navidog_test`),
 compila y abre la app en una ventana de 1600×1000 que recorre las pantallas principales. Guarda `01-home.png` …
-`17e-manual-rollbacks-history.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
+`18e-update-dialog-error.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
 («Restaurar todo en Local» y «Restaurar paquete en Local») usan también el MySQL 5.7 desechable como staging
-(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Nunca usa tu perfil real y se niega a
+(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (aviso y diálogo de actualizaciones)
+responden con una versión ficticia de `tests/fixtures/updates/latest-release.json` en vez de consultar GitHub. Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
 
@@ -767,16 +797,18 @@ ejecución, y su carpeta debe llamarse `profile`.
 
 ### Variables de entorno
 
-| Variable                         | Efecto                                                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `ELECTRONDB_USER_DATA=<carpeta>` | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents. |
-| `ELECTRONDB_PLAIN_SECRETS=1`     | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                               |
-| `ELECTRONDB_SMOKE=1`             | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                            |
-| `ELECTRONDB_DEBUG=1`             | Registro a nivel `debug`, copiado también en la consola.                                                                       |
-| `ELECTRONDB_TEST_MYSQL_URL`      | MySQL desechable para `npm run test:integration`.                                                                              |
-| `ELECTRONDB_TEST_MYSQL57_URL`    | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                 |
-| `ELECTRONDB_TEST_KEYCHAIN_DIR`   | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                            |
-| `ELECTRONDB_SCREENSHOTS=<dir>`   | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                               |
+| Variable                            | Efecto                                                                                                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ELECTRONDB_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                  |
+| `ELECTRONDB_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                |
+| `ELECTRONDB_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                             |
+| `ELECTRONDB_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                        |
+| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL desechable para `npm run test:integration`.                                                                                                                               |
+| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                                                                  |
+| `ELECTRONDB_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                             |
+| `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                |
+| `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error). |
+| `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                |
 
 Prueba de humo del binario compilado sin tocar tus datos:
 
@@ -811,6 +843,9 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 
 ## Seguridad
 
+- **Búsqueda de actualizaciones**: lo único que la app envía a Internet por su cuenta es una petición anónima
+  (`GET`) a `api.github.com` para leer la última versión publicada; no lleva identificadores ni datos tuyos. Solo
+  abre en el navegador enlaces de las versiones de ElectronDB en GitHub. Se desactiva en **Ajustes**.
 - **Las copias `.nb3` no van cifradas** (igual que las de Navicat). Se escriben con permisos `0600` en tu
   carpeta de usuario, pero cualquiera que copie el archivo puede leer los datos. Trátalas como datos sensibles y
   no las subas a repositorios ni carpetas compartidas.

@@ -788,6 +788,61 @@ const STEPS: Step[] = [
         for (const db of ['rb_shop', 'rb_crm'])
           await S.api.invokeSilent('db:execute', id, 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
   },
+  // Update check screens: main answers from ELECTRONDB_UPDATES_FIXTURE (a fake v0.1.3).
+  {
+    name: '18a-update-notice',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.workspace.showObjects()
+      await S.updates.runStartupCheck()
+      if (S.updates.result?.status !== 'available')
+        throw new Error('no update available: run with ELECTRONDB_UPDATES_FIXTURE (see npm run screenshots)')
+      if (!S.updates.noticeOpen) throw new Error('update notice not shown')
+      await H.waitFor('[data-test="update-notice"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.updates.hideNotice()`
+  },
+  {
+    // Not packaged here, so main reports the source mode; the packaged view uses the same answer.
+    name: '18b-update-dialog-packaged',
+    script: `
+      S.updates.showDetails()
+      S.updates.result = { ...S.updates.result, runMode: 'packaged', source: undefined }
+      await H.waitFor('[data-test="update-packaged"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.updates.dialogOpen = false`
+  },
+  {
+    name: '18c-update-dialog-source',
+    script: `
+      S.updates.openDialog()
+      await H.until(() => !S.updates.checking, 10000)
+      if (S.updates.result?.runMode !== 'source') throw new Error('expected source mode (unpackaged run)')
+      await H.waitFor('[data-test="update-source"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.updates.dialogOpen = false`
+  },
+  {
+    name: '18d-update-dialog-uptodate',
+    script: `
+      const r = S.updates.result
+      S.updates.result = { status: 'up-to-date', currentVersion: r.currentVersion, latestVersion: r.currentVersion,
+        releaseUrl: r.releaseUrl.replace(/v[0-9.]+$/, 'v' + r.currentVersion), runMode: r.runMode }
+      S.updates.showDetails()
+      await H.waitFor('[data-test="update-uptodate"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.updates.dialogOpen = false`
+  },
+  {
+    name: '18e-update-dialog-error',
+    script: `
+      S.updates.result = { status: 'error', currentVersion: S.updates.result.currentVersion, runMode: 'packaged',
+        error: 'GitHub ha limitado temporalmente las consultas desde tu red. Vuelve a intentarlo dentro de un rato (el límite se renueva cada hora).' }
+      S.updates.showDetails()
+      await H.waitFor('[data-test="update-error"]', 5000)
+      await H.settle(S, 700)`,
+    cleanup: `S.updates.dialogOpen = false`
+  },
   {
     name: '15-light-theme-home',
     script: `

@@ -8,6 +8,7 @@ import { useProgressStore } from '@renderer/stores/progress'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
+import { useUpdatesStore } from '@renderer/stores/updates'
 
 let disposers: (() => void)[] = []
 
@@ -28,7 +29,9 @@ export function subscribeToMainEvents(): () => void {
     // Marks the connection closed and notifies the user.
     connections.listenToClosedEvents(),
     // Drops cached schema data so the tree does not show stale children.
-    api.on('event:connectionClosed', ({ connectionId }) => tree.forget(connectionId))
+    api.on('event:connectionClosed', ({ connectionId }) => tree.forget(connectionId)),
+    // App menu «Buscar actualizaciones…».
+    api.on('event:checkUpdates', () => useUpdatesStore().openDialog())
   ]
   return unsubscribeFromMainEvents
 }

@@ -5,6 +5,7 @@ import { useConnectionsStore } from '@renderer/stores/connections'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useTabsStore } from '@renderer/stores/tabs'
 import { useUiStore } from '@renderer/stores/ui'
+import { useUpdatesStore } from '@renderer/stores/updates'
 import { useObjectsContext } from '@renderer/composables/useObjectsContext'
 import { useNotify } from '@renderer/composables/useNotify'
 import { runSafely } from '@renderer/utils/errors'
@@ -14,6 +15,7 @@ const tree = useTreeStore()
 const connections = useConnectionsStore()
 const ui = useUiStore()
 const tabs = useTabsStore()
+const updates = useUpdatesStore()
 const notify = useNotify()
 const { context: objectsContext } = useObjectsContext()
 
@@ -133,7 +135,12 @@ const actions = computed<ToolbarAction[]>(() => [
       { label: 'Eventos', icon: 'mdi-calendar-clock', action: () => ws.showGroup('events') },
       { label: 'Importar desde Navicat…', icon: 'mdi-import', action: () => ui.openImportDialog() },
       { label: 'Ajustes…', icon: 'mdi-cog-outline', action: () => ui.openSettingsDialog() },
-      { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) }
+      { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) },
+      {
+        label: 'Buscar actualizaciones…',
+        icon: 'mdi-update',
+        action: () => updates.openDialog()
+      }
     ]
   },
   {

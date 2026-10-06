@@ -6,6 +6,7 @@ import { registerDbHandlers } from './db'
 import { registerFiltersHandlers } from './filters'
 import { registerJobsHandlers } from './jobs'
 import { registerNavicatHandlers } from './navicat'
+import { registerUpdatesHandlers } from './updates'
 
 /**
  * Each feature module owns src/main/ipc/<area>.ts and exports
@@ -19,4 +20,5 @@ export function registerAllHandlers(ctx: AppContext): void {
   registerBackupsHandlers(ctx)
   registerJobsHandlers(ctx)
   registerNavicatHandlers(ctx)
+  registerUpdatesHandlers(ctx)
 }

@@ -85,7 +85,14 @@ export const api = {
     pickFile: (title: string, filters?: { name: string; extensions: string[] }[]) =>
       invoke('app:pickFile', title, filters),
     startupNotices: () => invokeSilent('app:startupNotices'),
-    dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id)
+    dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id),
+    /** Only GitHub release pages/downloads of ElectronDB (main rejects anything else). */
+    openExternal: (url: string) => invoke('app:openExternal', url)
+  },
+  updates: {
+    /** Never throws for network problems: they come back as status 'error'. */
+    check: (manual: boolean) => invokeSilent('updates:check', manual),
+    dismiss: (version: string) => invoke('updates:dismiss', version)
   },
   settings: {
     get: () => invoke('settings:get'),

@@ -11,6 +11,8 @@ import type { MenuItemConstructorOptions } from 'electron'
 export function buildAppMenuTemplate(options: {
   appName: string
   dev: boolean
+  /** «Buscar actualizaciones…»: asks the renderer to open its updates dialog. */
+  onCheckUpdates?: () => void
 }): MenuItemConstructorOptions[] {
   const view: MenuItemConstructorOptions[] = [
     { role: 'resetZoom' },
@@ -31,6 +33,9 @@ export function buildAppMenuTemplate(options: {
       label: options.appName,
       submenu: [
         { role: 'about' },
+        ...(options.onCheckUpdates
+          ? [{ label: 'Buscar actualizaciones…', click: options.onCheckUpdates }]
+          : []),
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },

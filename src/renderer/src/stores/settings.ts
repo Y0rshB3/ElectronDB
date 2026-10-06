@@ -8,7 +8,8 @@ const DEFAULTS: AppSettings = {
   backupsRootDir: '',
   defaultRowLimit: 1000,
   theme: 'dark',
-  confirmProductionWrites: true
+  confirmProductionWrites: true,
+  checkUpdatesOnStartup: true
 }
 
 export const useSettingsStore = defineStore('settings', () => {

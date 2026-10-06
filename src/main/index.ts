@@ -70,7 +70,13 @@ app.whenReady().then(async () => {
   }
 
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate(buildAppMenuTemplate({ appName: app.name, dev: !app.isPackaged }))
+    Menu.buildFromTemplate(
+      buildAppMenuTemplate({
+        appName: app.name,
+        dev: !app.isPackaged,
+        onCheckUpdates: () => ctx.emit('event:checkUpdates', null)
+      })
+    )
   )
 
   // Registered before every other 'before-quit' listener: quitting while a

@@ -11,6 +11,7 @@ import { useSettingsStore } from './stores/settings'
 import { useTabsStore } from './stores/tabs'
 import { useTreeStore } from './stores/tree'
 import { useUiStore } from './stores/ui'
+import { useUpdatesStore } from './stores/updates'
 import { useWorkspace } from './composables/useWorkspace'
 import { applyPlatformClass } from './utils/platform'
 import '@mdi/font/css/materialdesignicons.css'
@@ -55,6 +56,7 @@ if (new URLSearchParams(window.location.search).get('nd-screenshots') === '1') {
     settings: useSettingsStore(pinia),
     jobs: useJobsStore(pinia),
     jobLogs: useJobLogsStore(pinia),
+    updates: useUpdatesStore(pinia),
     workspace: useWorkspace()
   }
 }
