@@ -1,0 +1,84 @@
+/*
+ * Navicat-style filter tokens: clickable words of a condition sentence.
+ * Column in the default text colour, operator in cyan accent, value in violet
+ * accent... connector in violet; all on the Nebula tokens.
+ */
+.ftok {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  max-width: 340px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--nd-radius-sm);
+  background: transparent;
+  font: inherit;
+  color: var(--nd-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background var(--nd-dur) var(--nd-ease);
+}
+.ftok:hover,
+.ftok:focus-visible,
+.ftok[aria-expanded='true'] {
+  background: var(--nd-hover);
+  outline: none;
+}
+.ftok:focus-visible {
+  box-shadow: 0 0 0 1px rgba(var(--nd-accent-rgb), 0.6);
+}
+.ftok--column {
+  color: var(--nd-text);
+  font-weight: 500;
+}
+.ftok--operator {
+  color: var(--nd-accent);
+}
+.ftok--value {
+  color: var(--nd-warning);
+}
+.ftok--value.is-empty {
+  color: var(--nd-text-muted);
+}
+.ftok--value.is-invalid {
+  color: var(--nd-error);
+  box-shadow: inset 0 -1px 0 var(--nd-error);
+}
+.ftok--value.is-sql {
+  color: var(--nd-text);
+  font-family: var(--nd-font-mono);
+}
+.ftok--connector {
+  color: var(--nd-violet);
+  font-weight: 600;
+  min-width: 18px;
+  justify-content: center;
+}
+.ftok-input {
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid rgba(var(--nd-accent-rgb), 0.6);
+  border-radius: var(--nd-radius-sm);
+  background: var(--nd-bg-sunken);
+  font: inherit;
+  color: var(--nd-text);
+  outline: none;
+  max-width: 420px;
+}
+.ftok-input.is-sql {
+  font-family: var(--nd-font-mono);
+}
+.ftok-temporal {
+  display: inline-flex;
+  width: 210px;
+  height: 22px;
+  border: 1px solid rgba(var(--nd-accent-rgb), 0.6);
+  border-radius: var(--nd-radius-sm);
+  background: var(--nd-bg-sunken);
+}
+.ftok-temporal :deep(.tinput__field) {
+  padding-left: 6px;
+  font-family: var(--nd-font-mono);
+}

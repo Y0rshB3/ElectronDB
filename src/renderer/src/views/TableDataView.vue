@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { QueryColumn } from '@shared/types'
-import { api } from '@renderer/api'
+import type { CellValue, ColumnInfo, QueryColumn } from '@shared/types'
+import { api, invokeSilent } from '@renderer/api'
+import CellValuePanel from '@renderer/components/data/CellValuePanel.vue'
+import { isCellChanged } from '@renderer/components/data/rowEditing'
+import { useValuePanelPref } from '@renderer/components/data/useValuePanelPref'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import ApplyErrorBanner from '@renderer/components/data/ApplyErrorBanner.vue'
 import EditableGrid from '@renderer/components/data/EditableGrid.vue'
 import RowEditActions from '@renderer/components/data/RowEditActions.vue'
+import TableFilterPanel from '@renderer/components/data/filter/TableFilterPanel.vue'
+import { NO_FILTER, useTableFilter } from '@renderer/components/data/filter/useTableFilter'
 import { isApplyShortcut, useRowEditor } from '@renderer/components/data/useRowEditor'
 import { useConfirm } from '@renderer/composables/useConfirm'
-import { errorMessage } from '@renderer/composables/useNotify'
+import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { formatDuration, formatNumber } from '@renderer/utils/format'
@@ -18,6 +23,7 @@ const props = defineProps<{ tab: WorkspaceTab }>()
 const settings = useSettingsStore()
 const tabs = useTabsStore()
 const { ask } = useConfirm()
+const notify = useNotify()
 
 const columns = ref<QueryColumn[]>([])
 const editor = useRowEditor(columns)
@@ -30,8 +36,58 @@ const loadError = ref<string | null>(null)
 
 const page = ref(1)
 const sort = ref<{ column: string; direction: 'ASC' | 'DESC' } | null>(null)
-const whereInput = ref('')
-const appliedWhere = ref('')
+
+const target = (): [string, string, string] => [
+  props.tab.connectionId ?? '',
+  props.tab.schema ?? '',
+  props.tab.objectName ?? ''
+]
+const filter = useTableFilter(props.tab, {
+  columns,
+  generateWhere: (f) => api.db.tableFilterSql(...target(), f),
+  confirm: (message, confirmText) =>
+    ask({ title: 'Filtro', message, confirmText, color: 'warning' }),
+  profiles: {
+    list: () => api.db.filterProfiles(...target()),
+    save: (name, f) => api.db.saveFilterProfile(...target(), name, f),
+    remove: (name) => api.db.deleteFilterProfile(...target(), name)
+  }
+})
+const { applied: appliedFilter, isApplied: filtered } = filter
+
+/** Declared columns (nullability, datetime(3)...) for the editors, aligned with `columns`. */
+const columnInfoList = ref<ColumnInfo[]>([])
+const columnInfo = computed(() =>
+  columns.value.map((c) => columnInfoList.value.find((i) => i.name === c.name) ?? null)
+)
+async function loadColumnInfo(): Promise<void> {
+  const { connectionId, schema, objectName } = props.tab
+  if (!connectionId || !schema || !objectName) return
+  try {
+    columnInfoList.value = await invokeSilent('db:columns', connectionId, schema, objectName)
+  } catch {
+    columnInfoList.value = [] // editors fall back to the result types
+  }
+}
+/** Column widths are remembered per table (names and pixels only). */
+const widthKey = computed(() =>
+  props.tab.connectionId && props.tab.schema && props.tab.objectName
+    ? `${props.tab.connectionId}:${props.tab.schema}:${props.tab.objectName}`
+    : null
+)
+
+/* "Texto" value panel: the full value of the active cell. */
+const valuePref = useValuePanelPref()
+const activeCell = computed(() => {
+  const cell = active.value
+  const row = cell ? rows.value.find((r) => r.uid === cell.uid) : undefined
+  if (!cell || !row) return null
+  return { row, col: cell.col, value: row.values[cell.col] as CellValue }
+})
+function editFromPanel(value: CellValue): void {
+  const cell = activeCell.value
+  if (cell && !cell.row.deleted) editor.onEdit(cell.row.uid, cell.col, value)
+}
 
 const pageSize = computed(() => settings.rowLimit)
 const pageCount = computed(() =>
@@ -69,7 +125,9 @@ async function load(): Promise<void> {
       limit: pageSize.value,
       offset: (page.value - 1) * pageSize.value,
       orderBy: sort.value,
-      where: appliedWhere.value.trim() || null
+      where: appliedFilter.value.where,
+      // Structured filter: main escapes it and checks the columns (no SQL built here).
+      ...(appliedFilter.value.filter ? { filter: appliedFilter.value.filter } : {})
     })
     columns.value = result.columns
     editor.reset(result.rows)
@@ -104,15 +162,47 @@ async function toggleSort(column: string): Promise<void> {
 }
 
 async function applyFilter(): Promise<void> {
+  const next = filter.prepareApply()
+  if (!next) return
   if (!(await discardGuard())) return
-  appliedWhere.value = whereInput.value
+  appliedFilter.value = next
   page.value = 1
   await load()
 }
 
 async function clearFilter(): Promise<void> {
-  whereInput.value = ''
-  if (appliedWhere.value) await applyFilter()
+  if (filter.isApplied.value && !(await discardGuard())) return
+  filter.reset()
+  if (!filter.isApplied.value) return
+  appliedFilter.value = NO_FILTER
+  page.value = 1
+  await load()
+}
+
+async function saveFilterProfile(name: string): Promise<void> {
+  try {
+    await filter.saveProfile(name)
+    notify.success(`Perfil de filtro «${name}» guardado`)
+  } catch {
+    /* invoke already reported the error */
+  }
+}
+
+async function deleteFilterProfile(name: string): Promise<void> {
+  try {
+    await filter.deleteProfile(name)
+  } catch {
+    /* invoke already reported the error */
+  }
+}
+
+async function toggleFilterMode(): Promise<void> {
+  try {
+    if (filter.state.value.mode === 'text') await filter.switchToBuilder()
+    else await filter.switchToText()
+  } catch (err) {
+    notify.error(`No se pudo generar el WHERE: ${errorMessage(err)}`)
+  }
 }
 
 async function applyChanges(): Promise<void> {
@@ -144,7 +234,10 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadColumnInfo()
+})
 
 defineExpose({ rows, applyChanges, load })
 </script>
@@ -159,6 +252,38 @@ defineExpose({ rows, applyChanges, load })
         data-test="refresh"
         @click="reload"
         >Refrescar</v-btn
+      >
+      <v-btn
+        prepend-icon="mdi-filter-variant"
+        size="small"
+        class="table-data__filter-btn"
+        :class="{ 'is-active': filter.open.value, 'is-filtered': filtered }"
+        :aria-pressed="filter.open.value"
+        :title="
+          filtered
+            ? `Filtro aplicado (${filter.appliedCount.value} condición/es). Mostrar u ocultar el panel`
+            : 'Mostrar u ocultar el panel de filtro'
+        "
+        data-test="filter-toggle"
+        @click="filter.open.value = !filter.open.value"
+        >Filtro<span
+          v-if="filtered"
+          class="table-data__filter-badge"
+          :aria-label="`${filter.appliedCount.value} condición(es) aplicadas`"
+          data-test="filter-badge"
+          >{{ filter.appliedCount.value }}</span
+        ></v-btn
+      >
+      <v-btn
+        prepend-icon="mdi-text-box-outline"
+        size="small"
+        :class="{ 'is-active': valuePref.open }"
+        class="table-data__filter-btn"
+        :aria-pressed="valuePref.open"
+        title="Mostrar el valor completo de la celda seleccionada"
+        data-test="value-toggle"
+        @click="valuePref.open = !valuePref.open"
+        >Texto</v-btn
       >
       <span class="nd-viewbar__sep" aria-hidden="true" />
       <RowEditActions
@@ -176,26 +301,27 @@ defineExpose({ rows, applyChanges, load })
     </div>
 
     <div class="nd-viewpanel">
-      <div class="table-data__filter">
-        <v-text-field
-          v-model="whereInput"
-          density="compact"
-          prefix="WHERE"
-          prepend-inner-icon="mdi-filter-variant"
-          placeholder="p. ej. id > 10 AND estado = 'activo'"
-          aria-label="Filtro WHERE"
-          clearable
-          hide-details
-          class="table-data__where"
-          :class="{ 'is-applied': !!appliedWhere }"
-          data-test="where"
-          @keydown.enter="applyFilter"
-          @click:clear="clearFilter"
-        />
-        <v-btn size="small" variant="tonal" data-test="apply-filter" @click="applyFilter"
-          >Filtrar</v-btn
-        >
-      </div>
+      <TableFilterPanel
+        v-if="filter.open.value"
+        :state="filter.state.value"
+        :columns="columns"
+        :profiles="filter.profiles.value"
+        :show-problems="filter.showProblems.value"
+        :is-applied="filtered"
+        :pending-apply="filter.pendingApply.value"
+        :active-count="filter.activeCount.value"
+        :problem="filter.problem.value"
+        :busy="loading || filter.switching.value"
+        @action="filter.dispatch"
+        @set-text="filter.setText"
+        @toggle-mode="toggleFilterMode"
+        @apply="applyFilter"
+        @menu-open="filter.refreshProfiles"
+        @load-profile="filter.loadProfile"
+        @save-profile="saveFilterProfile"
+        @delete-profile="deleteFilterProfile"
+        @clear="clearFilter"
+      />
 
       <ApplyErrorBanner
         v-if="applyError"
@@ -210,7 +336,11 @@ defineExpose({ rows, applyChanges, load })
         La tabla no tiene clave primaria: las filas se identifican por todos sus valores.
       </div>
 
-      <div class="table-data__grid">
+      <div
+        class="table-data__grid"
+        :style="valuePref.open ? { minHeight: '160px' } : undefined"
+        data-test="grid-area"
+      >
         <v-progress-linear
           v-if="loading"
           indeterminate
@@ -240,18 +370,31 @@ defineExpose({ rows, applyChanges, load })
           :offset="(page - 1) * pageSize"
           :error-row="applyError?.uid ?? null"
           :error-col="applyError?.col ?? null"
+          :column-info="columnInfo"
+          :width-key="widthKey"
           @sort="toggleSort"
           @edit="editor.onEdit"
         />
         <EmptyState v-else-if="!loading" icon="mdi-table-off" title="Sin datos" />
       </div>
 
+      <CellValuePanel
+        v-if="valuePref.open"
+        :column="activeCell ? (columns[activeCell.col] ?? null) : null"
+        :info="activeCell ? columnInfo[activeCell.col] : null"
+        :value="activeCell?.value ?? null"
+        :editable="!!activeCell && !activeCell.row.deleted"
+        :changed="!!activeCell && isCellChanged(activeCell.row, activeCell.col)"
+        view="table"
+        @edit="editFromPanel"
+      />
+
       <div class="table-data__footer" data-test="footer">
         <span class="table-data__stats nd-ellipsis">
           {{ formatNumber(loadedRows) }} fila(s) en esta página
           <template v-if="total !== null"> · {{ formatNumber(total) }} en total</template>
           <template v-if="durationMs !== null"> · {{ formatDuration(durationMs) }}</template>
-          <template v-if="appliedWhere"> · filtrado</template>
+          <template v-if="filtered"> · filtrado</template>
         </span>
         <span class="nd-viewbar__spacer" />
         <div class="table-data__pager" role="navigation" aria-label="Paginación">
@@ -296,32 +439,24 @@ defineExpose({ rows, applyChanges, load })
 
 <style scoped src="../components/data/viewChrome.css"></style>
 <style scoped>
-.table-data__filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--nd-hairline);
-}
-.table-data__where {
-  flex: 1 1 auto;
-}
-.table-data__where :deep(.v-text-field__prefix) {
-  font-family: var(--nd-font-mono);
-  font-size: var(--nd-fs-xs);
-  font-weight: 600;
-  color: var(--nd-violet);
-  opacity: 1;
-  padding-inline-end: 8px;
-}
-.table-data__where :deep(input) {
-  font-family: var(--nd-font-mono);
-  font-size: var(--nd-fs-dense);
-}
-.table-data__where.is-applied :deep(.v-field__prepend-inner > .v-icon) {
+.table-data__filter-btn.is-active {
   color: var(--nd-accent);
-  opacity: 1;
+  background: rgba(var(--nd-accent-rgb), 0.1);
+}
+.table-data__filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: var(--nd-radius-pill);
+  font-family: var(--nd-font-mono);
+  font-size: 10px;
+  color: var(--nd-bg-base, #000);
+  background: var(--nd-accent);
+  box-shadow: 0 0 6px rgba(var(--nd-accent-rgb), 0.6);
 }
 .table-data__notice {
   display: flex;
@@ -336,7 +471,8 @@ defineExpose({ rows, applyChanges, load })
 }
 .table-data__grid {
   position: relative;
-  flex: 1 1 auto;
+  /* Basis 0: the rows never compete with the value panel for space; min-height (inline) protects the grid. */
+  flex: 1 1 0;
   min-height: 0;
 }
 .table-data__footer {

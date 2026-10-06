@@ -38,6 +38,8 @@ import type {
   StartupNotice,
   TableDataPage,
   TableDataRequest,
+  TableFilter,
+  TableFilterProfile,
   TableInfo,
   TableStructure,
   TriggerInfo,
@@ -102,6 +104,25 @@ export interface IpcInvokeMap {
     result: string
   }
   'db:tableData': { args: [connectionId: string, request: TableDataRequest]; result: TableDataPage }
+  /** Saved filter profiles of one table (userData/filter-profiles.json). */
+  'filters:list': {
+    args: [connectionId: string, schema: string, table: string]
+    result: TableFilterProfile[]
+  }
+  /** Creates or replaces the profile `name`; returns the table's profiles. */
+  'filters:save': {
+    args: [connectionId: string, schema: string, table: string, name: string, filter: TableFilter]
+    result: TableFilterProfile[]
+  }
+  'filters:delete': {
+    args: [connectionId: string, schema: string, table: string, name: string]
+    result: TableFilterProfile[]
+  }
+  /** WHERE text (without the keyword) main would run for a structured filter; '' when empty. */
+  'db:tableFilterSql': {
+    args: [connectionId: string, schema: string, table: string, filter: TableFilter]
+    result: string
+  }
   'db:applyRowChanges': {
     args: [
       connectionId: string,
@@ -240,6 +261,10 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'db:tableStructure',
   'db:showCreate',
   'db:tableData',
+  'db:tableFilterSql',
+  'filters:list',
+  'filters:save',
+  'filters:delete',
   'db:applyRowChanges',
   'db:execute',
   'db:users',

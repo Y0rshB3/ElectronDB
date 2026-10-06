@@ -1,18 +1,14 @@
 import { performance } from 'node:perf_hooks'
 import type { TableDataPage, TableDataRequest } from '@shared/types'
 import { MysqlUserError } from './errors'
-import { escapeId, primaryKeyColumns } from './introspect'
+import { escapeId, listColumns, primaryKeyColumns, type Queryable } from './introspect'
 import { MAX_ROWS_CAP } from './query'
 import type { FullSession } from './session'
+import { buildFilterWhere, filterNeedsColumns } from './tableFilter'
 import { normalizeRow, toQueryColumn } from './values'
 
 /** Milliseconds the COUNT(*) may run before we give up and report total = null. */
 export const COUNT_TIMEOUT_MS = 3000
-
-export interface BuiltQuery {
-  sql: string
-  params: unknown[]
-}
 
 function validate(req: TableDataRequest): void {
   if (!req.schema || !req.table) throw new MysqlUserError('Falta el esquema o la tabla')
@@ -26,26 +22,57 @@ function validate(req: TableDataRequest): void {
   }
 }
 
-function fromClause(req: TableDataRequest): string {
+/**
+ * WHERE body for the request: the raw `where` (user's own SQL, own lines and
+ * parentheses so a trailing "-- note" or an OR cannot escape it) AND the
+ * structured filter (escaped by tableFilter). '' when neither is set.
+ * `columns` are the table's columns, required when the filter has conditions.
+ */
+export function buildWhere(req: TableDataRequest, columns: readonly string[] = []): string {
+  const parts: string[] = []
+  const raw = req.where?.trim()
+  if (raw) parts.push(`(\n${raw}\n)`)
+  const filter = buildFilterWhere(req.filter, columns)
+  if (filter) parts.push(`(${filter})`)
+  return parts.join(' AND ')
+}
+
+function fromClause(req: TableDataRequest, columns?: readonly string[]): string {
   let sql = `FROM ${escapeId(req.schema)}.${escapeId(req.table)}`
-  const where = req.where?.trim()
-  // Own lines + parentheses: a trailing "-- note" / "#" comment in the filter
-  // cannot swallow the LIMIT, and OR inside it cannot escape the clause.
-  if (where) sql += ` WHERE (\n${where}\n)`
+  const where = buildWhere(req, columns)
+  if (where) sql += ` WHERE ${where}`
   return sql
 }
 
-export function buildSelectSql(req: TableDataRequest): BuiltQuery {
+/**
+ * Paged SELECT. Everything is rendered to plain SQL (LIMIT/OFFSET are validated
+ * integers, filter values escaped by the driver): a `?` typed inside the raw
+ * WHERE must not be taken for a placeholder and consume a parameter.
+ */
+export function buildSelectSql(req: TableDataRequest, columns?: readonly string[]): string {
   validate(req)
-  let sql = `SELECT * ${fromClause(req)}`
+  let sql = `SELECT * ${fromClause(req, columns)}`
   if (req.orderBy) sql += ` ORDER BY ${escapeId(req.orderBy.column)} ${req.orderBy.direction}`
-  sql += ' LIMIT ? OFFSET ?'
-  return { sql, params: [req.limit, req.offset] }
+  sql += ` LIMIT ${req.limit} OFFSET ${req.offset}`
+  return sql
 }
 
-export function buildCountSql(req: TableDataRequest): string {
+export function buildCountSql(req: TableDataRequest, columns?: readonly string[]): string {
   validate(req)
-  return `SELECT /*+ MAX_EXECUTION_TIME(${COUNT_TIMEOUT_MS}) */ COUNT(*) AS total ${fromClause(req)}`
+  return `SELECT /*+ MAX_EXECUTION_TIME(${COUNT_TIMEOUT_MS}) */ COUNT(*) AS total ${fromClause(req, columns)}`
+}
+
+/** Column names for validating a structured filter (only fetched when it needs them). */
+export async function filterColumns(
+  q: Queryable,
+  req: Pick<TableDataRequest, 'schema' | 'table' | 'filter'>
+): Promise<string[]> {
+  if (!filterNeedsColumns(req.filter)) return []
+  const columns = (await listColumns(q, req.schema, req.table)).map((c) => c.name)
+  if (!columns.length) {
+    throw new MysqlUserError(`No se encontró la tabla ${req.schema}.${req.table}`)
+  }
+  return columns
 }
 
 /** Loads one page of a table plus its primary key and (best effort) total row count. */
@@ -53,12 +80,14 @@ export async function fetchTableData(
   session: FullSession,
   req: TableDataRequest
 ): Promise<TableDataPage> {
-  const select = buildSelectSql(req)
-  const countSql = buildCountSql(req)
+  validate(req)
   const started = performance.now()
+  const columnNames = await filterColumns(session, req)
+  const select = buildSelectSql(req, columnNames)
+  const countSql = buildCountSql(req, columnNames)
 
   const primaryKey = await primaryKeyColumns(session, req.schema, req.table)
-  const raw = await session.runStatement(select.sql, req.limit, select.params)
+  const raw = await session.runStatement(select, req.limit)
   const first = raw.resultSets[0]
   const columns = first ? first.fields.map(toQueryColumn) : []
   const rows = first ? first.rows.map(normalizeRow) : []

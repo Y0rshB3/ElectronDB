@@ -419,6 +419,42 @@ try {
       FROM shot_customers c LEFT JOIN shot_orders o ON o.customer_id = c.id
       GROUP BY c.id, c.name, c.country
   `)
+  // Grid editors: DATETIME(3), DATE, TIME, YEAR and a wide JSON column ("Texto" value panel).
+  await conn.query(`
+    DROP TABLE IF EXISTS shot_events;
+    CREATE TABLE shot_events (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(80) NOT NULL,
+      dateEnd DATETIME(3) NOT NULL,
+      day DATE NULL,
+      at_time TIME NULL,
+      season YEAR NULL,
+      payload JSON NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Eventos de demostración';
+  `)
+  const events = []
+  for (let i = 1; i <= 40; i++) {
+    const d = new Date(Date.UTC(2026, 8, 1) + i * 9 * 3600000)
+    const iso = d.toISOString().replace('T', ' ').slice(0, 23)
+    events.push([
+      `Evento ${i}`,
+      iso,
+      iso.slice(0, 10),
+      iso.slice(11, 19),
+      2020 + (i % 7),
+      JSON.stringify({
+        cliente: { id: i, nombre: `Cliente ${i}`, vip: i % 3 === 0 },
+        etiquetas: ['demo', i % 2 ? 'impar' : 'par'],
+        importe: Math.round(i * 137.5) / 10,
+        notas: null
+      })
+    ])
+  }
+  await conn.query(
+    'INSERT INTO shot_events (title, dateEnd, day, at_time, season, payload) VALUES ?',
+    [events]
+  )
+
   // Local copy of rb_shop that the rollback screens replace (rb_crm does not exist locally).
   await conn.query(`
     DROP DATABASE IF EXISTS rb_shop;

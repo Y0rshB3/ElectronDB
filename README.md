@@ -33,9 +33,10 @@ La interfaz está en español. El código y los comentarios están en inglés.
   clave privada), SSL, lista de bases de datos personalizada y consultas iniciales de sesión.
 - **Explorador de objetos**: tablas, vistas, funciones, procedimientos, eventos y usuarios.
 - **Editor de consultas** con autocompletado, formateo de SQL, varias sentencias y resultados editables cuando
-  vienen de una sola tabla con clave primaria.
+  vienen de una sola tabla con clave primaria. La conexión se puede cambiar desde la propia pestaña.
 - **Vista de datos** con edición de celdas, `NULL`, alta y baja de filas; los cambios se aplican en una
-  transacción y se deshacen todos si falla uno.
+  transacción y se deshacen todos si falla uno. Filtro visual estilo Navicat con paréntesis y perfiles,
+  selector de fecha y hora, columnas redimensionables y panel **Texto** con el valor completo de la celda.
 - **Diseñador de tablas** (columnas, índices, claves foráneas) y editor DDL de vistas y rutinas.
 - **Copias de seguridad `.nb3`**: crear, listar (incluidas las de Navicat, en solo lectura), restaurar en
   cualquier conexión y "rollback a local".
@@ -371,7 +372,7 @@ interruptor **Agrupar por paquete**, abajo a la derecha, está activado por defe
 - **Lote**: el resto (los lotes de Navicat, copias antiguas o hechas a mano) se agrupan por conexión y
   etiqueta (el sufijo del nombre, `…-backup-staging.nb3`) cuando cada copia se hizo menos de 10 minutos
   después de la anterior y no repite base de datos. Título `<etiqueta o «Sin etiqueta»> · <fecha de la
-  primera>`.
+primera>`.
 
 Un paquete necesita al menos dos copias; las sueltas siguen como filas normales. Los paquetes salen plegados:
 la flecha los despliega. Para restaurar el paquete entero en tu MySQL local:
@@ -448,6 +449,91 @@ Para programarlo con la app cerrada fuera de macOS:
 
   El registro de la ejecución queda en `/tmp/electrondb-cron.log` y en el `logs/` del perfil.
 
+### Cambiar la conexión de una consulta
+
+En la barra de la pestaña de consulta, a la izquierda de la base de datos, está el **selector de conexión**: cada
+conexión aparece con su color, su nombre y su entorno (Producción en rojo). Al cambiarla:
+
+- El SQL del editor se conserva. La conexión se abre si hacía falta.
+- Se recarga la lista de bases de datos: si la nueva conexión tiene una base con el mismo nombre se mantiene; si
+  no, queda sin base de datos seleccionada. El autocompletado pasa a usar la nueva conexión.
+- El título de la pestaña cambia a `consulta@base (conexión)` y los resultados anteriores se vacían (pertenecían
+  a la otra conexión).
+- No se puede cambiar mientras se ejecuta una consulta; si un resultado tiene cambios sin aplicar, primero
+  pregunta si quieres descartarlos.
+- Con una conexión de **Producción** la barra y el selector se tiñen de rojo, y las confirmaciones de escritura
+  se aplican siempre a la conexión **actual** de la pestaña.
+- Las consultas guardadas son de cada conexión: si abres una guardada y cambias de conexión, al pulsar
+  **Guardar** se guarda en la conexión nueva (la original no cambia). El botón lo indica con un icono y un aviso.
+
+### Filtrar datos de una tabla
+
+El botón **Filtro** de la vista de datos muestra u oculta el panel de filtro; con un filtro aplicado el botón
+muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee como frases, igual que en Navicat:
+
+```
+☑ email contiene jorge y
+☑ (
+☑   country está en la lista (ES, MX) o
+☑   credit_limit entre 1000 y 6000
+  ) y
+☐ city empieza por Val          ← desmarcada: se conserva, pero no se aplica
+```
+
+- Haz clic en cada palabra para cambiarla: la **columna** y el **operador** abren un menú, el **valor** se edita en
+  el sitio (`<?>` si está vacío; en columnas de fecha u hora con el calendario) y el **conector** alterna entre
+  `y` y `o`. Al lado del valor se indica el tipo (`[Número]`, `[Texto]`, `[Fecha]`...).
+- `+` añade una condición y `(+` un paréntesis (en la raíz o, desde la línea `)`, dentro de ese paréntesis). Los
+  paréntesis se pueden anidar.
+- Clic derecho en una línea: Insertar condición, Insertar paréntesis, Agrupar con paréntesis, Borrar condición,
+  Borrar paréntesis (conserva sus condiciones), Borrar paréntesis y condiciones, Limpiar todo y los **perfiles**.
+  Clic derecho en el espacio vacío o en una línea `)`: Añadir condición, Limpiar todo y los perfiles.
+- Operadores: `=`, `!=`, `<`, `<=`, `>`, `>=`, contiene, no contiene, empieza por, no empieza por, termina en, no
+  termina en, es nulo, no es nulo, está vacío, no está vacío, está en la lista, no está en la lista, entre, no
+  entre y `[Personalizado]` (un fragmento SQL tuyo para esa línea).
+- **Aplicar filtro** (o `Cmd/Ctrl+Enter`, o `Enter` al editar un valor) recarga la tabla desde la primera página;
+  el total y la paginación usan el mismo filtro. **Limpiar** quita el filtro y recarga todo.
+- **Editar como texto (WHERE)** muestra el `WHERE` que se ejecutaría para retocarlo a mano. Ese texto es SQL tuyo
+  y se ejecuta tal cual; al volver al editor visual se descarta lo editado (se avisa antes).
+- El filtro y la visibilidad del panel se conservan mientras la pestaña está abierta. Los **perfiles** (Guardar
+  perfil, Guardar perfil como…, Cargar perfil, Eliminar perfil) se guardan por conexión, base de datos y tabla
+  en `filter-profiles.json` del perfil.
+
+Cómo se interpreta, para que no haya sorpresas:
+
+- `y` tiene prioridad sobre `o`, como en SQL: `a o b y c` es `a o (b y c)`. Usa paréntesis para otro orden.
+- **está vacío** es `(columna = '' OR columna IS NULL)` (como Navicat); **no está vacío** es lo contrario.
+- `!=`, **no contiene**, **no está en la lista**, etc. siguen a SQL: las filas con `NULL` en esa columna no
+  aparecen. Usa **es nulo** si también las quieres.
+- **contiene / empieza por / termina en** buscan el texto literal: `%`, `_` y `\` no son comodines.
+- La SQL la construye el proceso principal: las columnas se comprueban contra la tabla real y los valores van
+  escapados por el controlador de MySQL. Solo `[Personalizado]` y el modo texto son SQL escrito por ti.
+
+### Editar fechas y horas
+
+Al editar una celda `DATE`, `DATETIME`, `TIMESTAMP`, `TIME` o `YEAR` el editor sigue siendo un campo de texto
+(puedes escribir o pegar `2026-09-30 23:45:00`) con un botón de calendario que también se abre con `Alt+↓`:
+
+- `DATE`: calendario. `DATETIME`/`TIMESTAMP`: calendario y hora con segundos (y fracción de segundo si la columna
+  la tiene, por ejemplo `DATETIME(3)`). `TIME`: horas, minutos y segundos (en el texto admite más de 24 h y
+  negativos, como MySQL). `YEAR`: selector de años.
+- **Hoy/Ahora** pone la fecha u hora de tu reloj; **NULL** solo aparece si la columna admite `NULL`.
+- `Enter` valida y guarda el cambio pendiente; `Esc` cancela. Un valor no válido se marca en rojo y no se guarda.
+- Se escribe siempre el formato de MySQL (`AAAA-MM-DD`, `AAAA-MM-DD hh:mm:ss[.ffffff]`, `hh:mm:ss`) sin
+  conversiones de zona horaria. Las fechas cero (`0000-00-00`) se muestran y se pueden conservar.
+
+### Columnas y panel Texto
+
+- Arrastra el borde derecho de una cabecera para cambiar el ancho de la columna (mínimo 48 px); doble clic en el
+  borde la ajusta al contenido visible (máximo 600 px). Los anchos se recuerdan por tabla (también al paginar,
+  refrescar o volver a abrirla). Editar una celda no cambia el ancho de su columna.
+- El botón **Texto** (vista de datos y resultados de consulta de una tabla) abre un panel inferior redimensionable
+  con el valor completo de la celda seleccionada: columna, tipo y tamaño; JSON formateado y coloreado; binarios
+  en hexadecimal; `NULL` como estado. Sigue a la celda activa también con las flechas.
+- Si la rejilla es editable, el panel también: el cambio queda pendiente como en la celda (Aplicar, Descartar,
+  `Cmd/Ctrl+S`). **Formatear JSON** guarda el JSON con sangría; si no, se guarda exactamente lo que escribes.
+  **NULL** solo aparece si la columna admite `NULL`. Las confirmaciones de producción no cambian.
+
 ## Dónde se guardan los datos
 
 El **perfil** es una carpeta por usuario que se llama como la app:
@@ -462,16 +548,17 @@ Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en
 `Navidog` (en Linux puede ser `navidog`). ElectronDB lo copia solo en el primer arranque: ver
 [Si venías de Navidog](#si-venías-de-navidog).
 
-| Archivo o carpeta  | Contenido                                                                   |
-| ------------------ | --------------------------------------------------------------------------- |
-| `connections.json` | Conexiones (sin contraseñas)                                                |
-| `credentials.json` | Contraseñas cifradas con el almacén del sistema                             |
-| `jobs.json`        | Trabajos de automatización                                                  |
-| `job-runs.json`    | Historial de ejecuciones                                                    |
-| `settings.json`    | Preferencias (carpeta de Navicat, carpeta de copias, tema, límite de filas) |
-| `logs/`            | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd      |
-| `backups/`         | Copias `.nb3` creadas por la app (carpeta por defecto)                      |
-| `notices.json`     | Avisos de arranque que ya cerraste                                          |
+| Archivo o carpeta      | Contenido                                                                   |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `connections.json`     | Conexiones (sin contraseñas)                                                |
+| `credentials.json`     | Contraseñas cifradas con el almacén del sistema                             |
+| `jobs.json`            | Trabajos de automatización                                                  |
+| `job-runs.json`        | Historial de ejecuciones                                                    |
+| `settings.json`        | Preferencias (carpeta de Navicat, carpeta de copias, tema, límite de filas) |
+| `logs/`                | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd      |
+| `backups/`             | Copias `.nb3` creadas por la app (carpeta por defecto)                      |
+| `notices.json`         | Avisos de arranque que ya cerraste                                          |
+| `filter-profiles.json` | Perfiles de filtro de la vista de datos (solo la definición del filtro)     |
 
 ### Copiar o mover el perfil
 

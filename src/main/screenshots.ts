@@ -76,7 +76,20 @@ window.__ndShotHelpers = (() => {
     if (!c) throw new Error('connection "${LOCAL}" not found (run scripts/seed-screenshots.mjs)')
     return c
   }
-  return { sleep, until, $, waitFor, click, idle, settle, local }
+  /** Layout check: the visible grid area must keep a usable height (value panel regression). */
+  function gridVisible(min = 120) {
+    const area = $('[data-test="grid-area"]')
+    if (!area) throw new Error('grid area not rendered')
+    const h = area.getBoundingClientRect().height
+    if (h < min) throw new Error('grid area too small: ' + Math.round(h) + 'px')
+    return h
+  }
+  async function valuePanel(on) {
+    const toggle = await waitFor('[data-test="value-toggle"]', 10000)
+    if ((toggle.getAttribute('aria-pressed') === 'true') !== on) toggle.click()
+    await sleep(200)
+  }
+  return { sleep, until, $, waitFor, click, idle, settle, local, gridVisible, valuePanel }
 })()
 true
 `
@@ -280,6 +293,170 @@ const STEPS: Step[] = [
       await H.click('[data-test="cell-1-2"]', 5000)
       await H.click('[data-test="set-null"]', 5000)
       await H.settle(S, 900)`
+  },
+  {
+    // Query tab connection picker (Navicat): every connection with its colour and environment.
+    name: '05k-query-connection-menu',
+    size: { width: 1280, height: 800 },
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      const c = H.local(S)
+      S.workspace.openQuery(c.id, '${SCHEMA}', {
+        sql: 'SELECT id, name, country, credit_limit FROM shot_customers ORDER BY id LIMIT 20;',
+        name: 'Clientes'
+      })
+      await H.sleep(900)
+      const field = await H.waitFor('[data-test="connection"] .v-field', 5000)
+      field.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await H.waitFor('[data-test="connection-option-shot-prod"]', 5000)
+      await H.sleep(400)`
+  },
+  {
+    // Production picked in the same tab: SQL kept, toolbar and picker tinted red.
+    name: '05l-query-connection-production',
+    size: { width: 1280, height: 800 },
+    script: `
+      await H.click('[data-test="connection-option-shot-prod"]', 5000)
+      await H.until(() => /Production Demo/.test(S.tabs.active.title), 15000)
+      await H.until(() => H.$('.query-view__bar.is-production'), 5000)
+      await H.click('[data-test="run"]', 10000)
+      await H.until(() => H.$('[data-test="tab-rs0"]'), 15000)
+      await H.until(() => /Editable/.test(H.$('[data-test="editability"]')?.textContent || ''), 15000)
+      // "Texto" on with no cell selected: the panel is only its header, the grid keeps its room.
+      await H.valuePanel(true)
+      await H.settle(S, 1500)
+      H.gridVisible()`
+  },
+  {
+    // Same tab with a cell selected: the value shows below a still visible grid.
+    name: '05l2-query-value-panel',
+    size: { width: 1280, height: 800 },
+    script: `
+      await H.click('[data-test="cell-1-1"]', 5000)
+      await H.waitFor('[data-test="value-panel-text"]', 5000)
+      await H.settle(S, 700)
+      H.gridVisible()`
+  },
+  {
+    // Navicat filter builder: sentences with a nested bracket and mixed y/o, applied.
+    name: '05m-table-filter',
+    size: { width: 1280, height: 800 },
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      const c = H.local(S)
+      let n = 0
+      const cond = (column, operator, values, connector, extra) => ({
+        id: 'shot-c' + ++n, kind: 'condition', enabled: true, column, operator,
+        values, connector, sql: '', ...extra
+      })
+      const group = (children, connector) => ({
+        id: 'shot-g' + ++n, kind: 'group', enabled: true, connector, children
+      })
+      const root = group([
+        cond('email', 'contains', ['cliente0'], 'AND'),
+        group([
+          cond('country', 'in', ['ES', 'MX', 'AR'], 'OR'),
+          cond('credit_limit', 'between', ['1000', '6000'], 'AND')
+        ], 'AND'),
+        cond('active', 'eq', ['1'], 'AND'),
+        cond('city', 'beginsWith', ['Val'], 'AND', { enabled: false })
+      ], 'AND')
+      S.tabs.open({
+        kind: 'tableData',
+        id: 'tableData:' + c.id + ':${SCHEMA}:shot_customers',
+        title: 'shot_customers@${SCHEMA} (' + c.name + ')',
+        connectionId: c.id,
+        schema: '${SCHEMA}',
+        objectName: 'shot_customers',
+        objectType: 'table',
+        payload: {
+          filterOpen: true,
+          filter: { mode: 'builder', root, text: '', generatedText: null, selectedId: 'shot-c3', profile: null }
+        }
+      })
+      await H.waitFor('[data-test="filter-line-condition"]', 15000)
+      await H.click('[data-test="apply-filter"]', 5000)
+      await H.until(() => /filtrado/.test(H.$('[data-test="footer"]')?.textContent || ''), 15000)
+      await H.settle(S, 900)
+      H.gridVisible()`
+  },
+  {
+    name: '05n-table-filter-operators',
+    size: { width: 1280, height: 800 },
+    script: `
+      const tokens = document.querySelectorAll('[data-test="filter-operator-token"]')
+      tokens[2].click()
+      await H.waitFor('.v-overlay--active [data-test="filter-operator-option-between"]', 5000)
+      await H.sleep(500)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    name: '05p-table-filter-context-menu',
+    size: { width: 1280, height: 800 },
+    script: `
+      await H.sleep(400)
+      const line = document.querySelectorAll('[data-test="filter-line-condition"]')[1]
+      const r = line.getBoundingClientRect()
+      line.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 260, clientY: r.top + 12 }))
+      await H.waitFor('.v-overlay--active [data-test="ctx-wrap"]', 5000)
+      await H.sleep(500)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    // "Editar como texto (WHERE)": the WHERE main generated, ready to tweak.
+    name: '05o-table-filter-text',
+    size: { width: 1280, height: 800 },
+    script: `
+      await H.sleep(300)
+      const toggle = await H.waitFor('[data-test="filter-text-mode"] input', 5000)
+      toggle.click()
+      await H.waitFor('[data-test="where"] textarea', 10000)
+      await H.settle(S, 700)`
+  },
+  {
+    // Date/time picker on a DATETIME(3) cell (calendar + time with milliseconds).
+    name: '05q-grid-datetime-picker',
+    size: { width: 1280, height: 800 },
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      const c = H.local(S)
+      S.workspace.openTableData(c.id, '${SCHEMA}', 'shot_events')
+      await H.until(() => /Evento 1/.test(H.$('[data-test="cell-0-1"]')?.textContent || ''), 15000)
+      await H.settle(S, 600)
+      await H.until(() => {
+        const cell = H.$('[data-test="cell-0-2"]')
+        if (!cell) return false
+        if (!cell.querySelector('[data-test="temporal-open"]'))
+          cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+        return cell.querySelector('[data-test="temporal-open"]')
+      }, 10000, 300)
+      await H.click('[data-test="cell-0-2"] [data-test="temporal-open"]', 5000)
+      await H.waitFor('.v-overlay--active [data-test="temporal-picker"]', 5000)
+      await H.sleep(500)`,
+    cleanup: `
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await H.sleep(200)
+      const input = H.$('[data-test="cell-input"]')
+      if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    // "Texto" value panel with pretty JSON, and a resized column (title, dragged wider).
+    name: '05r-grid-value-panel-json',
+    size: { width: 1280, height: 800 },
+    script: `
+      const toggle = await H.waitFor('[data-test="value-toggle"]', 5000)
+      if (toggle.getAttribute('aria-pressed') !== 'true') toggle.click()
+      const handle = await H.waitFor('[data-test="resize-title"]', 5000)
+      const r = handle.getBoundingClientRect()
+      const opts = (x) => ({ bubbles: true, clientX: x, clientY: r.top + 5, pointerId: 1 })
+      handle.dispatchEvent(new PointerEvent('pointerdown', opts(r.left)))
+      handle.dispatchEvent(new PointerEvent('pointermove', opts(r.left + 90)))
+      handle.dispatchEvent(new PointerEvent('pointerup', opts(r.left + 90)))
+      await H.sleep(200)
+      await H.click('[data-test="cell-1-6"]', 5000)
+      await H.waitFor('[data-test="value-panel-json"]', 5000)
+      await H.settle(S, 700)
+      H.gridVisible()`
   },
   {
     name: '06-designer',

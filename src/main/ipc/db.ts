@@ -4,7 +4,8 @@ import { getConnectionManager } from '../mysql/manager'
 import { executeScript } from '../mysql/query'
 import { applyRowChanges, isBinaryDataType } from '../mysql/rowChanges'
 import type { PooledSession } from '../mysql/session'
-import { fetchTableData } from '../mysql/tableData'
+import { fetchTableData, filterColumns } from '../mysql/tableData'
+import { buildFilterWhere } from '../mysql/tableFilter'
 import { listUsers } from '../mysql/users'
 import { assertProductionWriteConfirmed, assertScriptAllowed } from './productionGuard'
 import { handle } from './typed'
@@ -50,6 +51,11 @@ export function registerDbHandlers(ctx: AppContext): void {
     withSession(id, null, (s) => introspect.showCreate(s, schema, type, name))
   )
   handle('db:tableData', (id, request) => withSession(id, null, (s) => fetchTableData(s, request)))
+  handle('db:tableFilterSql', (id, schema, table, filter) =>
+    withSession(id, null, async (s) =>
+      buildFilterWhere(filter, await filterColumns(s, { schema, table, filter }))
+    )
+  )
   handle('db:applyRowChanges', (id, schema, table, changes, options) => {
     if (changes.length) assertProductionWriteConfirmed(ctx, id, options, 'Modificar filas')
     return withSession(id, null, async (s) => {

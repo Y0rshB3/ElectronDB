@@ -15,3 +15,38 @@ export function columnKind(type: string | null | undefined): ColumnKind {
   if (TEMPORAL.test(t)) return 'temporal'
   return 'text'
 }
+
+export interface ValueHint {
+  /** Placeholder shown in a filter value input. */
+  placeholder: string
+  /** Virtual keyboard / input mode hint. */
+  inputmode: 'decimal' | 'text'
+}
+
+/**
+ * Input hint for typing a value of this column (filter builder): the literal
+ * format MySQL expects for temporal types, "Número" for numeric ones.
+ */
+export function valueHint(type: string | null | undefined): ValueHint {
+  const t = (type ?? '').trim().toUpperCase()
+  if (/^YEAR\b/.test(t)) return { placeholder: 'AAAA', inputmode: 'decimal' }
+  if (/^(DATETIME|TIMESTAMP)\b/.test(t))
+    return { placeholder: 'AAAA-MM-DD hh:mm:ss', inputmode: 'text' }
+  if (/^DATE\b/.test(t)) return { placeholder: 'AAAA-MM-DD', inputmode: 'text' }
+  if (/^TIME\b/.test(t)) return { placeholder: 'hh:mm:ss', inputmode: 'text' }
+  if (columnKind(t) === 'number') return { placeholder: 'Número', inputmode: 'decimal' }
+  return { placeholder: 'Valor', inputmode: 'text' }
+}
+
+/** Short type label shown after a filter value, like Navicat's "[Número]". */
+export function typeLabel(type: string | null | undefined): string {
+  const t = (type ?? '').trim().toUpperCase()
+  if (!t) return ''
+  if (/^(DATETIME|TIMESTAMP)\b/.test(t)) return 'Fecha y hora'
+  if (/^DATE\b/.test(t)) return 'Fecha'
+  if (/^TIME\b/.test(t)) return 'Hora'
+  if (/^YEAR\b/.test(t)) return 'Año'
+  if (columnKind(t) === 'number') return 'Número'
+  if (/^(BLOB|TINYBLOB|MEDIUMBLOB|LONGBLOB|BINARY|VARBINARY|GEOMETRY)\b/.test(t)) return 'Binario'
+  return 'Texto'
+}

@@ -11,6 +11,7 @@ import type {
   RollbackRequest,
   RowChange,
   TableDataRequest,
+  TableFilter,
   WriteOptions
 } from '@shared/types'
 import { errorMessage, useNotify } from './composables/useNotify'
@@ -120,6 +121,13 @@ export const api = {
     showCreate: (c: string, s: string, type: ObjectType, name: string) =>
       invoke('db:showCreate', c, s, type, name),
     tableData: (c: string, req: TableDataRequest) => invokeSilent('db:tableData', c, req),
+    tableFilterSql: (c: string, s: string, t: string, filter: TableFilter) =>
+      invokeSilent('db:tableFilterSql', c, s, t, filter),
+    filterProfiles: (c: string, s: string, t: string) => invokeSilent('filters:list', c, s, t),
+    saveFilterProfile: (c: string, s: string, t: string, name: string, filter: TableFilter) =>
+      invoke('filters:save', c, s, t, name, filter),
+    deleteFilterProfile: (c: string, s: string, t: string, name: string) =>
+      invoke('filters:delete', c, s, t, name),
     applyRowChanges: (
       c: string,
       s: string,

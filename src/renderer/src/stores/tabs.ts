@@ -110,6 +110,17 @@ export const useTabsStore = defineStore('tabs', () => {
     if (tab) tab.payload = { ...tab.payload, ...patch }
   }
 
+  /**
+   * Points a tab at another connection/schema (query tab connection picker). The
+   * tab keeps its id and view; closeForConnection and the toolbar follow it.
+   */
+  function setTarget(id: string, connectionId: string, schema: string | null): void {
+    const tab = tabs.value.find((t) => t.id === id)
+    if (!tab) return
+    tab.connectionId = connectionId
+    tab.schema = schema ?? undefined
+  }
+
   function setTitle(id: string, title: string): void {
     const tab = tabs.value.find((t) => t.id === id)
     if (tab) tab.title = title
@@ -144,6 +155,7 @@ export const useTabsStore = defineStore('tabs', () => {
     open,
     setDirty,
     setPayload,
+    setTarget,
     setTitle,
     close,
     closeForConnection,

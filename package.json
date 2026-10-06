@@ -1,7 +1,7 @@
 {
   "name": "electrondb",
   "productName": "ElectronDB",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ElectronDB: private Navicat-compatible desktop MySQL client (connections, object explorer, query editor, .nb3 backups and automation).",
   "private": true,
   "main": "./out/main/index.js",

@@ -115,9 +115,12 @@ export function useWorkspace() {
     }
     const s = schema ?? (tree.selected?.connectionId === cid ? currentSchema() : null)
     const name = payload?.name ?? 'Consulta sin título'
+    // A tab with this id may since have been switched to another connection: open a new one.
+    const queryTabId = savedId ? `query:${cid}:${savedId}` : undefined
+    const idTaken = !!queryTabId && tabs.tabs.some((t) => t.id === queryTabId)
     tabs.open({
       kind: 'query',
-      id: payload?.savedQueryId ? `query:${cid}:${payload.savedQueryId}` : undefined,
+      id: idTaken ? undefined : queryTabId,
       title: `${name}${s ? `@${s}` : ''} (${connections.nameOf(cid)})`,
       connectionId: cid,
       schema: s ?? undefined,

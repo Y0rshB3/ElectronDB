@@ -54,6 +54,20 @@ describe('useWorkspace context resolution', () => {
     expect(tabs.tabs.filter((t) => t.kind === 'query')).toHaveLength(2)
   })
 
+  // A query tab switched to another connection keeps its id `query:a:q1`.
+  it('opens a new tab when the saved query tab now points at another connection', () => {
+    const ws = useWorkspace()
+    const tabs = useTabsStore()
+    ws.openQuery('a', 'shop', { savedQueryId: 'q1' })
+    const moved = tabs.active
+    tabs.setTarget(moved.id, 'b', null)
+    tabs.activate('objects')
+    ws.openQuery('a', 'shop', { savedQueryId: 'q1' })
+    expect(tabs.tabs.filter((t) => t.kind === 'query')).toHaveLength(2)
+    expect(tabs.active.id).not.toBe(moved.id)
+    expect(tabs.active.connectionId).toBe('a')
+  })
+
   it('uses the only connection when there is exactly one', async () => {
     setActivePinia(createPinia())
     installBridge({ 'connections:list': [makeConnection({ id: 'solo' })] })

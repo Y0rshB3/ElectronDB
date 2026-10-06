@@ -60,6 +60,19 @@ class ResizeObserverStub {
 
 export function setupDom(): Pinia {
   globalThis.ResizeObserver ??= ResizeObserverStub as never
+  // Vuetify menus position against the visual viewport, which jsdom lacks.
+  ;(globalThis as { visualViewport?: unknown }).visualViewport ??= {
+    width: 1280,
+    height: 800,
+    offsetLeft: 0,
+    offsetTop: 0,
+    pageLeft: 0,
+    pageTop: 0,
+    scale: 1,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined
+  }
+  document.elementsFromPoint ??= () => []
   const pinia = createPinia()
   setActivePinia(pinia)
   return pinia
@@ -72,6 +85,21 @@ export function openTab(input: OpenTabInput): WorkspaceTab {
 export async function mountView(view: Component, tab: WorkspaceTab, pinia: Pinia) {
   const wrapper = mount(view, {
     props: { tab },
+    attachTo: document.body,
+    global: { plugins: [pinia, vuetify], stubs: { SqlEditor: SqlEditorStub } }
+  })
+  await flushPromises()
+  return wrapper
+}
+
+/** Mounts any component with the test Vuetify + Pinia (props as given). */
+export async function mountComponent(
+  component: Component,
+  props: Record<string, unknown>,
+  pinia: Pinia
+) {
+  const wrapper = mount(component, {
+    props,
     attachTo: document.body,
     global: { plugins: [pinia, vuetify], stubs: { SqlEditor: SqlEditorStub } }
   })

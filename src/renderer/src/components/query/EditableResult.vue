@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRef, watch } from 'vue'
-import type { CellValue, QueryColumn } from '@shared/types'
+import type { CellValue, ColumnInfo, QueryColumn, TableStructure } from '@shared/types'
+import CellValuePanel from '@renderer/components/data/CellValuePanel.vue'
+import { isCellChanged } from '@renderer/components/data/rowEditing'
+import { useValuePanelPref } from '@renderer/components/data/useValuePanelPref'
 import { invokeSilent } from '@renderer/api'
 import ResultGrid from '@renderer/components/common/ResultGrid.vue'
 import ApplyErrorBanner from '@renderer/components/data/ApplyErrorBanner.vue'
@@ -53,16 +56,43 @@ const target = computed(() =>
   editability.value?.schema ? `${editability.value.schema}.${editability.value.table}` : null
 )
 
+/** Source table structure (declared types, nullability) once known. */
+const structure = ref<TableStructure | null>(null)
+const columnInfo = computed<(ColumnInfo | null)[]>(() =>
+  props.columns.map((c) => {
+    if (!structure.value || (c.table && c.table !== structure.value.name)) return null
+    const name = (c.sourceName ?? c.name).toLowerCase()
+    return structure.value.columns.find((i) => i.name.toLowerCase() === name) ?? null
+  })
+)
+/** Widths remembered per source table of the result (names and pixels only). */
+const widthKey = source.ok
+  ? `query:${props.connectionId}:${source.source.schema}:${source.source.table}`
+  : null
+
+const valuePref = useValuePanelPref()
+const activeCell = computed(() => {
+  const cell = active.value
+  const row = cell ? gridRows.value.find((r) => r.uid === cell.uid) : undefined
+  if (!cell || !row) return null
+  return { row, col: cell.col, value: row.values[cell.col] as CellValue }
+})
+function editFromPanel(value: CellValue): void {
+  const cell = activeCell.value
+  if (cell && editable.value && !cell.row.deleted) editor.onEdit(cell.row.uid, cell.col, value)
+}
+
 async function checkEditability(): Promise<void> {
   if (!source.ok) return
   try {
-    const structure = await invokeSilent(
+    const loaded = await invokeSilent(
       'db:tableStructure',
       props.connectionId,
       source.source.schema,
       source.source.table
     )
-    editability.value = decideEditability(props.columns, source.source, structure, props.rows)
+    structure.value = loaded
+    editability.value = decideEditability(props.columns, source.source, loaded, props.rows)
   } catch {
     editability.value = decideEditability(props.columns, source.source, null)
   }
@@ -172,6 +202,20 @@ defineExpose({ applyChanges, discard: editor.discard, dirty, editability })
         <v-icon icon="mdi-lock-outline" size="13" aria-hidden="true" />
         <span class="editable-result__chip-text">Solo lectura · {{ readOnlyReason }}</span>
       </span>
+      <template v-if="source.ok">
+        <span class="nd-viewbar__sep" aria-hidden="true" />
+        <v-btn
+          prepend-icon="mdi-text-box-outline"
+          size="small"
+          :class="{ 'is-active': valuePref.open }"
+          class="editable-result__toggle"
+          :aria-pressed="valuePref.open"
+          title="Mostrar el valor completo de la celda seleccionada"
+          data-test="value-toggle"
+          @click="valuePref.open = !valuePref.open"
+          >Texto</v-btn
+        >
+      </template>
       <template v-if="editable">
         <span class="nd-viewbar__sep" aria-hidden="true" />
         <RowEditActions
@@ -197,7 +241,11 @@ defineExpose({ applyChanges, discard: editor.discard, dirty, editability })
       @close="applyError = null"
     />
 
-    <div class="editable-result__grid">
+    <div
+      class="editable-result__grid"
+      :style="source.ok && valuePref.open ? { minHeight: 'min(160px, 70%)' } : undefined"
+      data-test="grid-area"
+    >
       <ResultGrid v-if="!source.ok" :columns="columns" :rows="props.rows" :truncated="truncated" />
       <template v-else>
         <EditableGrid
@@ -211,11 +259,23 @@ defineExpose({ applyChanges, discard: editor.discard, dirty, editability })
           :readonly="!editable"
           :error-row="applyError?.uid ?? null"
           :error-col="applyError?.col ?? null"
+          :column-info="columnInfo"
+          :width-key="widthKey"
           @sort="toggleSort"
           @edit="editor.onEdit"
         />
       </template>
     </div>
+    <CellValuePanel
+      v-if="source.ok && valuePref.open"
+      :column="activeCell ? (columns[activeCell.col] ?? null) : null"
+      :info="activeCell ? columnInfo[activeCell.col] : null"
+      :value="activeCell?.value ?? null"
+      :editable="editable && !!activeCell && !activeCell.row.deleted"
+      :changed="!!activeCell && isCellChanged(activeCell.row, activeCell.col)"
+      view="query"
+      @edit="editFromPanel"
+    />
     <div v-if="source.ok" class="editable-result__footer" data-test="result-footer">
       <span class="nd-mono">{{ loadedCount }}</span> filas
       <span v-if="truncated" class="editable-result__truncated">· resultado truncado</span>
@@ -254,9 +314,14 @@ defineExpose({ applyChanges, discard: editor.discard, dirty, editability })
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.editable-result__toggle.is-active {
+  color: var(--nd-accent);
+  background: rgba(var(--nd-accent-rgb), 0.1);
+}
 .editable-result__grid {
   position: relative;
-  flex: 1 1 auto;
+  /* Basis 0: the rows never compete with the value panel for space; min-height (inline) protects the grid. */
+  flex: 1 1 0;
   min-height: 0;
 }
 .editable-result__footer {

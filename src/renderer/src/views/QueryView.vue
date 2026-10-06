@@ -15,10 +15,12 @@ import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { cached, type SchemaProvider } from '@renderer/components/common/editor/sqlCompletion'
 import { invokeSilent } from '@renderer/api'
 import EditableResult from '@renderer/components/query/EditableResult.vue'
+import QueryConnectionPicker from '@renderer/components/query/QueryConnectionPicker.vue'
 import QueryMessages from '@renderer/components/query/QueryMessages.vue'
 import { beautifySql } from '@renderer/components/query/beautifySql'
 import { analyzeWrites } from '@renderer/components/query/writeGuard'
 import { useConfirm } from '@renderer/composables/useConfirm'
+import { useWorkspace } from '@renderer/composables/useWorkspace'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useQueriesStore } from '@renderer/stores/queries'
@@ -34,11 +36,14 @@ const connections = useConnectionsStore()
 const settings = useSettingsStore()
 const notify = useNotify()
 const { ask, confirmDestructive } = useConfirm()
+const workspace = useWorkspace()
 
 const editor = ref<InstanceType<typeof SqlEditor> | null>(null)
 const sql = ref('')
 const savedSql = ref('')
 const savedQueryId = ref<string | null>(null)
+/** Connection the saved query belongs to (queries are stored per connection). */
+const savedConnectionId = ref<string | null>(null)
 const queryName = ref('Consulta sin título')
 const schema = ref<string | null>(props.tab.schema ?? null)
 const schemas = ref<string[]>([])
@@ -133,7 +138,26 @@ function onSplitKey(event: KeyboardEvent): void {
 }
 
 const connectionId = computed(() => props.tab.connectionId ?? '')
-watch(connectionId, () => (completion.value = makeProvider()))
+const production = computed(() => connections.isProduction(connectionId.value))
+/** Switching connection (opening it, loading its databases). */
+const switching = ref(false)
+/** The saved query was opened on another connection: the next save stores it on this one. */
+const savedElsewhere = computed(
+  () =>
+    !!savedQueryId.value &&
+    !!savedConnectionId.value &&
+    savedConnectionId.value !== connectionId.value
+)
+const saveTitle = computed(() =>
+  savedElsewhere.value
+    ? `Guardar (Cmd+S): la consulta se guardará en «${connections.nameOf(connectionId.value)}». La original de «${connections.nameOf(savedConnectionId.value ?? '')}» no cambia.`
+    : 'Guardar (Cmd+S)'
+)
+const connectionLockReason = computed(() => {
+  if (running.value) return 'Detén la consulta en curso para cambiar de conexión'
+  if (switching.value) return 'Cambiando de conexión…'
+  return null
+})
 const resultSets = computed(() =>
   results.value
     .map((r, index) => ({ r, index }))
@@ -146,7 +170,7 @@ const resultSets = computed(() =>
     }))
 )
 const errorCount = computed(() => results.value.filter((r) => r.error).length)
-const sqlDirty = computed(() => sql.value !== savedSql.value)
+const sqlDirty = computed(() => sql.value !== savedSql.value || savedElsewhere.value)
 const hasPendingEdits = computed(() => Object.values(pendingEdits.value).some(Boolean))
 // The tab close guard asks while the SQL is unsaved or a result holds unapplied edits.
 const dirty = computed(() => sqlDirty.value || hasPendingEdits.value)
@@ -200,6 +224,7 @@ function loadPayload(): void {
     const saved = queries.get(connectionId.value, id)
     if (saved) {
       savedQueryId.value = saved.id
+      savedConnectionId.value = connectionId.value
       queryName.value = saved.name
       sql.value = saved.sql
       savedSql.value = saved.sql
@@ -213,7 +238,7 @@ function loadPayload(): void {
 }
 
 async function run(selectionOnly = false): Promise<void> {
-  if (running.value || !connectionId.value) return
+  if (running.value || switching.value || !connectionId.value) return
   const selection = editor.value?.getSelection() ?? ''
   const script = (selectionOnly ? selection : selection || sql.value).trim()
   if (!script) {
@@ -293,14 +318,19 @@ function format(): void {
 }
 
 function persist(name: string, id: string | null): void {
-  if (!connectionId.value) return
-  const saved = queries.save(connectionId.value, {
-    id: id ?? undefined,
+  const cid = connectionId.value
+  if (!cid) return
+  // Saved queries live per connection: a query moved here from another connection is
+  // saved on this one (same-name entries are overwritten); the original is left as is.
+  const target = id && queries.get(cid, id) ? id : null
+  const saved = queries.save(cid, {
+    id: target ?? undefined,
     name,
     sql: sql.value,
     schema: schema.value
   })
   savedQueryId.value = saved.id
+  savedConnectionId.value = cid
   // Lets useWorkspace.openQuery focus this tab when the saved query is opened from the tree.
   tabs.setPayload(props.tab.id, { savedQueryId: saved.id })
   queryName.value = saved.name
@@ -328,6 +358,62 @@ function confirmSaveAs(): void {
   saveDialog.value = false
   // Saving under an existing name overwrites that query (store dedupes by name).
   persist(name, clash ? clash.id : null)
+}
+
+/**
+ * Navicat-style connection picker: points this tab at another connection,
+ * keeping the SQL. Refused while a query runs; unapplied result edits must be
+ * discarded first (the results of the old connection are cleared, never
+ * applied to the new one). Keeps the database when the new connection has one
+ * with the same name. Production write guards read the tab's connection at run
+ * time, so they follow the switch.
+ */
+async function switchConnection(id: string): Promise<boolean> {
+  if (!id || id === connectionId.value || switching.value) return false
+  if (running.value) {
+    notify.warning('Detén la consulta en curso antes de cambiar de conexión')
+    return false
+  }
+  if (
+    hasPendingEdits.value &&
+    !(await ask({
+      title: 'Cambios sin aplicar',
+      message: 'Hay cambios sin aplicar en los resultados. Si cambias de conexión se descartarán.',
+      confirmText: 'Descartar y cambiar',
+      color: 'warning'
+    }))
+  )
+    return false
+  switching.value = true
+  try {
+    // Opening reports its own error; the tab stays on the current connection.
+    if (!(await workspace.ensureOpen(id))) return false
+    let names: string[] = []
+    try {
+      names = (await api.db.databases(id)).map((d) => d.name)
+    } catch {
+      names = []
+    }
+    const keep = schema.value && names.includes(schema.value) ? schema.value : null
+    // Results (and their editable grids) belong to the old connection.
+    runSeq++
+    results.value = []
+    pendingEdits.value = {}
+    runId.value++
+    totalMs.value = null
+    notice.value = null
+    resultTab.value = 'messages'
+    schemas.value = names
+    tabs.setTarget(props.tab.id, id, keep)
+    // Fresh autocompletion metadata: the cache belongs to the old connection.
+    completion.value = makeProvider()
+    schema.value = keep
+    updateTitle()
+    void loadCompletion()
+    return true
+  } finally {
+    switching.value = false
+  }
 }
 
 /**
@@ -369,18 +455,23 @@ onMounted(async () => {
   await Promise.all([loadSchemas(), loadCompletion()])
 })
 
-defineExpose({ run, stop, results, schema })
+defineExpose({ run, stop, results, schema, switchConnection })
 </script>
 
 <template>
   <div class="nd-view query-view">
-    <div class="nd-viewbar" role="toolbar" aria-label="Acciones de consulta">
+    <div
+      class="nd-viewbar query-view__bar"
+      :class="{ 'is-production': production }"
+      role="toolbar"
+      aria-label="Acciones de consulta"
+    >
       <v-btn
         prepend-icon="mdi-play"
         size="small"
         color="primary"
         variant="flat"
-        :disabled="running || !connectionId"
+        :disabled="running || switching || !connectionId"
         title="Ejecutar (Cmd+R / Cmd+Enter). Si hay texto seleccionado se ejecuta solo la selección."
         data-test="run"
         @click="run()"
@@ -393,40 +484,62 @@ defineExpose({ run, stop, results, schema })
         color="error"
         class="ml-1"
         :disabled="!running"
+        aria-label="Detener"
+        title="Detener"
         data-test="stop"
         @click="stop"
-        >Detener</v-btn
+        ><span class="query-view__label">Detener</span></v-btn
       >
       <span class="nd-viewbar__sep" aria-hidden="true" />
       <v-btn
         prepend-icon="mdi-auto-fix"
         size="small"
         title="Embellecer SQL (Cmd+B): la selección o todo el editor"
+        aria-label="Embellecer"
         :disabled="running"
         data-test="format"
         @click="format"
       >
-        Embellecer
+        <span class="query-view__label">Embellecer</span>
       </v-btn>
       <v-btn
         prepend-icon="mdi-content-save-outline"
         size="small"
-        title="Guardar (Cmd+S)"
+        :title="saveTitle"
+        aria-label="Guardar"
         data-test="save"
         @click="save"
-        >Guardar</v-btn
-      >
+        ><span class="query-view__label">Guardar</span
+        ><v-icon
+          v-if="savedElsewhere"
+          icon="mdi-swap-horizontal"
+          size="14"
+          class="query-view__moved"
+          aria-label="Se guardará en la conexión actual"
+          data-test="save-moved"
+      /></v-btn>
       <v-btn
         prepend-icon="mdi-content-save-edit-outline"
         size="small"
+        title="Guardar como"
+        aria-label="Guardar como"
         data-test="save-as"
         @click="saveAs"
-        >Guardar como</v-btn
+        ><span class="query-view__label">Guardar como</span></v-btn
       >
       <span class="nd-viewbar__spacer" />
+      <QueryConnectionPicker
+        :model-value="connectionId"
+        :connections="connections.sorted"
+        :disabled="running || switching"
+        :disabled-reason="connectionLockReason"
+        class="query-view__conn"
+        @update:model-value="switchConnection"
+      />
       <v-select
         v-model="schema"
         :items="schemas"
+        :disabled="switching"
         placeholder="Base de datos"
         aria-label="Base de datos"
         prepend-inner-icon="mdi-database-outline"
@@ -621,8 +734,40 @@ defineExpose({ run, stop, results, schema })
 
 <style scoped src="../components/data/viewChrome.css"></style>
 <style scoped>
+/* Production connection: a red rule under the toolbar, on top of the red picker. */
+.query-view__bar {
+  /* Size container: secondary buttons drop their labels before the pickers get squeezed. */
+  container: qbar / inline-size;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  border-bottom: 2px solid transparent;
+}
+@container qbar (max-width: 1060px) {
+  .query-view__label {
+    display: none;
+  }
+  .query-view__bar :deep(.v-btn:has(.query-view__label) .v-btn__prepend) {
+    margin-inline: 0;
+  }
+  .query-view__bar :deep(.v-btn:has(.query-view__label)) {
+    min-width: 0;
+    padding: 0 8px;
+  }
+}
+.query-view__bar.is-production {
+  border-bottom-color: color-mix(in srgb, var(--nd-error) 55%, transparent);
+  background: linear-gradient(to bottom, transparent, var(--nd-error-soft));
+}
+.query-view__conn {
+  margin-right: 6px;
+}
+.query-view__moved {
+  margin-left: 4px;
+  color: var(--nd-warning);
+}
 .query-view__schema {
-  flex: 0 1 240px;
+  /* Small basis: the bar wraps only when the minimum widths no longer fit. */
+  flex: 1 1 170px;
   min-width: 170px;
   max-width: 240px;
 }

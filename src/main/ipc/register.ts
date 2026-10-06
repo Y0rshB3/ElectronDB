@@ -3,6 +3,7 @@ import { registerAppHandlers } from './app'
 import { registerBackupsHandlers } from './backups'
 import { registerConnectionsHandlers } from './connections'
 import { registerDbHandlers } from './db'
+import { registerFiltersHandlers } from './filters'
 import { registerJobsHandlers } from './jobs'
 import { registerNavicatHandlers } from './navicat'
 
@@ -14,6 +15,7 @@ export function registerAllHandlers(ctx: AppContext): void {
   registerAppHandlers(ctx)
   registerConnectionsHandlers(ctx)
   registerDbHandlers(ctx)
+  registerFiltersHandlers(ctx)
   registerBackupsHandlers(ctx)
   registerJobsHandlers(ctx)
   registerNavicatHandlers(ctx)

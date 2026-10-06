@@ -251,6 +251,87 @@ export interface TableDataRequest {
   orderBy?: { column: string; direction: 'ASC' | 'DESC' } | null
   /** Raw WHERE clause without the keyword, run as-is. */
   where?: string | null
+  /**
+   * Structured filter (Navicat filter builder). Main turns it into a WHERE with
+   * escaped identifiers checked against the table's columns and escaped values.
+   * When both `where` and `filter` are given they are combined with AND.
+   */
+  filter?: TableFilter | null
+}
+
+/**
+ * Filter builder operators. Labels live in the renderer; main maps each one to SQL:
+ * - eq/ne/lt/le/gt/ge: `col = ?`, `col <> ?`... (NULL never matches, like SQL)
+ * - contains/beginsWith/endsWith (+ not*): `col [NOT] LIKE ?` with %, _ and \ escaped
+ * - isNull/isNotNull: `col IS [NOT] NULL`
+ * - isEmpty: `(col = '' OR col IS NULL)`; isNotEmpty: `(col <> '' AND col IS NOT NULL)`
+ * - in/notIn: `col [NOT] IN (?, ?...)` with one value per list item
+ * - between/notBetween: `col [NOT] BETWEEN ? AND ?`
+ * - custom: the row's raw SQL fragment, run as-is (same trust level as the raw WHERE)
+ * Siblings are joined with their connectors in order; like SQL, AND binds tighter
+ * than OR (`a OR b AND c` = `a OR (b AND c)`): brackets (groups) set any other order.
+ * Disabled conditions and empty groups are skipped.
+ */
+export type TableFilterOperator =
+  | 'eq'
+  | 'ne'
+  | 'lt'
+  | 'le'
+  | 'gt'
+  | 'ge'
+  | 'contains'
+  | 'notContains'
+  | 'beginsWith'
+  | 'notBeginsWith'
+  | 'endsWith'
+  | 'notEndsWith'
+  | 'isNull'
+  | 'isNotNull'
+  | 'isEmpty'
+  | 'isNotEmpty'
+  | 'in'
+  | 'notIn'
+  | 'between'
+  | 'notBetween'
+  | 'custom'
+
+export type TableFilterJoin = 'AND' | 'OR'
+
+/**
+ * One condition line. `connector` joins it with the NEXT sibling (Navicat "y"/"o");
+ * the last item's connector is unused.
+ */
+export interface TableFilterCondition {
+  kind: 'condition'
+  enabled: boolean
+  /** Table column (ignored by `custom`). */
+  column: string
+  operator: TableFilterOperator
+  /** One value; two for between/notBetween; the list items for in/notIn; none otherwise. */
+  values: string[]
+  connector: TableFilterJoin
+  /** Raw SQL fragment of a `custom` row. */
+  sql?: string | null
+}
+
+/** Bracket: its children are combined in order with their own connectors. Groups nest. */
+export interface TableFilterGroup {
+  kind: 'group'
+  enabled: boolean
+  connector: TableFilterJoin
+  children: TableFilterNode[]
+}
+
+export type TableFilterNode = TableFilterCondition | TableFilterGroup
+
+/** The root group (its own connector and brackets are not rendered). */
+export type TableFilter = TableFilterGroup
+
+/** Saved filter of one table (Navicat filter profile). */
+export interface TableFilterProfile {
+  name: string
+  filter: TableFilter
+  updatedAt: string
 }
 
 export interface TableDataPage {

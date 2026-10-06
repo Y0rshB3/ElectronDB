@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { CellValue, QueryColumn } from '@shared/types'
+import type { CellValue, ColumnInfo, QueryColumn } from '@shared/types'
+import { useColumnWidthsStore } from '@renderer/stores/columnWidths'
 import { columnKind, type ColumnKind } from './columnKind'
 import { displayCell, isCellChanged, type ActiveCell, type EditableRow } from './rowEditing'
+import TemporalInput from './TemporalInput.vue'
+import { temporalSpec, type TemporalSpec } from './temporal'
 
 const props = defineProps<{
   columns: QueryColumn[]
@@ -15,6 +18,13 @@ const props = defineProps<{
   /** Row (and cell) whose change made the last apply fail. */
   errorRow?: string | null
   errorCol?: number | null
+  /** Declared column info aligned with `columns` (nullability, datetime(3)...), when known. */
+  columnInfo?: (ColumnInfo | null | undefined)[]
+  /**
+   * Remembers column widths under this key (connection + table) across reloads and
+   * reopening; without it widths live as long as the grid.
+   */
+  widthKey?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -27,12 +37,82 @@ const active = defineModel<ActiveCell | null>('active', { default: null })
 
 /** Presentation only: numbers right aligned in mono, dates in mono. */
 const kinds = computed<ColumnKind[]>(() => props.columns.map((c) => columnKind(c.type)))
+/** Date/time picker per column (DATE, DATETIME/TIMESTAMP with fsp, TIME, YEAR). */
+const specs = computed<(TemporalSpec | null)[]>(() =>
+  props.columns.map((c, i) => temporalSpec(c.type, props.columnInfo?.[i]?.columnType))
+)
+const nullable = (col: number): boolean => props.columnInfo?.[col]?.nullable ?? true
+
+/* ---------- column widths (drag the header edge, double-click to fit) ---------- */
+
+const MIN_COL_WIDTH = 48
+const MAX_FIT_WIDTH = 600
+const widthsStore = useColumnWidthsStore()
+const localWidths = ref<Record<string, number>>({})
+const widths = computed<Record<string, number>>(() =>
+  props.widthKey ? widthsStore.get(props.widthKey) : localWidths.value
+)
+function setWidth(name: string, width: number): void {
+  const w = Math.max(MIN_COL_WIDTH, Math.round(width))
+  if (props.widthKey) widthsStore.set(props.widthKey, name, w)
+  else localWidths.value = { ...localWidths.value, [name]: w }
+}
+/** Inline sizing of a resized column (th and td); untouched columns keep content sizing. */
+const colStyles = computed(() =>
+  props.columns.map((c) => {
+    const w = widths.value[c.name]
+    return w
+      ? { width: `${w}px`, minWidth: `${w}px`, maxWidth: `${w}px`, '--col-w': `${w - 24}px` }
+      : undefined
+  })
+)
+
+function startResize(event: PointerEvent, col: number): void {
+  const th = (event.currentTarget as HTMLElement).closest('th')
+  if (!th) return
+  const handle = event.currentTarget as HTMLElement
+  try {
+    handle.setPointerCapture?.(event.pointerId)
+  } catch {
+    /* synthetic or already released pointer: dragging still works while over the handle */
+  }
+  const startX = event.clientX
+  const startW = th.getBoundingClientRect().width
+  const name = props.columns[col].name
+  resizing.value = true
+  const onMove = (e: PointerEvent): void => setWidth(name, startW + e.clientX - startX)
+  const onUp = (): void => {
+    resizing.value = false
+    handle.removeEventListener('pointermove', onMove)
+    handle.removeEventListener('pointerup', onUp)
+    handle.removeEventListener('pointercancel', onUp)
+  }
+  handle.addEventListener('pointermove', onMove)
+  handle.addEventListener('pointerup', onUp)
+  handle.addEventListener('pointercancel', onUp)
+}
+
+/** Double-click on the edge: fit the header and the rendered values (capped). */
+function autoFit(col: number): void {
+  const el = root.value
+  if (!el) return
+  let content = 0
+  el.querySelectorAll<HTMLElement>(`td[data-col="${col}"] .cell-value`).forEach((v) => {
+    content = Math.max(content, v.scrollWidth)
+  })
+  const header = el.querySelector<HTMLElement>(`th[data-col="${col}"] .header-cell`)
+  content = Math.max(content, (header?.scrollWidth ?? 0) + 8)
+  setWidth(props.columns[col].name, Math.min(MAX_FIT_WIDTH, content + 26))
+}
+const resizing = ref(false)
 
 const editing = ref<ActiveCell | null>(null)
 const draft = ref('')
 /** True once the user typed in the editor: lets an emptied NULL cell become '' instead of staying NULL. */
 const typed = ref(false)
 const inputRef = ref<HTMLInputElement[] | HTMLInputElement | null>(null)
+type TemporalEditor = InstanceType<typeof TemporalInput>
+const temporalRef = ref<TemporalEditor[] | TemporalEditor | null>(null)
 let lastClicked: number | null = null
 
 function isEditing(uid: string, col: number): boolean {
@@ -73,9 +153,55 @@ async function startEdit(uid: string, col: number): Promise<void> {
   draft.value = value === null ? '' : displayCell(value)
   typed.value = false
   await nextTick()
+  if (specs.value[col]) return // TemporalInput focuses itself
   const el = Array.isArray(inputRef.value) ? inputRef.value[0] : inputRef.value
   el?.focus()
   el?.select()
+}
+
+/** Commits a value decided by the temporal editor (validated literal, or null). */
+function commitValue(value: string | null): void {
+  if (!editing.value) return
+  const { uid, col } = editing.value
+  const row = props.rows.find((r) => r.uid === uid)
+  editing.value = null
+  if (!row) return
+  const current = row.values[col]
+  if (value === null ? current === null : current !== null && displayCell(current) === value) return
+  emit('edit', uid, col, value)
+}
+
+function onTemporalCommit(value: string | null): void {
+  commitValue(value)
+  move(1, 0)
+  root.value?.focus()
+}
+
+/** Leaving a temporal editor commits only valid text; invalid text keeps the editor open. */
+function onTemporalLeave(): void {
+  const editor = Array.isArray(temporalRef.value) ? temporalRef.value[0] : temporalRef.value
+  if (!editor) return commit()
+  editor.tryCommit()
+}
+
+function onTemporalKey(event: KeyboardEvent): void {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    onTemporalLeave()
+    return
+  }
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    event.stopPropagation()
+    const editor = Array.isArray(temporalRef.value) ? temporalRef.value[0] : temporalRef.value
+    if (editor?.tryCommit() ?? true) move(0, event.shiftKey ? -1 : 1)
+    return
+  }
+  event.stopPropagation()
+}
+
+function cancelTemporal(): void {
+  cancel()
+  root.value?.focus()
 }
 
 function commit(): void {
@@ -164,7 +290,7 @@ async function revealError(): Promise<void> {
 }
 watch(() => [props.errorRow, props.errorCol], revealError)
 
-defineExpose({ startEdit, revealError })
+defineExpose({ startEdit, revealError, autoFit })
 </script>
 
 <template>
@@ -187,8 +313,10 @@ defineExpose({ startEdit, revealError })
             :class="[`kind-${kinds[c]}`, { 'is-sorted': !!sortIcon(col.name) }]"
             :aria-sort="ariaSort(col.name)"
             :title="`${col.name} · ${col.type}`"
+            :style="colStyles[c]"
+            :data-col="c"
             :data-test="`header-${col.name}`"
-            @click="emit('sort', col.name)"
+            @click="!resizing && emit('sort', col.name)"
           >
             <span class="header-cell">
               <v-icon
@@ -206,6 +334,16 @@ defineExpose({ startEdit, revealError })
                 class="header-cell__sort"
               />
             </span>
+            <span
+              class="col-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              :aria-label="`Redimensionar ${col.name} (doble clic: ajustar al contenido)`"
+              :data-test="`resize-${col.name}`"
+              @pointerdown.stop.prevent="startResize($event, c)"
+              @click.stop
+              @dblclick.stop="autoFit(c)"
+            />
           </th>
         </tr>
       </thead>
@@ -237,25 +375,56 @@ defineExpose({ startEdit, revealError })
                 'cell-error': !!errorRow && row.uid === errorRow && errorCol === c
               }
             ]"
+            :style="colStyles[c]"
+            :data-col="c"
             :data-test="`cell-${index}-${c}`"
             @click="clickCell(row.uid, c, index)"
             @dblclick="startEdit(row.uid, c)"
           >
-            <input
+            <!--
+              The value stays in the flow (hidden while editing) so the column keeps
+              its width and the row its height; the editor overlays the cell box.
+            -->
+            <span
+              class="cell-value"
+              :class="{ 'is-sizer': isEditing(row.uid, c) }"
+              :title="isEditing(row.uid, c) ? undefined : displayCell(row.values[c])"
+              :aria-hidden="isEditing(row.uid, c) || undefined"
+              >{{ displayCell(row.values[c]) }}</span
+            >
+            <span
               v-if="isEditing(row.uid, c)"
-              ref="inputRef"
-              v-model="draft"
-              class="cell-input"
-              :aria-label="`Editar ${col.name}`"
-              data-test="cell-input"
-              :placeholder="row.values[c] === null ? 'NULL' : undefined"
-              @input="typed = true"
-              @keydown="onInputKey"
-              @blur="commit"
-            />
-            <span v-else class="cell-value" :title="displayCell(row.values[c])">{{
-              displayCell(row.values[c])
-            }}</span>
+              class="cell-editor"
+              :class="{ 'is-temporal': !!specs[c] }"
+              data-test="cell-editor"
+            >
+              <TemporalInput
+                v-if="specs[c]"
+                ref="temporalRef"
+                v-model="draft"
+                :spec="specs[c]!"
+                :nullable="nullable(c)"
+                :label="`Editar ${col.name}`"
+                :placeholder="row.values[c] === null ? 'NULL' : undefined"
+                autofocus
+                @commit="onTemporalCommit"
+                @cancel="cancelTemporal"
+                @leave="onTemporalLeave"
+                @keydown="onTemporalKey"
+              />
+              <input
+                v-else
+                ref="inputRef"
+                v-model="draft"
+                class="cell-input"
+                :aria-label="`Editar ${col.name}`"
+                data-test="cell-input"
+                :placeholder="row.values[c] === null ? 'NULL' : undefined"
+                @input="typed = true"
+                @keydown="onInputKey"
+                @blur="commit"
+              />
+            </span>
           </td>
         </tr>
       </tbody>
@@ -339,10 +508,39 @@ tbody tr.row-deleted::after {
 }
 .cell-value {
   display: inline-block;
-  max-width: 320px;
+  max-width: var(--col-w, 320px);
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+}
+
+/* ---- Column resize handle ---- */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  z-index: 2;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+.col-resizer::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--nd-dur) var(--nd-ease);
+}
+th:hover .col-resizer::after {
+  background: var(--nd-border-strong);
+}
+.col-resizer:hover::after,
+.col-resizer:active::after {
+  background: var(--nd-accent);
 }
 
 /* ---- Header ---- */
@@ -511,16 +709,32 @@ td.cell-null .cell-value {
   color: var(--nd-text-muted);
 }
 td.cell-editing {
-  padding: 0;
+  /* Same padding as any cell: the hidden value keeps the column width unchanged. */
   background: var(--nd-bg-input) !important;
   box-shadow: var(--nd-glow);
   position: relative;
-  z-index: 0;
+  z-index: 2;
+  overflow: visible;
+}
+.cell-value.is-sizer {
+  visibility: hidden;
+}
+.cell-editor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+/* Room for the calendar button without squeezing the value: it overhangs the next cell. */
+.cell-editor.is-temporal {
+  right: auto;
+  width: calc(100% + 26px);
+  background: var(--nd-bg-raised);
+  box-shadow: inset 0 0 0 1px var(--nd-accent);
+  border-radius: 0 var(--nd-radius-sm) var(--nd-radius-sm) 0;
 }
 .cell-input {
   width: 100%;
-  min-width: 96px;
-  height: calc(var(--grid-row-h) - 1px);
+  height: 100%;
   padding: 0 12px;
   background: transparent;
   color: var(--nd-text);
