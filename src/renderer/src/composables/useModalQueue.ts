@@ -4,13 +4,14 @@ import { useUiStore } from '@renderer/stores/ui'
 export const MODAL_RETRY_MS = 700
 
 /**
- * True while any modal is on screen: the global ones tracked in the ui store
+ * True while any modal is on screen: the guided tour, the global ones tracked in the ui store
  * and, through the DOM, every other active Vuetify dialog (rollback, users,
  * update dialogs...). Menus and tooltips do not count.
  */
 export function otherModalOpen(): boolean {
   const ui = useUiStore()
   if (
+    ui.tourActive ||
     ui.confirm.open ||
     ui.connectionDialog.open ||
     ui.importDialog ||

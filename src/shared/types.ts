@@ -666,6 +666,30 @@ export interface NavicatDetection {
   backupCount: number
 }
 
+/** Where an automatically found Navicat folder lives. */
+export type NavicatCandidateSource = 'default' | 'appStore' | 'legacy' | 'copied'
+
+/** A Navicat data folder found automatically (its Common/conn.plist parses). */
+export interface NavicatCandidate {
+  rootPath: string
+  source: NavicatCandidateSource
+  connectionCount: number
+  jobCount: number
+  backupCount: number
+  /** Last change of Common/conn.plist (ISO), null when unknown. */
+  modifiedAt: string | null
+}
+
+export interface NavicatCandidatesResult {
+  /**
+   * False outside macOS: Navicat for Windows/Linux keeps its connections
+   * elsewhere (Registry...), only a copied macOS «Navicat CC» folder can be read.
+   */
+  supportedPlatform: boolean
+  /** Best first: most connections, then most recently changed. */
+  candidates: NavicatCandidate[]
+}
+
 export interface NavicatConnectionPreview {
   name: string
   host: string

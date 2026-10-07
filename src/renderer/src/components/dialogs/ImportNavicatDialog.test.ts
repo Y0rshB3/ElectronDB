@@ -173,4 +173,146 @@ describe('ImportNavicatDialog', () => {
       })
     })
   }
+
+  describe('automatic search', () => {
+    const cand = (rootPath: string, connectionCount: number, source = 'default') => ({
+      rootPath,
+      source,
+      connectionCount,
+      jobCount: 3,
+      backupCount: 105,
+      modifiedAt: '2026-10-01T10:00:00.000Z'
+    })
+    const NAV = '/Users/demo/Library/Application Support/PremiumSoft CyberTech/Navicat CC'
+    const STORE = '/Users/demo/Library/Containers/com.prect.Navicat/Data/Navicat CC'
+    let saved: unknown[]
+
+    function mock(candidates: unknown[], validRoots: string[] = [NAV, STORE]) {
+      saved = []
+      invoke = mockElectronDB({
+        'navicat:findCandidates': () => ({ supportedPlatform: true, candidates }),
+        'navicat:detect': (root) => ({
+          found: validRoots.includes(root as string),
+          rootPath: root,
+          connPlistPath: null,
+          prefPlistPath: null,
+          profilesDir: null,
+          connectionCount: 4,
+          jobCount: 3,
+          backupCount: 105
+        }),
+        'navicat:previewConnections': () => [preview('Local', false)],
+        'navicat:previewJobs': () => [],
+        'settings:update': (patch) => {
+          saved.push(patch)
+          return { ...useSettingsStore().settings, ...(patch as object) }
+        },
+        'app:pickDirectory': () => STORE
+      })
+    }
+
+    async function open(path = '', request: object | null = null) {
+      const pinia = freshPinia()
+      useSettingsStore().settings.navicatRootPath = path
+      useUiStore().openImportDialog(request)
+      wrapper = mountWith(ImportNavicatDialog, pinia)
+      await settle(8)
+      return wrapper
+    }
+
+    it('empty path: searches and asks «¿Es correcto?» for a single folder; «Sí» goes on and remembers it', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open('')
+      expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(1)
+      const proposal = w.get('[data-test="import-proposal"]')
+      expect(proposal.text()).toContain(`Se detectó Navicat en ${NAV}`)
+      expect(proposal.text()).toContain('4 conexiones, 3 tareas, 105 copias')
+      expect(proposal.text()).toContain('¿Es correcto?')
+
+      await w.get('[data-test="import-proposal-yes"]').trigger('click')
+      await settle(8)
+      expect(calls(invoke, 'navicat:previewConnections')).toEqual([[NAV]])
+      expect(w.find('[data-test="import-connections"]').exists()).toBe(true)
+      expect(saved).toEqual([{ navicatRootPath: NAV }])
+    })
+
+    it('stored path that is no longer valid: searches the usual places', async () => {
+      mock([cand(STORE, 2, 'appStore')])
+      const w = await open('/old/Navicat CC')
+      expect(calls(invoke, 'navicat:detect')).toEqual([['/old/Navicat CC']])
+      expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(1)
+      expect(w.get('[data-test="import-proposal"]').text()).toContain(STORE)
+      // The proposal replaces the «no data in that folder» warning.
+      expect(w.find('[data-test="import-not-found"]').exists()).toBe(false)
+    })
+
+    it('valid stored path: no search, the usual detection', async () => {
+      mock([cand(STORE, 2)])
+      const w = await open(NAV)
+      expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(0)
+      expect(w.find('[data-test="import-detection"]').exists()).toBe(true)
+    })
+
+    it('several folders: a list to choose from, best first', async () => {
+      mock([cand(NAV, 4), cand(STORE, 2, 'appStore')])
+      const w = await open('')
+      const list = w.get('[data-test="import-candidates"]')
+      expect(list.text()).toContain('Se encontraron 2 carpetas')
+      expect(list.text()).toContain('Navicat de la App Store')
+      const radios = w.findAll('[data-test="import-candidate"] input')
+      expect(radios).toHaveLength(2)
+      await radios[1].setValue(true)
+      await w.get('[data-test="import-candidates-use"]').trigger('click')
+      await settle(8)
+      expect(calls(invoke, 'navicat:previewConnections')).toEqual([[STORE]])
+      expect(saved).toEqual([{ navicatRootPath: STORE }])
+    })
+
+    it('«Elegir otra» hides the proposal and keeps the manual path, picker and Detectar', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open('')
+      await w.get('[data-test="import-proposal-other"]').trigger('click')
+      await settle()
+      expect(w.find('[data-test="import-proposal"]').exists()).toBe(false)
+      await w.get('[data-test="import-pick"]').trigger('click')
+      await settle(8)
+      expect(calls(invoke, 'navicat:detect')).toEqual([[STORE]])
+      expect(w.get('[data-test="import-detection"]').text()).toContain(STORE)
+    })
+
+    it('nothing found on macOS: says so and keeps the manual path', async () => {
+      mock([])
+      const w = await open('')
+      expect(w.get('[data-test="import-none-found"]').text()).toContain('No se encontró Navicat')
+      expect(w.find('[data-test="import-root"]').exists()).toBe(true)
+    })
+
+    it('«Detectar» with an empty path searches again', async () => {
+      mock([])
+      const w = await open('')
+      await w.get('[data-test="import-detect"]').trigger('click')
+      await settle(8)
+      expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(2)
+      expect(calls(invoke, 'navicat:detect')).toHaveLength(0)
+    })
+
+    it('from the welcome tour («Sí, importar»): detected and straight to «Seleccionar»', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open('', { rootPath: NAV })
+      expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(0)
+      expect(calls(invoke, 'navicat:detect')).toEqual([[NAV]])
+      expect(w.find('[data-test="import-connections"]').exists()).toBe(true)
+      expect(w.text()).toContain('Paso 2 de 3')
+      expect(useUiStore().importDialogRequest).toBeNull()
+    })
+
+    it('from the welcome tour («No es esta carpeta»): step 1, no single-folder question again', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open(NAV, { chooseFolder: true })
+      expect(w.text()).toContain('Paso 1 de 3')
+      expect(w.find('[data-test="import-proposal"]').exists()).toBe(false)
+      expect((w.get('[data-test="import-root"] input').element as HTMLInputElement).value).toBe('')
+      expect(w.find('[data-test="import-pick"]').exists()).toBe(true)
+    })
+  })
 })

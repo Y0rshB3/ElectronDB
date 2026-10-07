@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { WhatsNewInfo } from '@shared/types'
+import { tourStepsOf } from '@shared/whatsNew'
 import { api } from '@renderer/api'
 import { showWhenFree } from '@renderer/composables/useModalQueue'
+import { useTourStore } from './tour'
 
 /**
  * «ElectronDB se actualizó a x.y.z»: shown once on the first start of a new
@@ -47,6 +49,16 @@ export const useWhatsNewStore = defineStore('whatsNew', () => {
     }
   }
 
+  /** «Mostrarme cómo» steps of the versions shown (empty: no button). */
+  const tourSteps = computed(() => (info.value ? tourStepsOf(info.value.entries) : []))
+
+  /** «Mostrarme cómo»: closes the popup (seen) and runs only those steps. */
+  async function showMe(): Promise<void> {
+    const steps = tourSteps.value
+    await close()
+    if (steps.length) useTourStore().startSteps(steps)
+  }
+
   async function openRelease(): Promise<void> {
     const url = info.value?.releaseUrl
     if (!url) return
@@ -57,5 +69,5 @@ export const useWhatsNewStore = defineStore('whatsNew', () => {
     }
   }
 
-  return { info, open, load, close, openRelease }
+  return { info, open, tourSteps, load, close, showMe, openRelease }
 })

@@ -38,6 +38,14 @@ export interface ConfirmRequest {
   items?: ConfirmItem[]
 }
 
+/** How the Navicat import dialog should open (set by the welcome tour). */
+export interface ImportDialogRequest {
+  /** Folder already confirmed by the user: detect it and jump to «Seleccionar». */
+  rootPath?: string
+  /** «No es esta carpeta»: stay on step 1, skip the automatic proposal, offer the folder picker. */
+  chooseFolder?: boolean
+}
+
 export interface ConfirmState extends ConfirmRequest {
   open: boolean
   resolve: ((value: boolean) => void) | null
@@ -57,6 +65,10 @@ export const useUiStore = defineStore('ui', () => {
     editing: null
   })
   const importDialog = ref(false)
+  /** Options of the last openImportDialog() call, read once by the dialog when it opens. */
+  const importDialogRequest = ref<ImportDialogRequest | null>(null)
+  /** A guided tour is on screen: queued popups wait for it like for any modal. */
+  const tourActive = ref(false)
   const settingsDialog = ref(false)
   const newDatabaseDialog = ref<{ open: boolean; connectionId: string | null }>({
     open: false,
@@ -97,7 +109,8 @@ export const useUiStore = defineStore('ui', () => {
     restoreDialog.value = { open: true, backup, connectionId, replace: options.replace === true }
   }
 
-  function openImportDialog(): void {
+  function openImportDialog(request: ImportDialogRequest | null = null): void {
+    importDialogRequest.value = request
     importDialog.value = true
   }
   function openSettingsDialog(): void {
@@ -137,6 +150,8 @@ export const useUiStore = defineStore('ui', () => {
     aiWidth,
     connectionDialog,
     importDialog,
+    importDialogRequest,
+    tourActive,
     settingsDialog,
     newDatabaseDialog,
     backupDialog,

@@ -11,6 +11,7 @@ import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useTourStore } from '@renderer/stores/tour'
 import PathPicker from '@renderer/components/common/PathPicker.vue'
 import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 import './pathField.css'
@@ -23,9 +24,16 @@ const settingsStore = useSettingsStore()
 const theme = useTheme()
 const notify = useNotify()
 const updates = useUpdatesStore()
+const tour = useTourStore()
 
 const form = ref<AppSettings>({ ...settingsStore.settings })
 const saving = ref(false)
+
+/** Closes Ajustes (unsaved changes are dropped, as with Cancelar) and replays the welcome tour. */
+function replayTour(): void {
+  ui.settingsDialog = false
+  void tour.startWelcome()
+}
 const error = ref('')
 
 const open = computed({
@@ -188,6 +196,17 @@ async function save(): Promise<void> {
             data-test="settings-check-updates-startup"
             class="settings-dialog__switch"
           />
+          <div class="settings-row">
+            <span class="settings-row__label">Recorrido por las funciones principales</span>
+            <v-btn
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-map-marker-path"
+              data-test="settings-replay-tour"
+              @click="replayTour"
+              >Ver tour de bienvenida</v-btn
+            >
+          </div>
         </section>
 
         <AiSettingsSection

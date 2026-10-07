@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import type {
   KeychainRecoveryResult,
+  NavicatCandidate,
+  NavicatCandidateSource,
   NavicatConnectionPreview,
   NavicatDetection,
   NavicatImportResult,
@@ -15,6 +17,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 import { isMac } from '@renderer/utils/platform'
+import { navicatCounts } from '@renderer/components/tour/welcomeTour'
 import DialogHeader from './DialogHeader.vue'
 
 type Step = 1 | 2 | 3
@@ -52,6 +55,26 @@ const selectedJobs = ref<string[]>([])
 const importResult = ref<NavicatImportResult | null>(null)
 const recovery = ref<KeychainRecoveryResult | null>(null)
 
+/*
+ * Automatic search (navicat:findCandidates): runs when the dialog opens with
+ * an empty or invalid path, or when «Detectar» is pressed with an empty path.
+ * One folder: «Se detectó Navicat en … ¿Es correcto?»; several: a list.
+ */
+type Proposal = 'confirm' | 'list' | 'none' | null
+const searching = ref(false)
+const candidates = ref<NavicatCandidate[]>([])
+const proposal = ref<Proposal>(null)
+const chosenRoot = ref<string | null>(null)
+/** «No es esta carpeta» from the welcome tour: the folder picker is what the user needs. */
+const choosingFolder = ref(false)
+
+const SOURCE_LABELS: Record<NavicatCandidateSource, string> = {
+  default: 'Ubicación habitual',
+  appStore: 'Navicat de la App Store',
+  legacy: 'Versión antigua de Navicat',
+  copied: 'Carpeta copiada'
+}
+
 const open = computed({
   get: () => ui.importDialog,
   set: (value: boolean) => {
@@ -60,7 +83,8 @@ const open = computed({
   }
 })
 const busy = computed(
-  () => detecting.value || previewing.value || importing.value || recovering.value
+  () =>
+    detecting.value || searching.value || previewing.value || importing.value || recovering.value
 )
 const pathArg = computed(() => rootPath.value.trim() || null)
 const allConnectionsSelected = computed(
@@ -85,6 +109,11 @@ function reset(): void {
   step.value = 1
   rootPath.value = settingsStore.settings.navicatRootPath
   detection.value = null
+  detectedPath = null
+  candidates.value = []
+  proposal.value = null
+  chosenRoot.value = null
+  choosingFolder.value = false
   error.value = ''
   connPreviews.value = []
   jobPreviews.value = []
@@ -95,16 +124,16 @@ function reset(): void {
 }
 
 async function detect(requested = false): Promise<void> {
-  // Outside macOS there is no default folder to probe: wait for a path.
-  if (!pathArg.value && !mac) {
+  // An empty path: look in the usual places instead of probing nothing.
+  if (!pathArg.value) {
     detection.value = null
-    error.value = requested
-      ? 'Escribe la ruta de la carpeta «Navicat CC» copiada desde un Mac.'
-      : ''
+    proposal.value = null
+    await search({ requested })
     return
   }
   detecting.value = true
   error.value = ''
+  proposal.value = null
   try {
     const result = await api.navicat.detect(pathArg.value)
     if (result.found && !rootPath.value) rootPath.value = result.rootPath
@@ -114,6 +143,79 @@ async function detect(requested = false): Promise<void> {
     error.value = errorMessage(err)
   } finally {
     detecting.value = false
+  }
+}
+
+/**
+ * Looks for Navicat in the usual places of this OS. With `skipConfirm`
+ * (the user just said the proposed folder is wrong) a single result is not
+ * proposed again.
+ */
+async function search(options: { requested?: boolean; skipConfirm?: boolean } = {}): Promise<void> {
+  searching.value = true
+  error.value = ''
+  let found: NavicatCandidate[] = []
+  try {
+    found = (await api.navicat.findCandidates()).candidates
+  } catch {
+    found = [] // the manual path keeps working
+  } finally {
+    searching.value = false
+  }
+  if (!ui.importDialog) return
+  candidates.value = found
+  chosenRoot.value = found[0]?.rootPath ?? null
+  if (found.length > 1) proposal.value = 'list'
+  else if (found.length === 1 && !options.skipConfirm) proposal.value = 'confirm'
+  else proposal.value = found.length ? null : 'none'
+  if (!found.length && options.requested && !mac)
+    error.value = 'Escribe la ruta de la carpeta «Navicat CC» copiada desde un Mac.'
+}
+
+/** «Sí» / «Usar esta carpeta»: use that folder and go on to «Seleccionar». */
+async function acceptCandidate(candidate: NavicatCandidate | undefined): Promise<void> {
+  if (!candidate) return
+  rootPath.value = candidate.rootPath
+  detection.value = {
+    found: true,
+    rootPath: candidate.rootPath,
+    connPlistPath: null,
+    prefPlistPath: null,
+    profilesDir: null,
+    connectionCount: candidate.connectionCount,
+    jobCount: candidate.jobCount,
+    backupCount: candidate.backupCount
+  }
+  detectedPath = candidate.rootPath
+  proposal.value = null
+  await goToPreview()
+}
+
+/** «Elegir otra»: the list when there are several, else the path field and the folder picker. */
+function rejectProposal(): void {
+  proposal.value = candidates.value.length > 1 ? 'list' : null
+  choosingFolder.value = true
+}
+
+async function pickFolder(): Promise<void> {
+  let picked: string | null = null
+  try {
+    picked = await api.app.pickDirectory('Carpeta de datos de Navicat')
+  } catch {
+    return
+  }
+  if (!picked) return
+  rootPath.value = picked
+  await detect(true)
+}
+
+/** Remembers the folder the import used, so the next import starts there. */
+async function rememberRoot(root: string | null): Promise<void> {
+  if (!root || root === settingsStore.settings.navicatRootPath) return
+  try {
+    await settingsStore.update({ navicatRootPath: root })
+  } catch {
+    /* best effort: the import itself does not depend on it */
   }
 }
 
@@ -131,6 +233,7 @@ async function goToPreview(): Promise<void> {
     selectedConnections.value = conns.filter((c) => !c.alreadyImported).map((c) => c.name)
     selectedJobs.value = jobList.filter((j) => !j.alreadyImported).map((j) => j.fileName)
     step.value = 2
+    void rememberRoot(pathArg.value)
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
@@ -181,12 +284,36 @@ async function recoverPasswords(): Promise<void> {
   }
 }
 
+/** Opening: a folder confirmed in the welcome tour, «No es esta carpeta», or the usual detection. */
+async function onOpen(): Promise<void> {
+  const request = ui.importDialogRequest
+  ui.importDialogRequest = null
+  reset()
+  if (request?.rootPath) {
+    rootPath.value = request.rootPath
+    await detect()
+    if (detection.value?.found && ui.importDialog) await goToPreview()
+    return
+  }
+  if (request?.chooseFolder) {
+    rootPath.value = ''
+    choosingFolder.value = true
+    await search({ skipConfirm: true })
+    return
+  }
+  if (pathArg.value) {
+    await detect()
+    // A stored path that no longer holds Navicat: search the usual places.
+    if (detection.value && !detection.value.found && ui.importDialog) await search()
+    return
+  }
+  await search()
+}
+
 watch(
   () => ui.importDialog,
   (value) => {
-    if (!value) return
-    reset()
-    void detect()
+    if (value) void onOpen()
   },
   { immediate: true }
 )
@@ -241,6 +368,100 @@ watch(
             >). Cópiala desde un Mac a este equipo y escribe aquí su ruta. Todavía no se leen las
             conexiones que Navicat para Windows guarda en el Registro ni las de Navicat para Linux.
           </v-alert>
+          <!-- Automatic search: one folder to confirm, or a list to choose from -->
+          <div
+            v-if="searching"
+            class="import-dialog__searching mb-3"
+            role="status"
+            data-test="import-searching"
+          >
+            <v-progress-circular indeterminate size="16" width="2" />
+            Buscando Navicat en las ubicaciones habituales…
+          </div>
+          <v-alert
+            v-else-if="proposal === 'confirm' && candidates[0]"
+            type="info"
+            variant="tonal"
+            icon="mdi-folder-search-outline"
+            class="mb-3"
+            data-test="import-proposal"
+          >
+            <div class="import-dialog__proposal-title">
+              Se detectó Navicat en
+              <code class="import-dialog__path">{{ candidates[0].rootPath }}</code>
+            </div>
+            <div class="import-dialog__counts mt-1">{{ navicatCounts(candidates[0]) }}</div>
+            <div class="import-dialog__question mt-2">¿Es correcto?</div>
+            <div class="d-flex ga-2 mt-2">
+              <v-btn
+                color="primary"
+                variant="flat"
+                size="small"
+                prepend-icon="mdi-check"
+                :loading="previewing"
+                data-test="import-proposal-yes"
+                @click="acceptCandidate(candidates[0])"
+                >Sí</v-btn
+              >
+              <v-btn
+                variant="tonal"
+                size="small"
+                :disabled="previewing"
+                data-test="import-proposal-other"
+                @click="rejectProposal"
+                >Elegir otra</v-btn
+              >
+            </div>
+          </v-alert>
+          <fieldset
+            v-else-if="proposal === 'list'"
+            class="import-dialog__candidates mb-3"
+            data-test="import-candidates"
+          >
+            <legend class="import-dialog__legend">
+              Se encontraron {{ candidates.length }} carpetas de Navicat. Elige cuál importar:
+            </legend>
+            <v-radio-group v-model="chosenRoot" hide-details density="compact">
+              <v-radio
+                v-for="c in candidates"
+                :key="c.rootPath"
+                :value="c.rootPath"
+                data-test="import-candidate"
+              >
+                <template #label>
+                  <span class="import-dialog__candidate">
+                    <code class="import-dialog__path" :title="c.rootPath">{{ c.rootPath }}</code>
+                    <span class="import-dialog__candidate-meta"
+                      >{{ SOURCE_LABELS[c.source] }} · {{ navicatCounts(c) }}</span
+                    >
+                  </span>
+                </template>
+              </v-radio>
+            </v-radio-group>
+            <v-btn
+              class="mt-2"
+              color="primary"
+              variant="flat"
+              size="small"
+              :disabled="!chosenRoot || busy"
+              :loading="previewing"
+              data-test="import-candidates-use"
+              @click="acceptCandidate(candidates.find((c) => c.rootPath === chosenRoot))"
+              >Usar esta carpeta</v-btn
+            >
+          </fieldset>
+          <v-alert
+            v-else-if="proposal === 'none' && mac && !detection"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            data-test="import-none-found"
+          >
+            No se encontró Navicat en las ubicaciones habituales. Escribe la ruta de su carpeta de
+            datos o elígela con «Elegir carpeta…».
+          </v-alert>
+
           <div class="d-flex ga-2 align-start">
             <v-text-field
               v-model="rootPath"
@@ -248,13 +469,23 @@ watch(
               :placeholder="rootPlaceholder"
               prepend-inner-icon="mdi-folder-outline"
               class="nd-mono-input"
+              :autofocus="choosingFolder"
               data-test="import-root"
             />
             <v-btn
               variant="tonal"
+              prepend-icon="mdi-folder-open-outline"
+              class="import-dialog__detect"
+              :disabled="busy"
+              data-test="import-pick"
+              @click="pickFolder"
+              >Elegir carpeta…</v-btn
+            >
+            <v-btn
+              variant="tonal"
               prepend-icon="mdi-radar"
               class="import-dialog__detect"
-              :loading="detecting"
+              :loading="detecting || searching"
               data-test="import-detect"
               @click="detect(true)"
               >Detectar</v-btn
@@ -284,7 +515,13 @@ watch(
               >
             </div>
           </v-alert>
-          <v-alert v-else-if="detection" type="warning" variant="tonal" class="mt-3">
+          <v-alert
+            v-else-if="detection && !proposal && !searching"
+            type="warning"
+            variant="tonal"
+            class="mt-3"
+            data-test="import-not-found"
+          >
             No se encontraron datos de Navicat en esa carpeta. Revisa la ruta (normalmente en
             Application Support/PremiumSoft CyberTech/Navicat CC).
           </v-alert>
@@ -546,6 +783,45 @@ watch(
 }
 .import-dialog__detect {
   height: 34px !important;
+}
+.import-dialog__searching {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+}
+.import-dialog__proposal-title {
+  overflow-wrap: anywhere;
+}
+.import-dialog__path {
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-xs);
+  overflow-wrap: anywhere;
+}
+.import-dialog__question {
+  font-weight: var(--nd-fw-heading);
+}
+.import-dialog__candidates {
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-card);
+  background: var(--nd-bg-input);
+  padding: 8px 12px 12px;
+}
+.import-dialog__legend {
+  padding: 0 4px;
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+}
+.import-dialog__candidate {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 2px 0;
+}
+.import-dialog__candidate-meta {
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
 }
 
 /* Stepper */

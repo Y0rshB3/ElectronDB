@@ -532,6 +532,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
       :class="{ 'is-production': production }"
       role="toolbar"
       aria-label="Acciones de consulta"
+      data-tour="query-toolbar"
     >
       <v-btn
         prepend-icon="mdi-play"
@@ -603,6 +604,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
           aria-label="Generar SQL con IA"
           :disabled="!connectionId"
           data-test="ai-generate"
+          data-tour="ai-generate"
           @click="generateOpen = true"
           ><span class="query-view__label">Generar SQL con IA</span></v-btn
         >

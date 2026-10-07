@@ -13,6 +13,7 @@ import { useTabsStore } from './stores/tabs'
 import { useTreeStore } from './stores/tree'
 import { useUiStore } from './stores/ui'
 import { useWhatsNewStore } from './stores/whatsNew'
+import { useTourStore } from './stores/tour'
 import { useObjectActions } from './composables/useObjectActions'
 import { useUpdatesStore } from './stores/updates'
 import { useWorkspace } from './composables/useWorkspace'
@@ -62,6 +63,7 @@ if (new URLSearchParams(window.location.search).get('nd-screenshots') === '1') {
     jobLogs: useJobLogsStore(pinia),
     updates: useUpdatesStore(pinia),
     whatsNew: useWhatsNewStore(pinia),
+    tour: useTourStore(pinia),
     objectActions: useObjectActions(),
     workspace: useWorkspace()
   }

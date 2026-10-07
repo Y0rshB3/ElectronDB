@@ -18,6 +18,7 @@ import type {
   JobRun,
   KeychainRecoveryResult,
   LogEvent,
+  NavicatCandidatesResult,
   NavicatConnectionPreview,
   NavicatDetection,
   NavicatImportRequest,
@@ -64,6 +65,7 @@ import type {
   AiStatusEvent,
   AiTestResult
 } from './ai'
+import type { TourState } from './tour'
 
 /**
  * Request/response channels (ipcRenderer.invoke / ipcMain.handle).
@@ -245,6 +247,16 @@ export interface IpcInvokeMap {
     result: NavicatImportResult
   }
   'navicat:recoverPasswords': { args: []; result: KeychainRecoveryResult }
+  /**
+   * Looks for Navicat data folders in the usual places of this OS (read-only,
+   * no network, nothing cached). Only folders whose Common/conn.plist parses.
+   */
+  'navicat:findCandidates': { args: []; result: NavicatCandidatesResult }
+
+  /** Onboarding state; decides once per profile whether the welcome tour is due. */
+  'tour:state': { args: []; result: TourState }
+  /** The welcome tour was finished or skipped (also after a replay). */
+  'tour:markWelcomeDone': { args: []; result: TourState }
 
   /*
    * AI assistant (bring your own key). Keys go renderer -> main only: no channel
@@ -378,6 +390,9 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'navicat:previewJobs',
   'navicat:import',
   'navicat:recoverPasswords',
+  'navicat:findCandidates',
+  'tour:state',
+  'tour:markWelcomeDone',
   'ai:providers',
   'ai:saveProvider',
   'ai:deleteProvider',

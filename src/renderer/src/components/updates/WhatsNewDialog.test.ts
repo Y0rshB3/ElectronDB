@@ -6,6 +6,7 @@ import { whatsNewBetween } from '@shared/whatsNew'
 import { MODAL_RETRY_MS } from '@renderer/composables/useModalQueue'
 import { useUiStore } from '@renderer/stores/ui'
 import { useWhatsNewStore } from '@renderer/stores/whatsNew'
+import { useTourStore } from '@renderer/stores/tour'
 import {
   createTestVuetify,
   flush,
@@ -124,5 +125,40 @@ describe('WhatsNewDialog', () => {
     expect(store.open).toBe(true)
     await store.load()
     expect(bridge.invoke.mock.calls.filter((c) => c[0] === 'updates:whatsNew')).toHaveLength(1)
+  })
+
+  it('«Mostrarme cómo» only appears when the versions shown have tour steps', async () => {
+    const store = await setup()
+    await store.load()
+    await settle()
+    // 0.1.3–0.1.4 have no steps.
+    expect(q('[data-test="whats-new-show-me"]')).toBeNull()
+  })
+
+  it('«Mostrarme cómo» closes the popup (seen) and runs only those steps', async () => {
+    vi.useFakeTimers()
+    const store = await setup({
+      currentVersion: '0.1.7',
+      previousVersion: '0.1.6',
+      entries: whatsNewBetween('0.1.6', '0.1.7'),
+      releaseUrl: URL
+    })
+    await store.load()
+    await vi.advanceTimersByTimeAsync(10)
+    const button = q<HTMLButtonElement>('[data-test="whats-new-show-me"]')
+    expect(button?.textContent).toContain('Mostrarme cómo')
+    button!.click()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(store.open).toBe(false)
+    expect(bridge.invoke).toHaveBeenCalledWith('updates:markSeen', '0.1.7')
+    // The dialog's closing overlay may still be in the DOM: the tour waits for it.
+    await vi.advanceTimersByTimeAsync(MODAL_RETRY_MS * 3)
+    const tour = useTourStore()
+    expect(tour.active).toBe(true)
+    expect(tour.kind).toBe('whatsNew')
+    expect(tour.steps.map((s) => s.title)).toEqual([
+      'Tour de bienvenida',
+      'Detección automática de Navicat'
+    ])
   })
 })

@@ -6,6 +6,7 @@ import { useTreeStore } from '@renderer/stores/tree'
 import { useTabsStore } from '@renderer/stores/tabs'
 import { useUiStore } from '@renderer/stores/ui'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useTourStore } from '@renderer/stores/tour'
 import { useObjectsContext } from '@renderer/composables/useObjectsContext'
 import { useNotify } from '@renderer/composables/useNotify'
 import { runSafely } from '@renderer/utils/errors'
@@ -16,6 +17,7 @@ const connections = useConnectionsStore()
 const ui = useUiStore()
 const tabs = useTabsStore()
 const updates = useUpdatesStore()
+const tour = useTourStore()
 const notify = useNotify()
 const { context: objectsContext } = useObjectsContext()
 
@@ -140,6 +142,11 @@ const actions = computed<ToolbarAction[]>(() => [
         label: 'Buscar actualizaciones…',
         icon: 'mdi-update',
         action: () => updates.openDialog()
+      },
+      {
+        label: 'Ver tour de bienvenida',
+        icon: 'mdi-map-marker-path',
+        action: () => tour.startWelcome()
       }
     ]
   },
@@ -214,6 +221,7 @@ const activeKey = computed<string | null>(() => {
         <template v-for="item in actions" :key="item.key">
           <div
             class="app-toolbar__item"
+            :data-tour="`toolbar-${item.key}`"
             :class="{
               'app-toolbar__item--active': activeKey === item.key,
               'app-toolbar__item--split': !!(item.action && item.menu),
@@ -301,6 +309,7 @@ const activeKey = computed<string | null>(() => {
         title="Asistente de IA"
         :aria-pressed="ui.aiPanelVisible"
         data-test="toolbar-ai"
+        data-tour="toolbar-ai"
         @click="ui.toggleAiPanel()"
       />
       <v-btn
@@ -310,6 +319,8 @@ const activeKey = computed<string | null>(() => {
         class="app-toolbar__settings"
         aria-label="Preferencias"
         title="Preferencias"
+        data-test="toolbar-settings"
+        data-tour="toolbar-settings"
         @click="ui.openSettingsDialog()"
       />
     </div>

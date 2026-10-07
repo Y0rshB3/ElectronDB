@@ -7,6 +7,7 @@ import { registerDbHandlers } from './db'
 import { registerFiltersHandlers } from './filters'
 import { registerJobsHandlers } from './jobs'
 import { registerNavicatHandlers } from './navicat'
+import { registerTourHandlers } from './tour'
 import { registerUpdatesHandlers } from './updates'
 
 /**
@@ -14,6 +15,8 @@ import { registerUpdatesHandlers } from './updates'
  * register<Area>Handlers(ctx). Keep this list in sync with IpcInvokeMap.
  */
 export function registerAllHandlers(ctx: AppContext): void {
+  // First: it snapshots whether the profile already held data before this start.
+  registerTourHandlers(ctx)
   registerAppHandlers(ctx)
   registerConnectionsHandlers(ctx)
   registerDbHandlers(ctx)

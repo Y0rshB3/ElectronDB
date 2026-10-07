@@ -47,20 +47,15 @@ export function unsubscribeFromMainEvents(): void {
 /**
  * Initial data load. Each source is loaded independently so one failure
  * (already reported through the snackbar by api.invoke) does not block the rest.
+ * Nothing opens by itself here: a fresh profile gets the welcome tour (see
+ * stores/tour.ts), whose last step offers the Navicat import.
  */
 export async function loadInitialData(): Promise<void> {
   const settings = useSettingsStore()
   const connections = useConnectionsStore()
   const jobs = useJobsStore()
-  const ui = useUiStore()
 
-  const [, connectionsResult] = await Promise.allSettled([
-    settings.load(),
-    connections.load(),
-    jobs.load()
-  ])
-  if (connectionsResult.status === 'fulfilled' && connections.items.length === 0)
-    ui.openImportDialog()
+  await Promise.allSettled([settings.load(), connections.load(), jobs.load()])
   await showStartupNotices()
 }
 

@@ -26,7 +26,7 @@ Private desktop MySQL client (macOS first, also Windows/Linux) compatible with N
 - Keep "Navidog" only where it identifies legacy data: `src/main/migration/`, the `LEGACY_*` constants (profile folder, "Navidog Safe Storage" keychain item, `dev.y0rshb3.navidog.job.*` launchd labels, `navidog.queries.*` localStorage keys), the env fallback, and the throwaway test MySQL credentials (`root`/`navidog`, db `navidog_test`).
 - CSS tokens and utility classes keep the internal `--nd-*` / `nd-` prefix on purpose (it stands for the old name); do not rename them.
 - Migration runs once per profile: `runProfileMigration` before app `ready` (copies `<appData>/Navidog` into `<appData>/ElectronDB`, never overwriting, writes `migrated-from-navidog.json`) and `runSecretMigration` right after the context (re-encrypts `credentials.json`; on macOS reads the old safeStorage key with `security`). A scratch profile (`ELECTRONDB_USER_DATA`) skips it.
-- Test-only switches, never for real use: `ELECTRONDB_LEGACY_USER_DATA=<dir>` migrates from that folder even into a scratch profile; `ELECTRONDB_LEGACY_KEYCHAIN=<file>` reads "Navidog Safe Storage" from that keychain file instead of the login keychain.
+- Test-only switches, never for real use: `ELECTRONDB_NAVICAT_CANDIDATES=<dirs>` replaces the automatic Navicat folder search (screenshots/tests); `ELECTRONDB_LEGACY_USER_DATA=<dir>` migrates from that folder even into a scratch profile; `ELECTRONDB_LEGACY_KEYCHAIN=<file>` reads "Navidog Safe Storage" from that keychain file instead of the login keychain.
 
 ## Conventions
 

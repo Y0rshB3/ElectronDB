@@ -25,6 +25,8 @@ import RestoreDialog from '@renderer/components/dialogs/RestoreDialog.vue'
 import UpdateDialog from '@renderer/components/updates/UpdateDialog.vue'
 import UpdateNotice from '@renderer/components/updates/UpdateNotice.vue'
 import WhatsNewDialog from '@renderer/components/updates/WhatsNewDialog.vue'
+import TourHost from '@renderer/components/tour/TourHost.vue'
+import { useTourStore } from '@renderer/stores/tour'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useWhatsNewStore } from '@renderer/stores/whatsNew'
 
@@ -33,6 +35,7 @@ const settings = useSettingsStore()
 const theme = useTheme()
 const updates = useUpdatesStore()
 const whatsNew = useWhatsNewStore()
+const tour = useTourStore()
 
 useShortcuts()
 
@@ -46,14 +49,18 @@ let unsubscribe: (() => void) | null = null
 let cancelUpdateCheck: (() => void) | null = null
 let unmounted = false
 
-/** The screenshot harness triggers the update check and «novedades» itself (they would cover other screens). */
+/** The screenshot harness triggers the update check, «novedades» and tours itself (they would cover other screens). */
 const screenshotMode = new URLSearchParams(window.location.search).get('nd-screenshots') === '1'
 
 onMounted(() => {
   unsubscribe = subscribeToMainEvents()
   // The automatic update check waits for the settings (its switch) and a few seconds more.
-  void loadInitialData().then(() => {
+  void loadInitialData().then(async () => {
     if (unmounted || screenshotMode) return
+    // First run of a fresh profile: the welcome tour (it ends offering the Navicat import).
+    // Profiles updated from an older build get the «novedades» popup instead.
+    await tour.maybeStartWelcome()
+    if (unmounted) return
     void whatsNew.load()
     cancelUpdateCheck = updates.scheduleStartupCheck()
   })
@@ -126,6 +133,7 @@ onBeforeUnmount(() => {
     <UpdateDialog />
     <UpdateNotice />
     <WhatsNewDialog />
+    <TourHost />
   </v-app>
 </template>
 

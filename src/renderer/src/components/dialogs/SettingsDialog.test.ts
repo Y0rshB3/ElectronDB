@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Mock } from 'vitest'
 import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useTourStore } from '@renderer/stores/tour'
 import { useUiStore } from '@renderer/stores/ui'
 import SettingsDialog from './SettingsDialog.vue'
 import { calls, freshPinia, mockElectronDB, mountWith, settle } from './testing'
@@ -94,5 +95,27 @@ describe('SettingsDialog › Seguridad typed-confirmation environments', () => {
     await settle()
     const [[patch]] = calls(invoke, 'settings:update') as [[Partial<AppSettings>]]
     expect(patch.typedConfirmEnvironments).toEqual(['production', 'local'])
+  })
+})
+
+describe('SettingsDialog › Ver tour de bienvenida', () => {
+  it('closes Ajustes and starts the welcome tour', async () => {
+    const invoke = mockElectronDB({
+      'app:info': () => ({ version: '0.1.7' }),
+      'navicat:findCandidates': () => ({ supportedPlatform: true, candidates: [] })
+    })
+    const pinia = freshPinia()
+    useSettingsStore().settings = { ...base }
+    const ui = useUiStore()
+    ui.settingsDialog = true
+    const wrapper = mountWith(SettingsDialog, pinia)
+    await settle()
+    await wrapper.get('[data-test="settings-replay-tour"]').trigger('click')
+    await settle()
+    expect(ui.settingsDialog).toBe(false)
+    expect(calls(invoke, 'navicat:findCandidates')).toHaveLength(1)
+    expect(useTourStore().active).toBe(true)
+    expect(useTourStore().kind).toBe('welcome')
+    wrapper.unmount()
   })
 })

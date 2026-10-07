@@ -68,6 +68,15 @@ const open = computed({
           >Ver todas las novedades en GitHub</v-btn
         >
         <v-spacer />
+        <v-btn
+          v-if="whatsNew.tourSteps.length"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-map-marker-path"
+          data-test="whats-new-show-me"
+          @click="whatsNew.showMe()"
+          >Mostrarme cómo</v-btn
+        >
         <v-btn color="primary" variant="flat" data-test="whats-new-ok" @click="whatsNew.close()"
           >Entendido</v-btn
         >

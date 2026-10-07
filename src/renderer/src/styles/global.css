@@ -85,6 +85,16 @@ samp,
   outline: none;
   box-shadow: var(--nd-glow);
 }
+/* Text inputs inside a Vuetify field match :focus-visible on every focus
+   (mouse included) and would get their own rectangular glow on top of the
+   field's rounded one (square glow, lines inside the field). The field
+   draws the focus glow on its outline instead (vuetify-overrides.css). */
+.v-field input:focus-visible,
+.v-field textarea:focus-visible,
+.v-field .v-field__input:focus-visible,
+.v-field .v-select__selection:focus-visible {
+  box-shadow: none;
+}
 
 /* Thin, rounded, translucent scrollbars. */
 * {

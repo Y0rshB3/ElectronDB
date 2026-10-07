@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { parseVersion } from './semver'
-import { WHATS_NEW, whatsNewBetween, whatsNewFor, type WhatsNewEntry } from './whatsNew'
+import {
+  WHATS_NEW,
+  tourStepsOf,
+  whatsNewBetween,
+  whatsNewFor,
+  type WhatsNewEntry
+} from './whatsNew'
 
 const entries: WhatsNewEntry[] = ['0.1.1', '0.1.2', '0.1.3', '0.1.4'].map((version) => ({
   version,
@@ -65,5 +71,45 @@ describe('WHATS_NEW (curated list)', () => {
 
   it('0.1.4 points to the new switch in Ajustes › Seguridad', () => {
     expect(whatsNewFor('0.1.4')?.important?.join(' ')).toMatch(/Ajustes › Seguridad/)
+  })
+
+  it('0.1.7 announces the tour, the Navicat detection and the field glow fix', () => {
+    expect(whatsNewFor('0.1.7')?.highlights).toEqual([
+      'Tour de bienvenida y guía de novedades',
+      'Detección automática de Navicat',
+      'El brillo de los campos ya no cruza la etiqueta ni se ve cuadrado'
+    ])
+  })
+
+  it('«Mostrarme cómo» steps are short and point at data-tour names', () => {
+    for (const e of WHATS_NEW) {
+      for (const step of e.tour ?? []) {
+        expect(step.title.length, step.title).toBeLessThanOrEqual(40)
+        expect(step.text.split(/[.?!](\s|$)/).filter((x) => x?.trim()).length).toBeLessThanOrEqual(
+          2
+        )
+        for (const t of [step.target ?? []].flat()) expect(t).toMatch(/^[a-z][a-z-]*$/)
+      }
+    }
+    // The restore option lives in a dialog: explained in text, no highlight.
+    const restore = whatsNewFor('0.1.6')?.tour?.find((s) => /Solo estructura/.test(s.title))
+    expect(restore?.target).toBeUndefined()
+  })
+})
+
+describe('tourStepsOf', () => {
+  it('joins the steps of the shown versions, oldest first', () => {
+    const list = whatsNewBetween('0.1.5', '0.1.7')
+    expect(tourStepsOf(list).map((s) => s.title)).toEqual([
+      'Asistente de IA',
+      'Generar SQL con IA',
+      'Restaurar «Solo estructura»',
+      'Tour de bienvenida',
+      'Detección automática de Navicat'
+    ])
+  })
+
+  it('is empty when no version has steps', () => {
+    expect(tourStepsOf(whatsNewBetween('0.1.2', '0.1.4'))).toEqual([])
   })
 })

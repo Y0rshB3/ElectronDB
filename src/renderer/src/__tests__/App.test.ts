@@ -117,16 +117,42 @@ describe('App shell', () => {
     wrapper.unmount()
   })
 
-  it('opens the Navicat import dialog when there are no connections', async () => {
+  it('never opens the Navicat import dialog by itself, even without connections', async () => {
     installBridge({
       'settings:get': settings,
       'connections:list': [],
       'jobs:list': [],
-      'jobs:runs': []
+      'jobs:runs': [],
+      'tour:state': { showWelcome: false, welcomeTourDone: true, tourSeenVersion: '0.1.6' }
     })
     const { wrapper } = mountApp()
     await settle()
-    expect(useUiStore().importDialog).toBe(true)
+    expect(useUiStore().importDialog).toBe(false)
+    expect(useUiStore().tourActive).toBe(false)
+    expect(document.querySelector('[data-test="tour"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('first run of a fresh profile: shows the welcome tour instead of the import dialog', async () => {
+    const b = installBridge({
+      'settings:get': settings,
+      'connections:list': [],
+      'jobs:list': [],
+      'jobs:runs': [],
+      'tour:state': { showWelcome: true, welcomeTourDone: false, tourSeenVersion: '0.1.7' },
+      'navicat:findCandidates': { supportedPlatform: true, candidates: [] },
+      'tour:markWelcomeDone': { showWelcome: false, welcomeTourDone: true, tourSeenVersion: '0.1.7' }
+    })
+    const { wrapper } = mountApp()
+    await settle()
+    expect(useUiStore().importDialog).toBe(false)
+    expect(useUiStore().tourActive).toBe(true)
+    expect(document.querySelector('[data-test="tour-welcome"]')).not.toBeNull()
+    ;(document.querySelector('[data-test="tour-skip"]') as HTMLElement).click()
+    await settle()
+    expect(useUiStore().tourActive).toBe(false)
+    expect(b.invoke).toHaveBeenCalledWith('tour:markWelcomeDone')
+    expect(useUiStore().importDialog).toBe(false)
     wrapper.unmount()
   })
 

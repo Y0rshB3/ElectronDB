@@ -36,7 +36,7 @@ function onContextMenu(event: MouseEvent, node: TreeNode): void {
 </script>
 
 <template>
-  <aside class="connection-tree" aria-label="Mis Conexiones">
+  <aside class="connection-tree" aria-label="Mis Conexiones" data-tour="connection-tree">
     <div class="connection-tree__header">
       <span class="connection-tree__title">Mis Conexiones</span>
       <span

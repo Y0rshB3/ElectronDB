@@ -52,6 +52,10 @@
   --nd-glow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 0 18px rgba(34, 211, 238, 0.25);
   --nd-glow-violet: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 0 18px rgba(139, 92, 246, 0.25);
   --nd-glow-error: 0 0 0 1px rgba(248, 113, 113, 0.45), 0 0 22px rgba(248, 113, 113, 0.28);
+  --nd-glow-filter: drop-shadow(0 0 1px rgba(34, 211, 238, 0.55))
+    drop-shadow(0 0 7px rgba(34, 211, 238, 0.35));
+  --nd-glow-filter-error: drop-shadow(0 0 1px rgba(248, 113, 113, 0.6))
+    drop-shadow(0 0 8px rgba(248, 113, 113, 0.35));
 
   /* Status */
   --nd-success: #34d399;
@@ -181,6 +185,8 @@
   --nd-on-accent: #ffffff;
   --nd-glow: 0 0 0 1px rgba(8, 145, 178, 0.35), 0 0 16px rgba(8, 145, 178, 0.18);
   --nd-glow-violet: 0 0 0 1px rgba(124, 58, 237, 0.3), 0 0 16px rgba(124, 58, 237, 0.16);
+  --nd-glow-filter: drop-shadow(0 0 1px rgba(8, 145, 178, 0.5))
+    drop-shadow(0 0 6px rgba(8, 145, 178, 0.22));
   --nd-glow-error: 0 0 0 1px rgba(220, 38, 38, 0.4), 0 0 18px rgba(220, 38, 38, 0.18);
 
   --nd-success: #059669;

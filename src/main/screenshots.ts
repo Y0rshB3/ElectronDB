@@ -1034,6 +1034,73 @@ const STEPS: Step[] = [
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * Welcome tour, Navicat detection and «Mostrarme cómo» (ELECTRONDB_SHOTS_ONLY=21).
+ * Run them on a fresh scratch profile with
+ * ELECTRONDB_NAVICAT_CANDIDATES=tests/fixtures/navicat (the anonymised fixture
+ * instead of the real Navicat folder) and, for 21f/21g,
+ * ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7.
+ */
+const TOUR_STEPS: Step[] = [
+  {
+    name: '21a-tour-welcome',
+    script: `
+      await S.tour.startWelcome()
+      await H.waitFor('[data-test="tour-welcome"]', 8000)
+      await H.sleep(500)`
+  },
+  {
+    name: '21b-tour-connections',
+    script: `
+      S.tour.next()
+      await H.until(() => S.tour.index === 1)
+      await H.sleep(700)`
+  },
+  {
+    name: '21c-tour-ai',
+    script: `
+      S.tour.index = 6
+      await H.sleep(700)`
+  },
+  {
+    name: '21d-tour-navicat-detected',
+    script: `
+      S.tour.index = S.tour.steps.length - 1
+      await H.waitFor('[data-test="tour-import-detected"]', 5000)
+      await H.sleep(700)`,
+    cleanup: `S.tour.skip()`
+  },
+  {
+    name: '21e-import-confirm',
+    script: `
+      // Only in the renderer: an empty stored path makes the dialog search (fixture folder).
+      S.settings.settings.navicatRootPath = ''
+      S.ui.openImportDialog()
+      await H.waitFor('[data-test="import-proposal"]', 8000)
+      await H.sleep(600)`,
+    cleanup: `S.ui.importDialog = false`
+  },
+  {
+    name: '21f-whats-new-show-me',
+    script: `
+      await S.whatsNew.load()
+      if (!S.whatsNew.tourSteps.length)
+        throw new Error('no «Mostrarme cómo» steps: run with ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7')
+      S.whatsNew.open = true
+      await H.waitFor('[data-test="whats-new-show-me"]', 5000)
+      await H.sleep(600)`
+  },
+  {
+    name: '21g-whats-new-tour',
+    script: `
+      await H.click('[data-test="whats-new-show-me"]', 5000)
+      await H.until(() => S.tour.active, 8000)
+      await H.sleep(800)`,
+    cleanup: `S.tour.skip()`
+  }
+]
+STEPS.push(...TOUR_STEPS)
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__electronDBShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }

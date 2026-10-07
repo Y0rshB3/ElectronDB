@@ -195,6 +195,14 @@ html .v-field {
     box-shadow var(--nd-dur) var(--nd-ease),
     background-color var(--nd-dur) var(--nd-ease);
 }
+/* The focus glow is drawn on the outline itself (drop-shadow follows the
+   drawn border lines), not as a box-shadow on the field box: a box-shadow
+   ignores the notch where the floating label sits (the light crossed the
+   label) and the outline's real corner radius (square glow on rounded
+   inputs). */
+html .v-field__outline {
+  transition: filter var(--nd-dur) var(--nd-ease);
+}
 html .v-field__input {
   letter-spacing: normal;
 }
@@ -213,7 +221,10 @@ html .v-field--variant-outlined.v-field--focused .v-field__outline {
   --v-field-border-width: 1px;
 }
 html .v-field--variant-outlined.v-field--focused {
-  box-shadow: var(--nd-glow);
+  box-shadow: none;
+}
+html .v-field--variant-outlined.v-field--focused .v-field__outline {
+  filter: var(--nd-glow-filter);
 }
 html .v-field--variant-outlined .v-field__outline__start {
   border-radius: var(--nd-radius-control) 0 0 var(--nd-radius-control);
@@ -225,7 +236,10 @@ html .v-field--error.v-field--variant-outlined .v-field__outline {
   color: var(--nd-error);
 }
 html .v-field--error.v-field--focused {
-  box-shadow: var(--nd-glow-error);
+  box-shadow: none;
+}
+html .v-field--error.v-field--focused .v-field__outline {
+  filter: var(--nd-glow-filter-error);
 }
 html .v-field--variant-solo,
 html .v-field--variant-solo-filled,

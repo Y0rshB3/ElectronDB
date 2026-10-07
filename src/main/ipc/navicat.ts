@@ -1,4 +1,8 @@
+import { homedir } from 'node:os'
+import { delimiter, resolve } from 'node:path'
 import type { AppContext } from '../context'
+import { envVar } from '../env'
+import { findNavicatCandidates } from '../navicat/candidates'
 import { readNavicatJobs } from '../navicat/batchJobs'
 import { readNavicatConnections } from '../navicat/connPlist'
 import { detectNavicat } from '../navicat/detect'
@@ -39,4 +43,27 @@ export function registerNavicatHandlers(ctx: AppContext): void {
     importFromNavicat(ctx, request, requireRoot(rootPath))
   )
   handle('navicat:recoverPasswords', () => recoverNavicatPasswords(ctx))
+  handle('navicat:findCandidates', () =>
+    findNavicatCandidates({
+      home: homedir(),
+      platform: process.platform,
+      overrideRoots: candidateOverride(ctx)
+    })
+  )
+}
+
+/**
+ * Test switch for screenshots and manual runs: ELECTRONDB_NAVICAT_CANDIDATES=<dir>[<path
+ * delimiter><dir>...] replaces the usual locations. Honoured only with a
+ * scratch profile (ELECTRONDB_USER_DATA).
+ */
+function candidateOverride(ctx: AppContext): string[] | undefined {
+  if (!ctx.isolatedProfile) return undefined
+  const raw = envVar('NAVICAT_CANDIDATES')?.trim()
+  if (!raw) return undefined
+  return raw
+    .split(delimiter)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => resolve(p))
 }

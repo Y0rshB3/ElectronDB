@@ -1,4 +1,5 @@
 import { compareVersions, parseVersion } from './semver'
+import type { TourStep } from './tour'
 
 /**
  * Curated, bundled «novedades» shown once after updating (works offline).
@@ -14,15 +15,58 @@ export interface WhatsNewEntry {
   highlights: string[]
   /** Actions or changes the user must be aware of (shown first, highlighted). */
   important?: string[]
+  /**
+   * Optional «Mostrarme cómo» steps. Targets are `data-tour` values; when a
+   * feature lives inside a dialog that is closed, leave `target` out and
+   * explain where to find it in the text.
+   */
+  tour?: TourStep[]
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.1.7',
+    date: '2026-10-07',
+    highlights: [
+      'Tour de bienvenida y guía de novedades',
+      'Detección automática de Navicat',
+      'El brillo de los campos ya no cruza la etiqueta ni se ve cuadrado'
+    ],
+    tour: [
+      {
+        target: 'toolbar-others',
+        title: 'Tour de bienvenida',
+        text: 'Puedes repetir el recorrido por ElectronDB cuando quieras desde Otros › Ver tour de bienvenida, o desde Ajustes.'
+      },
+      {
+        target: 'toolbar-connection',
+        title: 'Detección automática de Navicat',
+        text: 'En Conexión › Importar desde Navicat, ElectronDB busca la carpeta de Navicat por ti y te pregunta si es la correcta antes de importar.'
+      }
+    ]
+  },
   {
     version: '0.1.6',
     date: '2026-10-06',
     highlights: [
       'Al reemplazar una base de datos puedes elegir «Solo estructura» (tablas y relaciones sin datos)',
       'Asistente de IA con tu propia clave (Claude, OpenAI, Groq, Grok, GLM, Ollama): pregunta sobre tu base de datos, genera y explica SQL; solo se envía la estructura'
+    ],
+    tour: [
+      {
+        target: 'toolbar-ai',
+        title: 'Asistente de IA',
+        text: 'Abre el panel del asistente para preguntar sobre tu base de datos. Actívalo antes en Ajustes › IA con tu propia clave; solo se envía la estructura, nunca los datos.'
+      },
+      {
+        target: ['ai-generate', 'toolbar-query'],
+        title: 'Generar SQL con IA',
+        text: 'En una pestaña de consulta, «Generar SQL con IA» escribe la consulta a partir de tu descripción y la inserta en el editor sin ejecutarla.'
+      },
+      {
+        title: 'Restaurar «Solo estructura»',
+        text: 'Al restaurar una copia con «Reemplazar la base de datos completa», elige «Solo estructura» para recrear las tablas y relaciones sin copiar los datos.'
+      }
     ]
   },
   {
@@ -96,6 +140,13 @@ export function whatsNewBetween(
         (compareVersions(e.version, current) ?? 1) <= 0
     )
     .sort((a, b) => compareVersions(b.version, a.version) ?? 0)
+}
+
+/** «Mostrarme cómo» steps of the given entries, oldest version first. */
+export function tourStepsOf(entries: readonly WhatsNewEntry[]): TourStep[] {
+  return [...entries]
+    .sort((a, b) => compareVersions(a.version, b.version) ?? 0)
+    .flatMap((e) => e.tour ?? [])
 }
 
 /** Entry of exactly `version`, if any. */

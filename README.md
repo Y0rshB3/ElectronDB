@@ -245,6 +245,26 @@ primera vez:
 
 ## Primer uso
 
+### Tour de bienvenida
+
+La primera vez que abres ElectronDB con un perfil nuevo aparece un recorrido corto (9 pasos): qué es la app,
+**Mis conexiones**, **Nueva consulta** (autocompletado, **Embellecer**, selector de conexión), datos y filtros,
+copias de seguridad y **Restaurar en Local**, automatización, el asistente de IA (**Ajustes › IA**, solo se envía
+la estructura) y **Ajustes › Seguridad** (Producción). Cada paso resalta el botón del que habla; si ese elemento
+no está en pantalla, la tarjeta sale centrada.
+
+- **Siguiente** / **Atrás** o las flechas ← → para moverte, **Saltar tour** o `Esc` para cerrarlo.
+- El último paso, **Importar tus datos**, busca Navicat (ver abajo). Si lo encuentra pregunta «Se detectó
+  Navicat en … (4 conexiones, 3 tareas, 105 copias). ¿Es correcto?»: **Sí, importar** abre la importación ya en
+  el paso **Seleccionar**; **No es esta carpeta** la abre en el primer paso para elegirla; **Ahora no** cierra.
+  Si no lo encuentra ofrece **Nueva conexión** o **Importar desde otro gestor**.
+- Terminarlo o saltarlo se recuerda en `tour.json` del perfil y no vuelve a salir. Puedes repetirlo cuando quieras
+  desde **Otros → Ver tour de bienvenida** o en **Ajustes → Actualizaciones → Ver tour de bienvenida**.
+- Si actualizas desde una versión anterior (0.1.6 o antes) no sale el tour de bienvenida: ya conoces la app. En
+  su lugar, la ventana de novedades ofrece **Mostrarme cómo** (ver [Actualizaciones](#actualizaciones)).
+- ElectronDB ya no abre la importación de Navicat sola al arrancar sin conexiones; sigue a mano en
+  **Conexión → Importar desde Navicat…** y en el estado vacío de **Mis conexiones**.
+
 ### Crear una conexión
 
 1. **Conexión → Nueva conexión MySQL…**
@@ -257,15 +277,26 @@ primera vez:
 
 Hoy se puede importar desde Navicat for MySQL.
 
-1. **Conexión → Importar desde Navicat…**. Se propone la carpeta
-   `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC` (la ruta es editable).
+1. **Conexión → Importar desde Navicat…**. Si la carpeta guardada no existe o está vacía, ElectronDB **busca
+   Navicat solo** en los sitios habituales de macOS:
+   - `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC` (la habitual);
+   - la versión de la App Store: `~/Library/Containers/<carpeta con «navicat» en el nombre>/Data/Library/Application Support/PremiumSoft CyberTech/Navicat CC`;
+   - versiones antiguas: `~/Library/Application Support/PremiumSoft CyberTech/Navicat` (si tiene `Common/conn.plist`).
+
+   Solo cuenta una carpeta cuyo `Common/conn.plist` se pueda leer. Si hay una, pregunta «Se detectó Navicat en
+   … ¿Es correcto?»: **Sí** pasa a **Seleccionar** y guarda la carpeta en **Ajustes**; **Elegir otra** deja
+   escribir la ruta o usar **Elegir carpeta…**. Si hay varias, aparecen en una lista (primero la que tiene más
+   conexiones y, a igualdad, la más reciente). **Detectar** con la ruta vacía vuelve a buscar. La búsqueda solo
+   lee: no escribe nada en esas carpetas, no usa la red y no guarda nada salvo la carpeta que confirmes.
+
 2. Marca las conexiones y los trabajos que quieras traer. Navicat no se modifica.
 3. Navicat no guarda las contraseñas en sus archivos. Puedes pulsar **recuperarlas del Llavero** (macOS pedirá
    permiso para cada una) o escribirlas una vez en cada conexión.
 
 **En Windows o Linux**: copia la carpeta `Navicat CC` desde un Mac (por ejemplo a `C:\Datos\Navicat CC` o
 `~/navicat-cc`) y escribe esa ruta en el diálogo de importación (o en **Ajustes** para no repetirla), que fuera
-de macOS empieza vacío. Las contraseñas habrá que escribirlas a mano: el botón del Llavero solo aparece en macOS.
+de macOS empieza vacío. ElectronDB también busca una carpeta llamada `Navicat CC` copiada en tu carpeta personal
+o un nivel por debajo (por ejemplo `~/Navicat CC` o `~/Documentos/Navicat CC`), sin recorrer el disco entero. Las contraseñas habrá que escribirlas a mano: el botón del Llavero solo aparece en macOS.
 Las copias `.nb3` se buscan en la carpeta de cada conexión dentro de `Navicat CC`, porque las rutas de un Mac
 no existen en otro equipo.
 
@@ -699,6 +730,7 @@ Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en
 | `logs/`                | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd             |
 | `backups/`             | Copias `.nb3` creadas por la app (carpeta por defecto)                             |
 | `notices.json`         | Avisos de arranque que ya cerraste                                                 |
+| `tour.json`            | Si ya viste (o saltaste) el tour de bienvenida                                     |
 | `filter-profiles.json` | Perfiles de filtro de la vista de datos (solo la definición del filtro)            |
 | `ai-providers.json`    | Proveedores del asistente de IA (sin claves; las claves van en `credentials.json`) |
 | `ai-memory.json`       | Notas de «Memoria» del asistente por conexión y base de datos                      |
@@ -785,6 +817,9 @@ cuenta**: las versiones no están firmadas, así que la actualización la haces 
   la 0.1.4). La lista viene con la app (`src/shared/whatsNew.ts`), así que funciona sin Internet. **Ver todas las
   novedades en GitHub** abre la página de la versión. En un perfil nuevo o al volver a una versión anterior no
   sale nada. La última versión vista se guarda en `updates.json` del perfil.
+- **Mostrarme cómo**: si alguna de esas versiones trae una guía, la ventana de novedades muestra este botón. La
+  cierra y resalta en la pantalla dónde están las novedades, paso a paso (lo que vive dentro de un diálogo se
+  explica con texto).
 
 ### Si instalaste la app (instalador de GitHub)
 
@@ -946,6 +981,8 @@ ELECTRONDB_SHOTS_DIR=/tmp/shots ELECTRONDB_SHOTS_PROFILE=/tmp/shots/profile \
 ELECTRONDB_SHOTS_MYSQL='mysql://root:navidog@127.0.0.1:33306/navidog_test' npm run screenshots
 # Solo algunos pasos (prefijos del nombre del PNG):
 ELECTRONDB_SHOTS_ONLY=05,06 npm run screenshots
+# Tour de bienvenida, detección de Navicat y «Mostrarme cómo» (pasos 21*):
+ELECTRONDB_SHOTS_ONLY=21 ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7 npm run screenshots
 ```
 
 Por defecto escribe en `$TMPDIR/electrondb-shots`. El perfil (`.../profile`) se borra y se recrea en cada
@@ -953,21 +990,22 @@ ejecución, y su carpeta debe llamarse `profile`.
 
 ### Variables de entorno
 
-| Variable                            | Efecto                                                                                                                                                                          |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ELECTRONDB_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                  |
-| `ELECTRONDB_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                |
-| `ELECTRONDB_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                             |
-| `ELECTRONDB_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                        |
-| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL desechable para `npm run test:integration`.                                                                                                                               |
-| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                                                                  |
-| `ELECTRONDB_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                             |
-| `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                |
-| `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error). |
-| `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                |
-| `ELECTRONDB_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).            |
-| `ELECTRONDB_AI_FIXTURE=1`           | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: el asistente de IA responde con textos fijos de un proveedor falso, sin red.                                        |
-| `ELECTRONDB_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                   |
+| Variable                            | Efecto                                                                                                                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ELECTRONDB_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                                                |
+| `ELECTRONDB_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                                              |
+| `ELECTRONDB_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                                                           |
+| `ELECTRONDB_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                      |
+| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL desechable para `npm run test:integration`.                                                                                                                                                             |
+| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                                                                                                |
+| `ELECTRONDB_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                           |
+| `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                                              |
+| `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |
+| `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                                              |
+| `ELECTRONDB_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).                                          |
+| `ELECTRONDB_AI_FIXTURE=1`           | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: el asistente de IA responde con textos fijos de un proveedor falso, sin red.                                                                      |
+| `ELECTRONDB_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                                                 |
+| `ELECTRONDB_NAVICAT_CANDIDATES`     | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: carpetas (separadas por `:`, o `;` en Windows) donde buscar Navicat en vez de las habituales; `npm run screenshots` usa `tests/fixtures/navicat`. |
 
 Prueba de humo del binario compilado sin tocar tus datos:
 

@@ -265,6 +265,7 @@ defineExpose({ rows, applyChanges, load })
             : 'Mostrar u ocultar el panel de filtro'
         "
         data-test="filter-toggle"
+        data-tour="table-filter"
         @click="filter.open.value = !filter.open.value"
         >Filtro<span
           v-if="filtered"
