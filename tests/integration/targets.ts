@@ -91,3 +91,52 @@ export function describeMysql(name: string, body: (target: MysqlTarget) => void)
     }
   }
 }
+
+/* ---------- other engines (one server each) ---------- */
+
+export interface ServerSpec {
+  /** Shown in the suite name. */
+  label: string
+  /** Env var name without the VORTAQ_/ELECTRONDB_/NAVIDOG_ prefix. */
+  envName: string
+  example: string
+}
+
+/** MariaDB 11 reached through a `mysql` connection (P1b fixes). */
+export const MARIADB_TARGET: ServerSpec = {
+  label: 'MariaDB 11',
+  envName: 'TEST_MARIADB_URL',
+  example: 'mysql://root:navidog@127.0.0.1:33311/navidog_test'
+}
+
+/** PostgreSQL 17 (P2a/P2b). */
+export const POSTGRES_TARGET: ServerSpec = {
+  label: 'PostgreSQL 17',
+  envName: 'TEST_PG_URL',
+  example: 'postgres://postgres:navidog@127.0.0.1:55432/navidog_test'
+}
+
+/**
+ * Registers `body` once for a single server. Same rule as describeMysql: without its URL the
+ * suite is skipped, unless VORTAQ_REQUIRE_INTEGRATION=1 makes the missing URL a failure.
+ */
+export function describeServer(spec: ServerSpec, name: string, body: (url: string) => void): void {
+  const title = `${name} [${spec.label}]`
+  const url = envVar(spec.envName, process.env)?.trim()
+  if (url) describe(title, () => body(url))
+  else if (integrationRequired()) {
+    describe(title, () => {
+      it(`needs VORTAQ_${spec.envName}`, () => {
+        throw new Error(
+          `VORTAQ_${spec.envName} is not set, and VORTAQ_REQUIRE_INTEGRATION=1 forbids skipping. ` +
+            `Start the test servers (docker compose -f tests/docker-compose.yml up -d --wait) and set ` +
+            `VORTAQ_${spec.envName}=${spec.example}`
+        )
+      })
+    })
+  } else {
+    describe.skip(title, () => {
+      it(`needs VORTAQ_${spec.envName}`, () => undefined)
+    })
+  }
+}

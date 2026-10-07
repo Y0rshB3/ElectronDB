@@ -463,6 +463,7 @@ class RunExecution {
   private logBackupEvent(event: BackupProgress): void {
     const d = event.detail
     if (event.phase === 'list') this.say(`  Encontrados ${event.message}`)
+    else if (event.phase === 'warning') this.say(`  Aviso: ${event.message}`)
     else if (event.phase === 'objectDone' && d?.objectName)
       this.say(
         objectLine({ type: d.objectType, name: d.objectName, count: d.rows ?? null, status: 'ok' })

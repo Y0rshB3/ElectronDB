@@ -318,6 +318,22 @@ contraseña»); si la rechaza verás «No hay contraseña guardada para la conex
 marca «Sin contraseña»». Las conexiones importadas de Navicat quedan en modo **Contraseña**, porque Navicat no
 guarda si hace falta.
 
+### Servidores MariaDB
+
+Una conexión MySQL puede apuntar a un servidor MariaDB: Vortaq lo detecta al conectar (por `VERSION()`) y
+aplica estos ajustes solo a ese servidor; con MySQL nada cambia.
+
+- Las **tablas versionadas** (`WITH SYSTEM VERSIONING`) aparecen con las demás tablas y se editan igual (el
+  historial lo guarda el servidor).
+- Los **valores por defecto** se muestran sin las comillas que añade MariaDB (`'x'` → `x`, `NULL` → sin valor).
+- Las columnas **INVISIBLE** se ven en la vista de datos (se piden por nombre, porque `SELECT *` las omite).
+- **Usuarios** se lee de `mysql.global_priv` (en MariaDB `mysql.user` es una vista sin `account_locked`).
+- El total de filas usa `SET STATEMENT max_statement_time` (MariaDB ignora la pista de MySQL) y el tipo de las
+  columnas JSON, UUID e INET aparece con su nombre.
+- El diseñador parte de la colación de la base de datos al crear una tabla.
+- **Copias `.nb3`**: el formato no tiene sitio para tablas versionadas ni secuencias; la ventana de copia y el
+  registro de la tarea avisan con sus nombres antes de omitirlas.
+
 ### Importar desde otros gestores
 
 **Más › Importar…** (también **Conexión › Importar…**, el botón **Importar…** de la lista vacía y el último paso
@@ -1161,7 +1177,7 @@ el registro es más detallado y se copia también en la terminal.
 | `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
 | `npm run test:watch`                | Tests en modo observación                                                   |
 | `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)          |
-| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, y falla si falta alguna URL              |
+| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7 y MariaDB 11; falla si falta alguna URL   |
 | `npm run lint`                      | ESLint                                                                      |
 | `npm run format`                    | Prettier                                                                    |
 | `npm run build`                     | Compila a `out/`                                                            |
@@ -1170,8 +1186,9 @@ el registro es más detallado y se copia también en la terminal.
 
 ### Tests de integración
 
-Necesitan dos MySQL desechables: 8.4 en el puerto 33306 y 5.7 en el 33357 (siempre en `127.0.0.1`, nunca en
-3306/3307). `tests/docker-compose.yml` los declara; los comandos valen igual en macOS, Linux y PowerShell:
+Necesitan servidores desechables: MySQL 8.4 en el puerto 33306, MySQL 5.7 en el 33357 y MariaDB 11 en el
+33311 (siempre en `127.0.0.1`, nunca en 3306/3307). `tests/docker-compose.yml` los declara (imágenes nativas
+arm64 salvo MySQL 5.7); los comandos valen igual en macOS, Linux y PowerShell:
 
 ```sh
 docker compose -f tests/docker-compose.yml up -d --wait
@@ -1194,13 +1211,15 @@ docker exec vortaq-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --w
 ```
 
 `npm run test:integration:required` es la puerta de calidad: ejecuta las suites de MySQL y de backups contra
-los dos servidores y **falla** (en vez de omitirlas) si falta `VORTAQ_TEST_MYSQL_URL` o
-`VORTAQ_TEST_MYSQL57_URL`. `npm run test:integration` omite en silencio el servidor que no tenga URL.
+los dos MySQL, la de MariaDB contra el suyo, y **falla** (en vez de omitirlas) si falta
+`VORTAQ_TEST_MYSQL_URL`, `VORTAQ_TEST_MYSQL57_URL` o `VORTAQ_TEST_MARIADB_URL`.
+`npm run test:integration` omite en silencio el servidor que no tenga URL.
 
 ```sh
 # macOS / Linux
 VORTAQ_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
 VORTAQ_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
+VORTAQ_TEST_MARIADB_URL='mysql://root:navidog@127.0.0.1:33311/navidog_test' \
 npm run test:integration:required
 ```
 
@@ -1208,6 +1227,7 @@ npm run test:integration:required
 # Windows (PowerShell)
 $env:VORTAQ_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
 $env:VORTAQ_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
+$env:VORTAQ_TEST_MARIADB_URL = 'mysql://root:navidog@127.0.0.1:33311/navidog_test'
 npm run test:integration:required
 ```
 
@@ -1287,6 +1307,7 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `VORTAQ_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                  |
 | `VORTAQ_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                          |
 | `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
+| `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                                    |
 | `VORTAQ_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                       |
 | `VORTAQ_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `VORTAQ_USER_DATA`.                                                                                                                                                              |
 | `VORTAQ_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |

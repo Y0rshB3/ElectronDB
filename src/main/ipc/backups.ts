@@ -26,4 +26,11 @@ export function registerBackupsHandlers(ctx: AppContext): void {
   handle('backups:delete', h.delete)
   handle('backups:cancel', h.cancel)
   handle('backups:exportSql', h.exportSql)
+  handle('backups:skippedObjects', async (connectionId, schema) => {
+    const [{ getSessionFactory }, { skippedObjectsWarning }] = await Promise.all([
+      import('../db/manager'),
+      import('../backup/create')
+    ])
+    return skippedObjectsWarning(getSessionFactory(ctx), connectionId, schema)
+  })
 }

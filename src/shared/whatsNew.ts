@@ -31,8 +31,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       'ElectronDB ahora se llama Vortaq',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y archivos .sql',
       'Exporta copias en .sql compatibles con otros gestores',
-      'Nuevo icono',
-      'Barra de herramientas reorganizada'
+      'Nuevo icono y barra de herramientas reorganizada',
+      'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
     ],
     important: ['Tus datos se trasladan automáticamente a Vortaq'],
     tour: [

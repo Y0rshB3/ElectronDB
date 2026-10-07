@@ -11,8 +11,10 @@
 # owns 33306, start only the 5.7 service:
 #   docker compose -f tests/docker-compose.yml up -d --wait mysql57
 #
-# Later engines (MariaDB 33316, PostgreSQL 55432, MongoDB 57017/57018) join this file in their
-# own phases (docs/multi-engine-design.md, section 15.3).
+# MariaDB (33311) and PostgreSQL (55432, plus a throwaway SSH server on 52222 for the tunnel
+# test) are here since 0.2.0; MongoDB (57017/57018) joins in its own phase
+# (docs/multi-engine-design.md, section 15.3). Start only some services by naming them:
+#   docker compose -f tests/docker-compose.yml up -d --wait mariadb11 postgres17 sshd
 name: electrondb-test
 
 services:
@@ -49,3 +51,56 @@ services:
       timeout: 5s
       retries: 90
       start_period: 20s
+
+  # VORTAQ_TEST_MARIADB_URL=mysql://root:navidog@127.0.0.1:33311/navidog_test
+  # Native arm64/amd64 image. A `mysql` connection pointed at it exercises the MariaDB fixes.
+  mariadb11:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: navidog
+      MARIADB_DATABASE: navidog_test
+    ports:
+      - '127.0.0.1:33311:3306'
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  # VORTAQ_TEST_PG_URL=postgres://postgres:navidog@127.0.0.1:55432/navidog_test
+  # uuid-ossp and pgcrypto are created in `public` by the tests themselves (idempotent).
+  postgres17:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: navidog
+      POSTGRES_DB: navidog_test
+    ports:
+      - '127.0.0.1:55432:5432'
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres', '-d', 'navidog_test']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 5s
+
+  # VORTAQ_TEST_SSH_URL=ssh://vortaq:navidog@127.0.0.1:52222  (optional)
+  # Throwaway SSH server on the compose network: the PostgreSQL tunnel test connects to it and
+  # forwards to `postgres17:5432`. Password login for a test-only user; never reuse elsewhere.
+  sshd:
+    image: linuxserver/openssh-server:latest
+    environment:
+      PUID: '1000'
+      PGID: '1000'
+      USER_NAME: vortaq
+      USER_PASSWORD: navidog
+      PASSWORD_ACCESS: 'true'
+      DOCKER_MODS: linuxserver/mods:openssh-server-ssh-tunnel
+    ports:
+      - '127.0.0.1:52222:2222'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 2222 || exit 1']
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 10s

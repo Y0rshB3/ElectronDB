@@ -3,6 +3,7 @@ import type { TableDataPage, TableDataRequest } from '@shared/types'
 import { fetchTablePage } from '../db/tableData'
 import { MysqlUserError } from './errors'
 import { escapeId, listColumns, primaryKeyColumns, type Queryable } from './introspect'
+import { isMariaDbSession } from './mariadb'
 import { MAX_ROWS_CAP } from './query'
 import type { FullSession } from './session'
 import { buildFilterWhere, filterNeedsColumns } from './tableFilter'
@@ -50,16 +51,30 @@ function fromClause(req: TableDataRequest, columns?: readonly string[]): string 
  * integers, filter values escaped by the driver): a `?` typed inside the raw
  * WHERE must not be taken for a placeholder and consume a parameter.
  */
-export function buildSelectSql(req: TableDataRequest, columns?: readonly string[]): string {
+export function buildSelectSql(
+  req: TableDataRequest,
+  columns?: readonly string[],
+  /** MariaDB with INVISIBLE columns: every column by name, since SELECT * omits them. */
+  explicitColumns?: readonly string[]
+): string {
   validate(req)
-  let sql = `SELECT * ${fromClause(req, columns)}`
+  let sql = explicitColumns?.length
+    ? `SELECT ${explicitColumns.map(escapeId).join(', ')} ${fromClause(req, columns)}`
+    : `SELECT * ${fromClause(req, columns)}`
   if (req.orderBy) sql += ` ORDER BY ${escapeId(req.orderBy.column)} ${req.orderBy.direction}`
   sql += ` LIMIT ${req.limit} OFFSET ${req.offset}`
   return sql
 }
 
-export function buildCountSql(req: TableDataRequest, columns?: readonly string[]): string {
+export function buildCountSql(
+  req: TableDataRequest,
+  columns?: readonly string[],
+  flavor: 'mysql' | 'mariadb' = 'mysql'
+): string {
   validate(req)
+  // MariaDB ignores the MAX_EXECUTION_TIME hint; its own per-statement timeout is in seconds.
+  if (flavor === 'mariadb')
+    return `SET STATEMENT max_statement_time=${COUNT_TIMEOUT_MS / 1000} FOR SELECT COUNT(*) AS total ${fromClause(req, columns)}`
   return `SELECT /*+ MAX_EXECUTION_TIME(${COUNT_TIMEOUT_MS}) */ COUNT(*) AS total ${fromClause(req, columns)}`
 }
 
@@ -76,6 +91,15 @@ export async function filterColumns(
   return columns
 }
 
+/** All columns in order when the table has an INVISIBLE one (MariaDB); undefined otherwise. */
+async function explicitColumnsFor(
+  q: Queryable,
+  req: Pick<TableDataRequest, 'schema' | 'table'>
+): Promise<string[] | undefined> {
+  const columns = await listColumns(q, req.schema, req.table)
+  return columns.some((c) => c.hidden) ? columns.map((c) => c.name) : undefined
+}
+
 /** Loads one page of a table plus its primary key and (best effort) total row count. */
 export async function fetchTableData(
   session: FullSession,
@@ -84,8 +108,11 @@ export async function fetchTableData(
   validate(req)
   const started = performance.now()
   const columnNames = await filterColumns(session, req)
-  const select = buildSelectSql(req, columnNames)
-  const countSql = buildCountSql(req, columnNames)
+  const mariadb = isMariaDbSession(session)
+  // MariaDB INVISIBLE columns are left out of SELECT *: name every column when there is one.
+  const explicit = mariadb ? await explicitColumnsFor(session, req) : undefined
+  const select = buildSelectSql(req, columnNames, explicit)
+  const countSql = buildCountSql(req, columnNames, mariadb ? 'mariadb' : 'mysql')
 
   return fetchTablePage(
     {

@@ -14,6 +14,10 @@ export interface FieldMeta {
   charsetNr?: number
   characterSet?: number
   decimals?: number
+  /** MariaDB extended metadata ('uuid', 'inet4', 'inet6', 'vector'...); MySQL never sends it. */
+  extendedTypeName?: string
+  /** MariaDB extended metadata: 'json' for JSON (stored as LONGTEXT). */
+  extendedFormat?: string
 }
 
 /* mysql2 field flags (lib/constants/field_flags.js) */
@@ -95,9 +99,20 @@ export function columnTypeName(field: FieldMeta): string {
   return name
 }
 
+/**
+ * Type label of a result column: MariaDB's extended metadata names the real
+ * type (JSON arrives as LONGTEXT, UUID as CHAR); without it (every MySQL
+ * server) the label is columnTypeName's, unchanged.
+ */
+export function extendedTypeLabel(field: FieldMeta): string {
+  if (field.extendedFormat === 'json') return 'JSON'
+  if (field.extendedTypeName) return field.extendedTypeName.toUpperCase()
+  return columnTypeName(field)
+}
+
 /** Builds the shared QueryColumn descriptor for a result field. */
 export function toQueryColumn(field: FieldMeta): QueryColumn {
-  const column: QueryColumn = { name: field.name, type: columnTypeName(field) }
+  const column: QueryColumn = { name: field.name, type: extendedTypeLabel(field) }
   const table = field.orgTable || field.table
   const schema = field.db || field.schema
   if (table) column.table = table

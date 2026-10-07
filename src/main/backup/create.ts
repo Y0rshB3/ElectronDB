@@ -5,6 +5,12 @@ import { describeObjectCounts } from '@shared/jobLog'
 import type { BackupCreateOptions, BackupCreateResult, ConnectionConfig } from '@shared/types'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
+import {
+  MARIADB_SKIPPED_OBJECTS_SQL,
+  describeSkippedObjects,
+  isMariaDbSession,
+  skippedFromTableTypes
+} from '../mysql/mariadb'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
 import { literalKindOf, renderTuple, type LiteralKind } from './mysqlLiterals'
@@ -129,7 +135,9 @@ async function withFreshStats<T>(session: MysqlSession, fn: () => Promise<T>): P
 async function listObjects(
   session: MysqlSession,
   schema: string,
-  freshStats: boolean
+  freshStats: boolean,
+  /** Receives the TABLE_TYPE rows of the listing (no extra query). */
+  onTables?: (rows: { name: unknown; type: unknown }[]) => void
 ): Promise<SchemaObject[]> {
   const listTables = () =>
     session.query<{ name: unknown; type: unknown; estRows?: unknown }>(
@@ -137,6 +145,7 @@ async function listObjects(
       [schema]
     )
   const tables = await (freshStats ? withFreshStats(session, listTables) : listTables())
+  onTables?.(tables)
   const routines = await session.query<{ name: unknown; type: unknown }>(
     'SELECT ROUTINE_NAME AS name, ROUTINE_TYPE AS type FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? ORDER BY ROUTINE_NAME',
     [schema]
@@ -270,9 +279,17 @@ export async function createBackup(
     }
 
     const wanted = new Set((options.objects ?? []).filter(Boolean))
-    const objects = (await listObjects(session, schema, options.includeData)).filter(
-      (o) => wanted.size === 0 || wanted.has(o.name)
-    )
+    // MariaDB: system-versioned tables and sequences have no .nb3 slot and are left out;
+    // say so (names only) instead of skipping them silently. Read from the same listing.
+    let skippedWarning = null as string | null
+    const objects = (
+      await listObjects(session, schema, options.includeData, (rows) => {
+        if (!isMariaDbSession(session)) return
+        skippedWarning = describeSkippedObjects(
+          skippedFromTableTypes(rows).filter((o) => wanted.size === 0 || wanted.has(o.name))
+        )
+      })
+    ).filter((o) => wanted.size === 0 || wanted.has(o.name))
     if (wanted.size > 0 && objects.length === 0) {
       throw new Error(`Ninguno de los objetos seleccionados existe en ${schema}.`)
     }
@@ -287,6 +304,8 @@ export async function createBackup(
       chunkLimit: deps.chunkLimit
     })
     const total = objects.length
+    if (skippedWarning)
+      progress({ phase: 'warning', current: 0, total, message: skippedWarning, done: false })
     const weights = objects.map((o) => objectWeight(o.rowsEstimate, options.includeData))
     const workTotal = weights.reduce((sum, w) => sum + w, 0)
     let workDone = 0
@@ -453,4 +472,28 @@ async function backupTable(
   }
   const { rows } = await object.finish(definition)
   return rows
+}
+
+/**
+ * Pre-backup check for the backup dialog (P1b): on a MariaDB server, the
+ * warning naming the system-versioned tables and sequences a .nb3 of `schema`
+ * would leave out; null otherwise. A MySQL server is never queried.
+ */
+export async function skippedObjectsWarning(
+  sessions: SessionFactory,
+  connectionId: string,
+  schema: string
+): Promise<string | null> {
+  if (!schema?.trim()) return null
+  const session = await sessions.acquire(connectionId)
+  try {
+    if (!isMariaDbSession(session)) return null
+    const rows = await session.query<{ name: unknown; type: unknown }>(
+      MARIADB_SKIPPED_OBJECTS_SQL,
+      [schema]
+    )
+    return describeSkippedObjects(skippedFromTableTypes(rows))
+  } finally {
+    await session.release().catch(() => undefined)
+  }
 }

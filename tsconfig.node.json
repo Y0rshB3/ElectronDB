@@ -18,7 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],
-      "@main/*": ["src/main/*"]
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/src/*"]
     }
   },
   "include": [
@@ -33,6 +34,9 @@
     "src/renderer/src/components/query/selectSource.ts",
     "src/renderer/src/components/query/resultEditability.ts",
     "src/renderer/src/utils/columnMeta.ts",
-    "src/renderer/src/components/data/rowEditing.ts"
+    "src/renderer/src/components/data/rowEditing.ts",
+    "src/renderer/src/components/designer/alterTable.ts",
+    "src/renderer/src/utils/tableDesigner.ts",
+    "src/renderer/src/utils/sql.ts"
   ]
 }

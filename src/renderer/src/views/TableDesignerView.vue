@@ -116,12 +116,25 @@ async function loadStructure(): Promise<void> {
     } else {
       original.value = null
       draft.value = newTableDraft()
+      // MariaDB has no utf8mb4_0900_ai_ci before 11.4: start from the database's own collation.
+      if (connections.serverInfo[connectionId.value]?.runtime?.flavor === 'mariadb')
+        draft.value = { ...draft.value, collation: await databaseCollation() }
     }
     initialSnapshot.value = JSON.stringify(draft.value)
   } catch (err) {
     loadError.value = errorMessage(err)
   } finally {
     loading.value = false
+  }
+}
+
+/** Default collation of the tab's database ('' = the server's default when unknown). */
+async function databaseCollation(): Promise<string> {
+  try {
+    const dbs = await api.db.databases(connectionId.value)
+    return dbs.find((d) => d.name === schema.value)?.collation ?? ''
+  } catch {
+    return ''
   }
 }
 

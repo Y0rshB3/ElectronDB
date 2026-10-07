@@ -14,10 +14,18 @@ import type {
 } from '@shared/types'
 import { MysqlUserError } from './errors'
 import { isSystemSchema } from '@shared/restoreTask'
+import { detectMysqlFlavor, mysqlReturning, mysqlVersionNumber } from '@shared/serverFlavor'
+import type { EngineId } from '@shared/types'
+import { MARIADB_LIST_TABLES_SQL, isMariaDbSession, unquoteMariaDbDefault } from './mariadb'
 
 /** The subset of MysqlSession introspection needs (also satisfied by a bare connection). */
 export interface Queryable {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>
+  /**
+   * VERSION() of the server when known (sessions carry it). A MariaDB version
+   * turns on the P1b fixes; absent or MySQL keeps the v0.1.x SQL unchanged.
+   */
+  readonly serverVersion?: string
 }
 
 type Row = Record<string, unknown>
@@ -55,7 +63,7 @@ function yes(value: unknown): boolean {
 
 export async function fetchServerInfo(
   q: Queryable,
-  target: { host: string; port: number; username: string }
+  target: { host: string; port: number; username: string; engine?: EngineId }
 ): Promise<ServerInfo> {
   const [vars] = await q.query<Row>(
     'SELECT VERSION() AS version, @@version_comment AS versionComment, @@character_set_server AS characterSet'
@@ -64,15 +72,24 @@ export async function fetchServerInfo(
     "SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Threads_connected')"
   )
   const byName = new Map(status.map((r) => [text(r.Variable_name), text(r.Value)]))
+  const version = text(vars?.version)
   return {
-    version: text(vars?.version),
+    version,
     versionComment: text(vars?.versionComment),
     host: target.host,
     port: target.port,
     username: target.username,
     characterSet: text(vars?.characterSet),
     uptimeSeconds: numberOrNull(byName.get('Uptime')) ?? 0,
-    threadsConnected: numberOrNull(byName.get('Threads_connected')) ?? 0
+    threadsConnected: numberOrNull(byName.get('Threads_connected')) ?? 0,
+    engine: target.engine ?? 'mysql',
+    // Derived from VERSION() above: no extra query, the MySQL SQL is unchanged.
+    runtime: {
+      flavor: detectMysqlFlavor(version),
+      versionNumber: mysqlVersionNumber(version),
+      transactions: true,
+      returning: mysqlReturning(version)
+    }
   }
 }
 
@@ -118,6 +135,7 @@ export async function dropDatabase(q: Queryable, name: string): Promise<void> {
 /* ---------- objects ---------- */
 
 export async function listTables(q: Queryable, schema: string): Promise<TableInfo[]> {
+  if (isMariaDbSession(q)) return mapTables(await q.query<Row>(MARIADB_LIST_TABLES_SQL, [schema]))
   const rows = await q.query<Row>(
     `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, AUTO_INCREMENT,
             CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT
@@ -126,6 +144,10 @@ export async function listTables(q: Queryable, schema: string): Promise<TableInf
       ORDER BY TABLE_NAME`,
     [schema]
   )
+  return mapTables(rows)
+}
+
+function mapTables(rows: Row[]): TableInfo[] {
   return rows.map((r) => ({
     name: text(r.TABLE_NAME),
     engine: textOrNull(r.ENGINE),
@@ -236,7 +258,7 @@ export async function listColumns(
       ORDER BY ORDINAL_POSITION`,
     [schema, table]
   )
-  return rows.map((r) => ({
+  const columns = rows.map((r): ColumnInfo => ({
     name: text(r.COLUMN_NAME),
     ordinal: numberOrNull(r.ORDINAL_POSITION) ?? 0,
     columnType: text(r.COLUMN_TYPE),
@@ -248,6 +270,13 @@ export async function listColumns(
     characterSet: textOrNull(r.CHARACTER_SET_NAME),
     collation: textOrNull(r.COLLATION_NAME),
     comment: text(r.COLUMN_COMMENT)
+  }))
+  if (!isMariaDbSession(q)) return columns
+  // MariaDB: 'NULL' / quoted literals in COLUMN_DEFAULT, INVISIBLE columns hidden from SELECT *.
+  return columns.map((c) => ({
+    ...c,
+    defaultValue: unquoteMariaDbDefault(c.defaultValue),
+    hidden: /\bINVISIBLE\b/i.test(c.extra)
   }))
 }
 
@@ -353,10 +382,22 @@ export async function tableStructure(
     listForeignKeys(q, schema, table),
     showCreate(q, schema, 'table', table)
   ])
+  const tableType = text(meta.TABLE_TYPE)
   return {
     schema,
     name: table,
-    tableType: text(meta.TABLE_TYPE),
+    tableType,
+    // MariaDB only: system-versioned tables are editable tables (kind says so to the renderer).
+    ...(isMariaDbSession(q)
+      ? {
+          kind:
+            tableType === 'SYSTEM VERSIONED'
+              ? ('system-versioned' as const)
+              : tableType === 'VIEW'
+                ? ('view' as const)
+                : ('table' as const)
+        }
+      : {}),
     columns,
     indexes,
     foreignKeys,

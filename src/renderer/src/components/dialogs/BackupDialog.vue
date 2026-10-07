@@ -93,6 +93,28 @@ function reset(): void {
 // Incremented per request so a slow response for a previous schema is discarded.
 let objectsRequest = 0
 
+/**
+ * MariaDB servers only (P1b): a .nb3 leaves out system-versioned tables and
+ * sequences, so the dialog names them before the copy starts. MySQL servers
+ * never ask (the connection's runtime flavour comes from connections:open).
+ */
+const skippedWarning = ref<string | null>(null)
+let skippedRequest = 0
+
+async function loadSkippedWarning(): Promise<void> {
+  const request = ++skippedRequest
+  skippedWarning.value = null
+  const cid = connectionId.value
+  const db = schema.value
+  if (!cid || !db || connections.serverInfo[cid]?.runtime?.flavor !== 'mariadb') return
+  try {
+    const warning = await api.invokeSilent('backups:skippedObjects', cid, db)
+    if (request === skippedRequest) skippedWarning.value = warning
+  } catch {
+    // Best effort: the backup itself logs the same warning.
+  }
+}
+
 async function loadObjects(): Promise<void> {
   const request = ++objectsRequest
   objectItems.value = []
@@ -193,6 +215,7 @@ watch(
     reset()
     if (connectionId.value) void schemaLoader.load(connectionId.value)
     void loadObjects()
+    void loadSkippedWarning()
   },
   { immediate: true }
 )
@@ -202,12 +225,14 @@ function onConnectionChange(id: string | null): void {
   schema.value = null
   objectItems.value = []
   objects.value = []
+  skippedWarning.value = null
   if (id) void schemaLoader.load(id)
 }
 
 function onSchemaChange(value: string | null): void {
   schema.value = value
   void loadObjects()
+  void loadSkippedWarning()
 }
 </script>
 
@@ -347,6 +372,15 @@ function onSchemaChange(value: string | null): void {
                 </p>
               </v-col>
             </template>
+            <v-col v-if="!isSql && skippedWarning" cols="12">
+              <v-alert
+                type="warning"
+                variant="tonal"
+                density="compact"
+                data-test="backup-skipped-warning"
+                >{{ skippedWarning }}</v-alert
+              >
+            </v-col>
             <v-col v-if="!isSql" cols="12">
               <v-textarea
                 v-model="comment"
