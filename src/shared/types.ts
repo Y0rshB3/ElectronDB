@@ -628,6 +628,10 @@ export interface BackupFile {
   sizeBytes: number
   createdAt: string
   modifiedAt: string
+  /**
+   * Who wrote the file. 'electrondb' means this app: the value predates the
+   * Vortaq name and stays as is because it is a data value, not a label.
+   */
   source: 'navicat' | 'electrondb' | 'unknown'
   /** Free-text suffix parsed from Navicat names like 20260317145120-staging.nb3 */
   label: string | null
@@ -1034,7 +1038,7 @@ export type UpdateRunMode = 'packaged' | 'source'
  * - 'auto': downloaded and installed from the app (electron-updater; Windows NSIS installer,
  *   Linux AppImage). The download is checked against the sha512 of latest.yml.
  * - 'mac-dmg': the app downloads the .dmg and checks its SHA-256, the user drags the app to
- *   Applications (self-install needs an Apple Developer ID signature, which ElectronDB lacks).
+ *   Applications (self-install needs an Apple Developer ID signature, which Vortaq lacks).
  * - 'manual': the browser downloads the file (portable .exe, .deb, test profiles).
  * - 'source': runs from a folder (`npm run dev`): commands to paste in a terminal.
  */

@@ -41,7 +41,7 @@ const fileName = computed(() => {
       <div class="update-install__row">
         <v-icon icon="mdi-download" size="20" class="update-install__icon" aria-hidden="true" />
         <div class="update-install__text">
-          <div class="update-install__title">Descargando ElectronDB {{ version }}…</div>
+          <div class="update-install__title">Descargando Vortaq {{ version }}…</div>
           <div class="update-install__meta nd-mono" data-test="update-progress-text">
             {{ progressText }}
           </div>
@@ -70,13 +70,11 @@ const fileName = computed(() => {
           aria-hidden="true"
         />
         <div class="update-install__text">
-          <div class="update-install__title">
-            ElectronDB {{ version }} está listo para instalarse
-          </div>
+          <div class="update-install__title">Vortaq {{ version }} está listo para instalarse</div>
           <div class="update-install__meta">
             Descargado y comprobado (sha512). Al reiniciar se instala sin preguntas y se abre la
             versión nueva; tus conexiones, trabajos y ajustes se conservan. Si eliges «Más tarde» se
-            instalará cuando cierres ElectronDB.
+            instalará cuando cierres Vortaq.
           </div>
         </div>
       </div>
@@ -111,13 +109,13 @@ const fileName = computed(() => {
         </div>
       </div>
       <ol class="update-install__steps" data-test="update-mac-steps">
-        <li>Cierra ElectronDB.</li>
+        <li>Cierra Vortaq.</li>
         <li>
           En la ventana del instalador,
-          <strong>arrastra ElectronDB a Aplicaciones y reemplaza</strong>
+          <strong>arrastra Vortaq a Aplicaciones y reemplaza</strong>
           la versión anterior.
         </li>
-        <li>Abre ElectronDB de nuevo: tus conexiones, trabajos y ajustes se conservan.</li>
+        <li>Abre Vortaq de nuevo: tus conexiones, trabajos y ajustes se conservan.</li>
       </ol>
       <div class="update-install__actions">
         <v-btn
@@ -149,7 +147,7 @@ const fileName = computed(() => {
             class="update-install__title nd-mono nd-ellipsis"
             :title="result?.download?.fileName"
           >
-            {{ result?.download?.fileName || `ElectronDB ${version}` }}
+            {{ result?.download?.fileName || `Vortaq ${version}` }}
           </div>
           <div class="update-install__meta">
             <template v-if="result?.download"
@@ -176,12 +174,12 @@ const fileName = computed(() => {
       <p v-if="isMac" class="update-install__hint" data-test="update-mac-why">
         En Mac la app descarga el <code>.dmg</code> y comprueba su suma SHA-256, pero no puede
         reemplazarse a sí misma: macOS solo permite la actualización automática a apps firmadas con
-        un certificado de desarrollador de Apple, y ElectronDB todavía no lo tiene. Después solo
-        tienes que arrastrar la app a Aplicaciones.
+        un certificado de desarrollador de Apple, y Vortaq todavía no lo tiene. Después solo tienes
+        que arrastrar la app a Aplicaciones.
       </p>
       <p v-else class="update-install__hint">
-        Se descarga desde las versiones de ElectronDB en GitHub y se comprueba antes de instalar.
-        Tus conexiones, trabajos y ajustes se conservan.
+        Se descarga desde las versiones de Vortaq en GitHub y se comprueba antes de instalar. Tus
+        conexiones, trabajos y ajustes se conservan.
       </p>
     </template>
 

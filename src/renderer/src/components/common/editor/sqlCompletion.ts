@@ -16,7 +16,7 @@ import type { EditorView } from '@codemirror/view'
  * literals are on unless sql_mode has NO_BACKSLASH_ESCAPES. Without this the
  * editor (and the string detection below) misreads `'it\'s'`.
  */
-export const electronDBMySQL = SQLDialect.define({ ...MySQL.spec, backslashEscapes: true })
+export const vortaqMySQL = SQLDialect.define({ ...MySQL.spec, backslashEscapes: true })
 
 type Tree = ReturnType<typeof syntaxTree>
 type SyntaxNode = ReturnType<Tree['resolveInner']>

@@ -7,7 +7,7 @@ import { CredentialStore, DB_PASSWORD, SECRET_KINDS, plainCodec } from './store'
 describe('CredentialStore', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-cred-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-cred-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

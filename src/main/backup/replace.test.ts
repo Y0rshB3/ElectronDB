@@ -50,7 +50,7 @@ describe('replaceSchemaFromBackup', () => {
     replaceSchemaFromBackup(deps, request(overrides), { line: (l) => lines.push(l) })
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-replace-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-replace-'))
     timeline = []
     backups = fakeBackupService(dir, timeline)
     sessions = fakeSessionFactory(timeline)
@@ -131,7 +131,11 @@ describe('replaceSchemaFromBackup', () => {
       dropObjectsFirst: false
     })
     expect(result.includeData).toBe(false)
-    expect(result.restore).toMatchObject({ objectsRestored: 2, rowsInserted: 0, structureOnly: true })
+    expect(result.restore).toMatchObject({
+      objectsRestored: 2,
+      rowsInserted: 0,
+      structureOnly: true
+    })
     const log = lines.join('\n')
     expect(log).toContain('Contenido: solo estructura')
     expect(log).toMatch(/Comprobar integridad del backup \.+ .*OK/)
@@ -287,7 +291,7 @@ describe('replaceSchemaFromBackup', () => {
 describe('readBackupCharset', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-charset-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-charset-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -324,7 +328,7 @@ describe('readBackupCharset', () => {
 describe('integrity of a real .nb3 before replacing (regression: damaged data chunk)', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-integrity-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-integrity-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

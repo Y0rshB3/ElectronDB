@@ -445,8 +445,8 @@ export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'event:aiDone'
 ] as const
 
-/** Typed API surface exposed on window.electronDB by the preload script. */
-export interface ElectronDBApi {
+/** Typed API surface exposed on window.vortaq by the preload script. */
+export interface VortaqApi {
   /** Host OS (process.platform: 'darwin', 'win32', 'linux'…), for OS-specific UI. */
   readonly platform: string
   invoke<C extends IpcChannel>(channel: C, ...args: IpcArgs<C>): Promise<IpcResult<C>>

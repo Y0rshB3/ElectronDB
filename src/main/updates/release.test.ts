@@ -8,7 +8,7 @@ const ASSETS = RELEASE_ASSETS
 describe('isAllowedReleaseUrl', () => {
   it('accepts release pages and downloads of the repository', () => {
     expect(isAllowedReleaseUrl(`${BASE}/tag/v0.1.3`)).toBe(true)
-    expect(isAllowedReleaseUrl(`${BASE}/download/v0.1.3/ElectronDB-0.1.3-arm64.dmg`)).toBe(true)
+    expect(isAllowedReleaseUrl(`${BASE}/download/v0.1.3/Vortaq-0.1.3-arm64.dmg`)).toBe(true)
     expect(isAllowedReleaseUrl('https://github.com/y0rshb3/electrondb/releases/latest')).toBe(true)
   })
 
@@ -21,7 +21,7 @@ describe('isAllowedReleaseUrl', () => {
       'https://github.com:8443/Y0rshB3/ElectronDB/releases/tag/v1',
       'https://github.com/Y0rshB3/ElectronDB/releases/',
       'https://github.com/Y0rshB3/ElectronDB/issues/1',
-      'https://github.com/Other/ElectronDB/releases/tag/v1',
+      'https://github.com/Other/Vortaq/releases/tag/v1',
       'https://github.com/Y0rshB3/ElectronDB/releases/../../../evil/repo/releases/x',
       'https://github.com/Y0rshB3/ElectronDBX/releases/tag/v1',
       'file:///etc/passwd',
@@ -40,7 +40,7 @@ describe('parseRelease', () => {
     const r = parseRelease(apiRelease())!
     expect(r.version).toBe('0.1.3')
     expect(r.tag).toBe('v0.1.3')
-    expect(r.name).toBe('ElectronDB v0.1.3')
+    expect(r.name).toBe('Vortaq v0.1.3')
     expect(r.htmlUrl).toBe(`${BASE}/tag/v0.1.3`)
     expect(r.publishedAt).toBe('2026-10-01T10:00:00Z')
     expect(r.assets).toHaveLength(8)
@@ -72,7 +72,7 @@ describe('parseRelease', () => {
         ]
       })
     )!
-    expect(r.name).toBe('ElectronDB v0.1.3')
+    expect(r.name).toBe('Vortaq v0.1.3')
     expect(r.notes).toBe('')
     expect(r.publishedAt).toBeNull()
     expect(r.assets).toEqual([{ name: 'ok.dmg', url: `${BASE}/download/v0.1.3/ok.dmg`, size: 0 }])
@@ -96,28 +96,25 @@ describe('pickAssets', () => {
 
   it('picks the dmg of the right architecture on macOS', () => {
     expect(names(pickAssets(ASSETS, 'darwin', 'arm64'))).toEqual([
-      'ElectronDB-0.1.3-arm64.dmg',
-      'ElectronDB-0.1.3-arm64-mac.zip'
+      'Vortaq-0.1.3-arm64.dmg',
+      'Vortaq-0.1.3-arm64-mac.zip'
     ])
     expect(names(pickAssets(ASSETS, 'darwin', 'x64'))).toEqual([
-      'ElectronDB-0.1.3-x64.dmg',
-      'ElectronDB-0.1.3-x64-mac.zip'
+      'Vortaq-0.1.3-x64.dmg',
+      'Vortaq-0.1.3-x64-mac.zip'
     ])
   })
 
   it('picks the setup on Windows and offers the portable', () => {
     const r = pickAssets(ASSETS, 'win32', 'x64')
-    expect(names(r)).toEqual([
-      'ElectronDB-0.1.3-x64-setup.exe',
-      'ElectronDB-0.1.3-x64-portable.exe'
-    ])
+    expect(names(r)).toEqual(['Vortaq-0.1.3-x64-setup.exe', 'Vortaq-0.1.3-x64-portable.exe'])
     expect(r.download).toMatchObject({ sizeBytes: 100, label: 'Instalador (.exe)' })
   })
 
   it('picks the AppImage on Linux and offers the .deb', () => {
     expect(names(pickAssets(ASSETS, 'linux', 'x64'))).toEqual([
-      'ElectronDB-0.1.3-x86_64.AppImage',
-      'electrondb_0.1.3_amd64.deb'
+      'Vortaq-0.1.3-x86_64.AppImage',
+      'vortaq_0.1.3_amd64.deb'
     ])
   })
 

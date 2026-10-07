@@ -33,9 +33,9 @@ describe('profile migration', () => {
     JSON.parse(readFileSync(join(dir, name), 'utf8'))
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'electrondb-migration-'))
+    root = mkdtempSync(join(tmpdir(), 'vortaq-migration-'))
     from = join(root, 'Navidog')
-    to = join(root, 'ElectronDB')
+    to = join(root, 'Vortaq')
     write(from, 'connections.json', {
       version: 1,
       items: [
@@ -211,12 +211,12 @@ describe('rewriteProfilePaths', () => {
     const out = rewriteProfilePaths(
       { a: '/AppData/navidog/backups/x', b: ['/AppData/navidog'], c: '/AppData/navidogs/x', n: 3 },
       '/AppData/Navidog',
-      '/AppData/ElectronDB',
+      '/AppData/Vortaq',
       'darwin'
     )
     expect(out.value).toEqual({
-      a: '/AppData/ElectronDB/backups/x',
-      b: ['/AppData/ElectronDB'],
+      a: '/AppData/Vortaq/backups/x',
+      b: ['/AppData/Vortaq'],
       c: '/AppData/navidogs/x',
       n: 3
     })
@@ -227,7 +227,7 @@ describe('rewriteProfilePaths', () => {
     const out = rewriteProfilePaths(
       { a: '/cfg/Navidog/backups/x', b: '/cfg/Navidog/backups', c: '/cfg/Navidog/certs/ca.pem' },
       '/cfg/Navidog',
-      '/cfg/ElectronDB',
+      '/cfg/Vortaq',
       'linux',
       ['/cfg/Navidog/backups']
     )
@@ -235,19 +235,14 @@ describe('rewriteProfilePaths', () => {
       value: {
         a: '/cfg/Navidog/backups/x',
         b: '/cfg/Navidog/backups',
-        c: '/cfg/ElectronDB/certs/ca.pem'
+        c: '/cfg/Vortaq/certs/ca.pem'
       },
       count: 1
     })
   })
 
   it('is case-sensitive on Linux', () => {
-    const out = rewriteProfilePaths(
-      '/cfg/navidog/backups',
-      '/cfg/Navidog',
-      '/cfg/ElectronDB',
-      'linux'
-    )
+    const out = rewriteProfilePaths('/cfg/navidog/backups', '/cfg/Navidog', '/cfg/Vortaq', 'linux')
     expect(out).toEqual({ value: '/cfg/navidog/backups', count: 0 })
   })
 })

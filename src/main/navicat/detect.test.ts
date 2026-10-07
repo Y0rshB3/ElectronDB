@@ -39,7 +39,7 @@ describe('detectNavicat', () => {
   describe('with backups under the default savepath', () => {
     let root: string
     beforeEach(() => {
-      root = mkdtempSync(join(tmpdir(), 'electrondb-detect-'))
+      root = mkdtempSync(join(tmpdir(), 'vortaq-detect-'))
       cpSync(FIXTURE_ROOT, root, { recursive: true })
       const settings = navicatPaths(root).settingsDir
       mkdirSync(join(settings, 'Dev', 'accounts'), { recursive: true })

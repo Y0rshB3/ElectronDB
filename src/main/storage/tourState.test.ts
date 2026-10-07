@@ -7,7 +7,7 @@ import { profileHadData, TOUR_FILE, TourStateService } from './tourState'
 describe('TourStateService (first-run logic)', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-tour-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-tour-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

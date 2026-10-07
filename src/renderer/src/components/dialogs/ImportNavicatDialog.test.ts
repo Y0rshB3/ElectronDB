@@ -3,7 +3,7 @@ import type { Mock } from 'vitest'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUiStore } from '@renderer/stores/ui'
 import ImportNavicatDialog from './ImportNavicatDialog.vue'
-import { calls, freshPinia, mockElectronDB, mountWith, settle } from './testing'
+import { calls, freshPinia, mockVortaq, mountWith, settle } from './testing'
 
 const ssh = {
   enabled: false,
@@ -35,7 +35,7 @@ describe('ImportNavicatDialog', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'navicat:detect': (root) => ({
         found: true,
         rootPath: root ?? '/nav',
@@ -131,7 +131,7 @@ describe('ImportNavicatDialog', () => {
   for (const os of ['win32', 'linux']) {
     describe(`on ${os}`, () => {
       beforeEach(() => {
-        ;(window.electronDB as { platform?: string }).platform = os
+        ;(window.vortaq as { platform?: string }).platform = os
       })
 
       it('explains the copied macOS folder and does not probe an empty path', async () => {
@@ -189,7 +189,7 @@ describe('ImportNavicatDialog', () => {
 
     function mock(candidates: unknown[], validRoots: string[] = [NAV, STORE]) {
       saved = []
-      invoke = mockElectronDB({
+      invoke = mockVortaq({
         'navicat:findCandidates': () => ({ supportedPlatform: true, candidates }),
         'navicat:detect': (root) => ({
           found: validRoots.includes(root as string),

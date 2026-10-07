@@ -18,8 +18,8 @@ import { createBackupService, type BackupService } from '@main/backup/index'
  * exactly as with data, every table stays empty and AUTO_INCREMENT starts at
  * 1; the default mode still restores the rows and the counters.
  *
- *   ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
- *   ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
+ *   VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
+ *   VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
  */
 
 const servers = [
@@ -158,7 +158,7 @@ describe.skipIf(servers.length === 0).each(cases)(
 
     beforeAll(async () => {
       const u = new URL(url)
-      dir = mkdtempSync(join(tmpdir(), 'electrondb-replace-structure-it-'))
+      dir = mkdtempSync(join(tmpdir(), 'vortaq-replace-structure-it-'))
       ctx = {
         userDataPath: dir,
         logDir: join(dir, 'logs'),
@@ -184,7 +184,8 @@ describe.skipIf(servers.length === 0).each(cases)(
 
     afterAll(async () => {
       try {
-        for (const db of [SRC, STRUCT, FULL]) await session?.execute(`DROP DATABASE IF EXISTS ${db}`)
+        for (const db of [SRC, STRUCT, FULL])
+          await session?.execute(`DROP DATABASE IF EXISTS ${db}`)
       } catch {
         /* best effort */
       }

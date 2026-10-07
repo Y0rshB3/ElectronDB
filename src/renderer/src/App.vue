@@ -74,7 +74,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <v-app class="electrondb">
+  <v-app class="vortaq">
     <div class="shell">
       <AppToolbar />
       <div class="shell__main">
@@ -152,10 +152,10 @@ body,
  * label share it so a disabled action reads as one dimmed unit.
  */
 :root,
-.v-theme--electrondbDark {
+.v-theme--vortaqDark {
   --nd-shell-disabled: color-mix(in srgb, var(--nd-text-2) 64%, transparent);
 }
-.v-theme--electrondbLight {
+.v-theme--vortaqLight {
   --nd-shell-disabled: color-mix(in srgb, var(--nd-text-2) 70%, transparent);
 }
 </style>

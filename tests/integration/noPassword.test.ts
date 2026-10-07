@@ -13,8 +13,8 @@ import { ConnectionManager } from '@main/mysql/manager'
 /**
  * Connections that need no password (auth proxies, users with an empty
  * password). Runs against every configured server:
- *   ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
- *   ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
+ *   VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
+ *   VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
  * Creates the throwaway users nd_nopass (empty password) and nd_pass, and drops them.
  */
 const servers = [
@@ -61,7 +61,7 @@ for (const server of servers) {
         savePassword: false
       },
       ssl: { enabled: false, verifyServer: false },
-      backupDir: join(tmpdir(), 'electrondb-it-nopass'),
+      backupDir: join(tmpdir(), 'vortaq-it-nopass'),
       extraBackupDirs: [],
       ...overrides
     })
@@ -69,7 +69,8 @@ for (const server of servers) {
     beforeAll(async () => {
       const conn = await admin()
       try {
-        for (const user of [NO_PASS, WITH_PASS]) await conn.query(`DROP USER IF EXISTS '${user}'@'%'`)
+        for (const user of [NO_PASS, WITH_PASS])
+          await conn.query(`DROP USER IF EXISTS '${user}'@'%'`)
         await conn.query(`CREATE USER '${NO_PASS}'@'%' IDENTIFIED BY ''`)
         await conn.query(`CREATE USER '${WITH_PASS}'@'%' IDENTIFIED BY '${WITH_PASS_SECRET}'`)
         for (const user of [NO_PASS, WITH_PASS])
@@ -77,7 +78,7 @@ for (const server of servers) {
       } finally {
         await conn.end()
       }
-      dir = mkdtempSync(join(tmpdir(), 'electrondb-it-nopass-'))
+      dir = mkdtempSync(join(tmpdir(), 'vortaq-it-nopass-'))
       ctx = {
         userDataPath: dir,
         logDir: join(dir, 'logs'),
@@ -96,7 +97,8 @@ for (const server of servers) {
       await manager?.closeAll()
       const conn = await admin()
       try {
-        for (const user of [NO_PASS, WITH_PASS]) await conn.query(`DROP USER IF EXISTS '${user}'@'%'`)
+        for (const user of [NO_PASS, WITH_PASS])
+          await conn.query(`DROP USER IF EXISTS '${user}'@'%'`)
       } finally {
         await conn.end()
       }

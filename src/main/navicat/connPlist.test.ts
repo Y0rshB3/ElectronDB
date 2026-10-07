@@ -12,12 +12,7 @@ const fixturePaths = navicatPaths(FIXTURE_ROOT)
 describe('parseConnPlist', () => {
   it('parses the four fixture connections', async () => {
     const connections = await parseConnPlist(await readTextFile(fixturePaths.connPlist))
-    expect(connections.map((c) => c.name)).toEqual([
-      'Dev',
-      'Home Lab',
-      'Production',
-      'Staging'
-    ])
+    expect(connections.map((c) => c.name)).toEqual(['Dev', 'Home Lab', 'Production', 'Staging'])
 
     const byName = Object.fromEntries(connections.map((c) => [c.name, c]))
     expect(byName.Dev).toMatchObject({
@@ -115,7 +110,7 @@ describe('inferEnvironment', () => {
 describe('readNavicatConnections', () => {
   let root: string
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'electrondb-navicat-'))
+    root = mkdtempSync(join(tmpdir(), 'vortaq-navicat-'))
     const paths = navicatPaths(root)
     mkdirSync(join(root, 'Common'), { recursive: true })
     copyFileSync(fixturePaths.connPlist, paths.connPlist)
@@ -165,12 +160,7 @@ describe('readNavicatConnections', () => {
 
   it('reads the real fixture root (no colours in that pref.plist)', async () => {
     const entries = await readNavicatConnections(FIXTURE_ROOT, [])
-    expect(entries.map((e) => e.preview.name)).toEqual([
-      'Dev',
-      'Home Lab',
-      'Production',
-      'Staging'
-    ])
+    expect(entries.map((e) => e.preview.name)).toEqual(['Dev', 'Home Lab', 'Production', 'Staging'])
     expect(entries.every((e) => e.preview.backupCount === 0 && !e.preview.alreadyImported)).toBe(
       true
     )

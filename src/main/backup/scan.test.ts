@@ -15,7 +15,7 @@ const touch = (path: string, content = 'not a real tar'): void => {
 }
 
 beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), 'electrondb-scan-'))
+  root = mkdtempSync(join(tmpdir(), 'vortaq-scan-'))
   const own = join(root, 'own')
   const navicat = join(root, 'navicat')
   touch(join(own, 'shop', '20260101090000.nb3'))
@@ -179,7 +179,7 @@ describe('fileCreatedAt', () => {
 
 describe('listBackups ordering on a timestamp tie', () => {
   it('two files of the same second: the one written last comes first (not the label name)', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'electrondb-scan-tie-'))
+    const dir = mkdtempSync(join(tmpdir(), 'vortaq-scan-tie-'))
     try {
       const own = join(dir, 'own')
       touch(join(own, 'shop', '20260401000000-struct.nb3'))

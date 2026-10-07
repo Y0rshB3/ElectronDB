@@ -24,7 +24,7 @@ function memFs(files: Record<string, string>, dirs: string[] = []): RunModeFs {
   }
 }
 
-const ROOT = resolve('/work/ElectronDB')
+const ROOT = resolve('/work/Vortaq')
 
 describe('detectRunMode', () => {
   it('reports packaged builds without touching the file system', () => {
@@ -91,13 +91,13 @@ describe('detectRunMode', () => {
 
 describe('sourceUpdateCommands', () => {
   it('quotes folders with spaces for the shell of the OS', () => {
-    expect(sourceUpdateCommands('/Users/me/My Apps/ElectronDB', 'darwin')[0]).toBe(
-      "cd '/Users/me/My Apps/ElectronDB'"
+    expect(sourceUpdateCommands('/Users/me/My Apps/Vortaq', 'darwin')[0]).toBe(
+      "cd '/Users/me/My Apps/Vortaq'"
     )
     expect(sourceUpdateCommands("/tmp/it's", 'linux')[0]).toBe(`cd '/tmp/it'\\''s'`)
-    expect(sourceUpdateCommands('C:\\Users\\Me\\My Apps\\ElectronDB', 'win32')[0]).toBe(
-      'cd "C:\\Users\\Me\\My Apps\\ElectronDB"'
+    expect(sourceUpdateCommands('C:\\Users\\Me\\My Apps\\Vortaq', 'win32')[0]).toBe(
+      'cd "C:\\Users\\Me\\My Apps\\Vortaq"'
     )
-    expect(sourceUpdateCommands('C:\\src\\ElectronDB', 'win32')[0]).toBe('cd C:\\src\\ElectronDB')
+    expect(sourceUpdateCommands('C:\\src\\Vortaq', 'win32')[0]).toBe('cd C:\\src\\Vortaq')
   })
 })

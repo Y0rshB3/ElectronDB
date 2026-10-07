@@ -34,8 +34,8 @@ import { validateJobInput } from '@main/ipc/jobValidation'
  * two schemas on MySQL 5.7 ("staging") and the run is restored with REPLACE
  * semantics into MySQL 8.4 ("local"), which already holds an older rb_a.
  *
- *   ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
- *   ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
+ *   VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
+ *   VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
  */
 
 const url84 = envVar('TEST_MYSQL_URL')
@@ -201,7 +201,7 @@ describe.skipIf(!url84 || !url57)('rollback of a run: MySQL 5.7 -> 8.4 (integrat
   beforeAll(async () => {
     const u84 = new URL(url84!)
     const u57 = new URL(url57!)
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-rollback-it-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-rollback-it-'))
     ctx = {
       userDataPath: dir,
       logDir: join(dir, 'logs'),

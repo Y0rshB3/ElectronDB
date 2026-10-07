@@ -9,7 +9,7 @@ import {
   calls,
   freshPinia,
   makeConnection,
-  mockElectronDB,
+  mockVortaq,
   mountWith,
   settle
 } from '@renderer/components/dialogs/testing'
@@ -113,7 +113,7 @@ describe('RollbackDialog', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'jobs:rollbackPlan': (_runId: unknown, targetId: unknown) => planFor(targetId as string),
       'jobs:rollback': () => started
     })
@@ -369,7 +369,7 @@ describe('RollbackDialog with backup files (a package of the backups list)', () 
   }
 
   it('plans the files, lists replaced vs created and sends the file request', async () => {
-    const invoke = mockElectronDB({
+    const invoke = mockVortaq({
       'jobs:rollbackPlan': (_source: unknown, targetId: unknown) => filesPlan(targetId as string),
       'jobs:rollback': () => started
     })
@@ -420,7 +420,7 @@ describe('RollbackDialog with backup files (a package of the backups list)', () 
   })
 
   it('shows why the files cannot be planned (two copies of one database)', async () => {
-    mockElectronDB({
+    mockVortaq({
       'jobs:rollbackPlan': () => {
         throw new Error(
           'Hay 2 copias de «auth» en la selección (a.nb3, b.nb3); selecciona solo una por base de datos.'
@@ -437,7 +437,7 @@ describe('RollbackDialog with backup files (a package of the backups list)', () 
   })
 
   it('a run source with chosen steps pre-checks only those', async () => {
-    const invoke = mockElectronDB({
+    const invoke = mockVortaq({
       'jobs:rollbackPlan': (_runId: unknown, targetId: unknown) => planFor(targetId as string)
     })
     const pinia = freshPinia()
@@ -455,7 +455,7 @@ describe('RollbackDialog with backup files (a package of the backups list)', () 
 
 describe('run history entry point', () => {
   it('shows «Restaurar todo en Local» only on finished runs with backups', async () => {
-    mockElectronDB({ 'jobs:runs': () => [run], 'jobs:rollbackPlan': () => planFor('local') })
+    mockVortaq({ 'jobs:runs': () => [run], 'jobs:rollbackPlan': () => planFor('local') })
     const pinia = freshPinia()
     useJobsStore().runs = [
       run,
@@ -470,7 +470,7 @@ describe('run history entry point', () => {
   })
 
   it('cancelling a running restore asks first (the database may stay incomplete)', async () => {
-    const invoke = mockElectronDB({ 'jobs:runs': () => [], 'jobs:cancel': () => undefined })
+    const invoke = mockVortaq({ 'jobs:runs': () => [], 'jobs:cancel': () => undefined })
     const pinia = freshPinia()
     const live: JobRun = {
       ...run,
@@ -525,7 +525,7 @@ describe('run history entry point', () => {
       source: 'electrondb',
       label: 'previo-rollback'
     }
-    const invoke = mockElectronDB({ 'jobs:runs': () => [], 'backups:list': () => [file] })
+    const invoke = mockVortaq({ 'jobs:runs': () => [], 'backups:list': () => [file] })
     const pinia = freshPinia()
     const done: JobRun = {
       ...run,

@@ -24,13 +24,13 @@ export function installBrowserShims(): void {
   }
 }
 
-/** Installs a fake window.electronDB whose invoke dispatches to the given handlers. */
-export function mockElectronDB(handlers: Record<string, Handler>): Mock {
+/** Installs a fake window.vortaq whose invoke dispatches to the given handlers. */
+export function mockVortaq(handlers: Record<string, Handler>): Mock {
   const invoke = vi.fn(async (channel: string, ...args: unknown[]) => {
     const handler = handlers[channel]
     return handler ? handler(...args) : undefined
   })
-  window.electronDB = { invoke, on: vi.fn(() => () => {}) } as never
+  window.vortaq = { invoke, on: vi.fn(() => () => {}) } as never
   return invoke
 }
 
@@ -47,8 +47,8 @@ const vuetify = createVuetify({
   directives: vuetifyDirectives,
   icons: { defaultSet: 'mdi', aliases, sets: { mdi } },
   theme: {
-    defaultTheme: 'electrondbDark',
-    themes: { electrondbDark: { dark: true }, electrondbLight: { dark: false } }
+    defaultTheme: 'vortaqDark',
+    themes: { vortaqDark: { dark: true }, vortaqLight: { dark: false } }
   }
 })
 

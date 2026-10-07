@@ -11,7 +11,7 @@ import { Nb3Writer } from './writer'
 
 let dir: string
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), 'electrondb-writer-'))
+  dir = mkdtempSync(join(tmpdir(), 'vortaq-writer-'))
 })
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 

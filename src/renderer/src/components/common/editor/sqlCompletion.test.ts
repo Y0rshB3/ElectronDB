@@ -14,7 +14,7 @@ import {
 } from '@codemirror/autocomplete'
 import {
   cached,
-  electronDBMySQL,
+  vortaqMySQL,
   schemaCompletionSource,
   splitPath,
   tableRefs,
@@ -46,7 +46,7 @@ async function complete(
 ): Promise<CompletionResult | null> {
   const pos = doc.indexOf('|')
   const text = doc.replace('|', '')
-  const state = EditorState.create({ doc: text, extensions: sql({ dialect: electronDBMySQL }) })
+  const state = EditorState.create({ doc: text, extensions: sql({ dialect: vortaqMySQL }) })
   return schemaCompletionSource(p)(
     new CompletionContext(state, pos, explicit)
   ) as Promise<CompletionResult | null>
@@ -128,7 +128,7 @@ async function openCompletion(
       doc: doc.replace('|', ''),
       selection: { anchor: pos },
       extensions: [
-        sql({ dialect: electronDBMySQL }),
+        sql({ dialect: vortaqMySQL }),
         closeBrackets(),
         autocompletion({ override: [schemaCompletionSource(p)], interactionDelay: 0 })
       ]

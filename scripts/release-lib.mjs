@@ -6,8 +6,8 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 
-export const PRODUCT = 'ElectronDB'
-export const PACKAGE_NAME = 'electrondb'
+export const PRODUCT = 'Vortaq'
+export const PACKAGE_NAME = 'vortaq'
 export const PLATFORMS = ['mac', 'win', 'linux']
 
 /** electron-builder arguments for one platform. Always `--publish never`. */
@@ -68,7 +68,7 @@ export function expectedFeedFiles(version) {
   const p = `${PRODUCT}-${version}`
   return {
     mac: {
-      // Not used by ElectronDB (macOS updates through the verified .dmg); order depends on the build.
+      // Not used by Vortaq (macOS updates through the verified .dmg); order depends on the build.
       path: null,
       files: [`${p}-arm64-mac.zip`, `${p}-x64-mac.zip`, `${p}-arm64.dmg`, `${p}-x64.dmg`]
     },

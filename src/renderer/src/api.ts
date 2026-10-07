@@ -35,8 +35,8 @@ export class ApiError extends Error {
 }
 
 function bridge() {
-  if (!window.electronDB) throw new Error('El puente IPC no está disponible (window.electronDB)')
-  return window.electronDB
+  if (!window.vortaq) throw new Error('El puente IPC no está disponible (window.vortaq)')
+  return window.vortaq
 }
 
 /** Invoke without reporting errors to the global snackbar. */
@@ -92,7 +92,7 @@ export const api = {
       invoke('app:pickFile', title, filters),
     startupNotices: () => invokeSilent('app:startupNotices'),
     dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id),
-    /** Only GitHub release pages/downloads of ElectronDB (main rejects anything else). */
+    /** Only GitHub release pages/downloads of Vortaq (main rejects anything else). */
     openExternal: (url: string) => invoke('app:openExternal', url)
   },
   tour: {

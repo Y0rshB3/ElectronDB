@@ -144,7 +144,7 @@ export class UpdateInstaller {
     const mode = this.options.mode
     if (mode !== 'auto' && mode !== 'mac-dmg')
       throw new Error(
-        'Esta copia de ElectronDB no puede actualizarse desde la app. Usa «Descargar manualmente».'
+        'Esta copia de Vortaq no puede actualizarse desde la app. Usa «Descargar manualmente».'
       )
     if (!isNewer(version, this.options.currentVersion))
       throw new Error(`Ya tienes la versión ${this.options.currentVersion} o una más nueva.`)

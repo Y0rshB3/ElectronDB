@@ -53,9 +53,9 @@ export function registerNavicatHandlers(ctx: AppContext): void {
 }
 
 /**
- * Test switch for screenshots and manual runs: ELECTRONDB_NAVICAT_CANDIDATES=<dir>[<path
+ * Test switch for screenshots and manual runs: VORTAQ_NAVICAT_CANDIDATES=<dir>[<path
  * delimiter><dir>...] replaces the usual locations. Honoured only with a
- * scratch profile (ELECTRONDB_USER_DATA).
+ * scratch profile (VORTAQ_USER_DATA).
  */
 function candidateOverride(ctx: AppContext): string[] | undefined {
   if (!ctx.isolatedProfile) return undefined

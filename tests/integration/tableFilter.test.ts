@@ -20,14 +20,14 @@ import { fetchTableData } from '@main/mysql/tableData'
  * Filter builder against real servers: every operator returns the expected rows
  * of a seeded table with NULL, empty, wildcard, quote, backslash and unicode values.
  *
- *   ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
- *   ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
+ *   VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
+ *   VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
  */
 const SERVERS = [
   { label: 'MySQL 8.4', url: envVar('TEST_MYSQL_URL') },
   { label: 'MySQL 5.7', url: envVar('TEST_MYSQL57_URL') }
 ]
-const SCHEMA = `electrondb_filter_${process.pid}`
+const SCHEMA = `vortaq_filter_${process.pid}`
 
 // utf8mb4_bin: comparisons are exact on both versions (no accent/case folding differences).
 const SEED = [
@@ -69,7 +69,7 @@ function input(u: URL): ConnectionInput {
       savePassword: false
     },
     ssl: { enabled: false, verifyServer: false },
-    backupDir: '/tmp/electrondb-it',
+    backupDir: '/tmp/vortaq-it',
     extraBackupDirs: []
   }
 }
@@ -135,7 +135,7 @@ for (const server of SERVERS) {
 
     beforeAll(async () => {
       const u = new URL(server.url!)
-      dir = mkdtempSync(join(tmpdir(), 'electrondb-filter-'))
+      dir = mkdtempSync(join(tmpdir(), 'vortaq-filter-'))
       const ctx: AppContext = {
         userDataPath: dir,
         logDir: join(dir, 'logs'),

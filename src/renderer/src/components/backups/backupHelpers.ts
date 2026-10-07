@@ -3,13 +3,13 @@ import { can } from '@renderer/engines/capabilities'
 
 export const SOURCE_CHIPS: Record<BackupFile['source'], { label: string; color: string }> = {
   navicat: { label: 'Navicat', color: 'warning' },
-  electrondb: { label: 'ElectronDB', color: 'primary' },
+  electrondb: { label: 'Vortaq', color: 'primary' },
   unknown: { label: 'Desconocido', color: 'secondary' }
 }
 
 /**
  * Chip for a backup source. Never throws: an unexpected value (for example "navidog" sent
- * by a main process from before the ElectronDB rename) is shown as "Desconocido".
+ * by a main process from the Navidog era) is shown as "Desconocido".
  */
 export function sourceChip(source: string | null | undefined): { label: string; color: string } {
   return (
@@ -52,9 +52,9 @@ export function canDeleteBackup(file: BackupFile | null | undefined): boolean {
   return !!file && file.source !== 'navicat'
 }
 
-/** Backups Navicat created are read-only for ElectronDB; explain why delete is disabled. */
+/** Backups Navicat created are read-only for Vortaq; explain why delete is disabled. */
 export const NAVICAT_DELETE_TOOLTIP =
-  'Las copias creadas por Navicat son de solo lectura en ElectronDB. Elimínalas desde Finder si ya no las necesitas.'
+  'Las copias creadas por Navicat son de solo lectura en Vortaq. Elimínalas desde Finder si ya no las necesitas.'
 
 /** nd-pill modifier class for an environment (production in red glass). */
 export function environmentPillClass(env: Environment): string {

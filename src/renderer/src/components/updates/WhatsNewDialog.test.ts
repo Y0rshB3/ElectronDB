@@ -62,9 +62,7 @@ describe('WhatsNewDialog', () => {
     await store.load()
     await settle()
     expect(store.open).toBe(true)
-    expect(q('[data-test="whats-new"] h2')!.textContent).toContain(
-      'ElectronDB se actualizó a 0.1.4'
-    )
+    expect(q('[data-test="whats-new"] h2')!.textContent).toContain('Vortaq se actualizó a 0.1.4')
     expect(q('[data-test="whats-new-0.1.4"]')).not.toBeNull()
     expect(q('[data-test="whats-new-0.1.3"]')).not.toBeNull()
     expect(q('[data-test="whats-new-0.1.2"]')).toBeNull()

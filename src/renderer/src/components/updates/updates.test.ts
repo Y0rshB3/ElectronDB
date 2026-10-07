@@ -26,20 +26,20 @@ function available(overrides: Partial<UpdateCheckResult> = {}): UpdateCheckResul
     status: 'available',
     currentVersion: '0.1.2',
     latestVersion: '0.1.3',
-    releaseName: 'ElectronDB v0.1.3',
+    releaseName: 'Vortaq v0.1.3',
     releaseUrl: `${RELEASE}/tag/v0.1.3`,
     publishedAt: '2026-10-01T10:00:00Z',
     notes: '## Novedades\n\n- Filtro **visual**\n- <b>sin html</b>',
     download: {
-      url: `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-arm64.dmg`,
-      fileName: 'ElectronDB-0.1.3-arm64.dmg',
+      url: `${RELEASE}/download/v0.1.3/Vortaq-0.1.3-arm64.dmg`,
+      fileName: 'Vortaq-0.1.3-arm64.dmg',
       sizeBytes: 149_062_782,
       label: 'Imagen de disco (.dmg)'
     },
     alternatives: [
       {
-        url: `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-arm64-mac.zip`,
-        fileName: 'ElectronDB-0.1.3-arm64-mac.zip',
+        url: `${RELEASE}/download/v0.1.3/Vortaq-0.1.3-arm64-mac.zip`,
+        fileName: 'Vortaq-0.1.3-arm64-mac.zip',
         sizeBytes: 149_224_720,
         label: 'Archivo .zip'
       }
@@ -51,10 +51,10 @@ function available(overrides: Partial<UpdateCheckResult> = {}): UpdateCheckResul
 }
 
 const SOURCE: UpdateCheckResult['source'] = {
-  dir: '/Users/me/ElectronDB',
+  dir: '/Users/me/Vortaq',
   isGit: true,
   branch: 'main',
-  commands: ['cd /Users/me/ElectronDB', 'git pull', 'npm install', 'npm run dev']
+  commands: ['cd /Users/me/Vortaq', 'git pull', 'npm install', 'npm run dev']
 }
 
 describe('updates UI', () => {
@@ -120,7 +120,7 @@ describe('updates UI', () => {
       expect(check).toHaveBeenCalledWith(false)
       expect(text('[data-test="update-notice"] h2')).toBe('Hay una nueva actualización')
       expect(text('[data-test="update-notice-subtitle"]')).toBe(
-        'ElectronDB 0.1.3 ya está disponible (tienes 0.1.2)'
+        'Vortaq 0.1.3 ya está disponible (tienes 0.1.2)'
       )
       const items = [...document.querySelectorAll('[data-test="update-highlights"] li')].map((li) =>
         li.textContent!.trim()
@@ -220,7 +220,7 @@ describe('updates UI', () => {
       await settle()
       expect(bridge.invoke).toHaveBeenCalledWith(
         'app:openExternal',
-        `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-arm64.dmg`
+        `${RELEASE}/download/v0.1.3/Vortaq-0.1.3-arm64.dmg`
       )
       q<HTMLButtonElement>('[data-test="update-notice-notes"]')!.click()
       await settle()
@@ -272,7 +272,7 @@ describe('updates UI', () => {
       expect(notes.querySelector('strong')?.textContent).toBe('visual')
       expect(notes.querySelector('b')).toBeNull()
       expect(notes.textContent).toContain('<b>sin html</b>')
-      expect(text('[data-test="update-packaged"]')).toContain('ElectronDB-0.1.3-arm64.dmg')
+      expect(text('[data-test="update-packaged"]')).toContain('Vortaq-0.1.3-arm64.dmg')
       expect(text('[data-test="update-packaged"]')).toContain('142 MB')
       expect(q('[data-test="update-source"]')).toBeNull()
 
@@ -280,7 +280,7 @@ describe('updates UI', () => {
       await settle()
       expect(bridge.invoke).toHaveBeenCalledWith(
         'app:openExternal',
-        `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-arm64-mac.zip`
+        `${RELEASE}/download/v0.1.3/Vortaq-0.1.3-arm64-mac.zip`
       )
       q<HTMLButtonElement>('[data-test="update-release-page"]')!.click()
       await settle()
@@ -302,7 +302,7 @@ describe('updates UI', () => {
       store.openDialog()
       await settle()
       expect(q('[data-test="update-packaged"]')).toBeNull()
-      expect(text('[data-test="update-source"]')).toContain('/Users/me/ElectronDB')
+      expect(text('[data-test="update-source"]')).toContain('/Users/me/Vortaq')
       expect(q('[data-test="update-commands"]')!.textContent).toBe(SOURCE!.commands.join('\n'))
       expect(q('[data-test="update-branch"]')).toBeNull()
       q<HTMLButtonElement>('[data-test="update-copy"]')!.click()
@@ -356,13 +356,13 @@ describe('updates UI', () => {
     })
   })
   describe('in-app update (Windows/Linux «Descargar y actualizar», Mac .dmg)', () => {
-    const WIN_SETUP = `${RELEASE}/download/v0.1.3/ElectronDB-0.1.3-x64-setup.exe`
+    const WIN_SETUP = `${RELEASE}/download/v0.1.3/Vortaq-0.1.3-x64-setup.exe`
     const winAvailable = () =>
       available({
         installMode: 'auto',
         download: {
           url: WIN_SETUP,
-          fileName: 'ElectronDB-0.1.3-x64-setup.exe',
+          fileName: 'Vortaq-0.1.3-x64-setup.exe',
           sizeBytes: 130_000_000,
           label: 'Instalador (.exe)'
         },
@@ -411,7 +411,7 @@ describe('updates UI', () => {
       })
       await settle()
       expect(text('[data-test="update-ready"]')).toContain(
-        'ElectronDB 0.1.3 está listo para instalarse'
+        'Vortaq 0.1.3 está listo para instalarse'
       )
       q<HTMLButtonElement>('[data-test="update-restart"]')!.click()
       await settle()
@@ -476,7 +476,7 @@ describe('updates UI', () => {
         {},
         {
           'updates:download': async () => {
-            throw new Error('Esta copia de ElectronDB no puede actualizarse desde la app.')
+            throw new Error('Esta copia de Vortaq no puede actualizarse desde la app.')
           }
         }
       )
@@ -509,12 +509,12 @@ describe('updates UI', () => {
         mode: 'mac-dmg',
         phase: 'downloaded',
         version: '0.1.3',
-        filePath: '/Users/me/Downloads/ElectronDB-0.1.3-arm64.dmg'
+        filePath: '/Users/me/Downloads/Vortaq-0.1.3-arm64.dmg'
       })
       await settle()
-      expect(text('[data-test="update-mac-ready"]')).toContain('ElectronDB-0.1.3-arm64.dmg')
+      expect(text('[data-test="update-mac-ready"]')).toContain('Vortaq-0.1.3-arm64.dmg')
       expect(text('[data-test="update-mac-steps"]')).toContain(
-        'arrastra ElectronDB a Aplicaciones y reemplaza'
+        'arrastra Vortaq a Aplicaciones y reemplaza'
       )
       q<HTMLButtonElement>('[data-test="update-open-dmg"]')!.click()
       await settle()

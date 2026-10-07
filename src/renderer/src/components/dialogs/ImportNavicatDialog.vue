@@ -352,7 +352,7 @@ watch(
         <!-- Step 1: detection -->
         <template v-if="step === 1">
           <p class="text-body-2 mb-3">
-            ElectronDB lee las conexiones, tareas de automatización y copias <code>.nb3</code> de
+            Vortaq lee las conexiones, tareas de automatización y copias <code>.nb3</code> de
             Navicat sin modificarlas.
           </p>
           <v-alert
@@ -663,9 +663,9 @@ watch(
                 <span class="import-dialog__section-title">Contraseñas</span>
               </div>
               <p class="text-body-2">
-                Navicat no guarda las contraseñas en sus archivos. ElectronDB puede intentar leerlas
-                del Llavero de macOS; el sistema puede pedirte permiso para cada elemento
-                («Permitir» o «Permitir siempre»).
+                Navicat no guarda las contraseñas en sus archivos. Vortaq puede intentar leerlas del
+                Llavero de macOS; el sistema puede pedirte permiso para cada elemento («Permitir» o
+                «Permitir siempre»).
               </p>
               <v-btn
                 class="mt-2"

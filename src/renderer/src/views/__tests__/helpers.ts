@@ -12,14 +12,14 @@ import { useTabsStore, type OpenTabInput, type WorkspaceTab } from '@renderer/st
 
 export type Handlers = Record<string, (...args: unknown[]) => unknown>
 
-/** Installs a fake window.electronDB whose invoke dispatches to one vi.fn per channel. */
+/** Installs a fake window.vortaq whose invoke dispatches to one vi.fn per channel. */
 export function mockBridge(handlers: Handlers): ReturnType<typeof vi.fn> {
   const invoke = vi.fn(async (channel: string, ...args: unknown[]) => {
     const handler = handlers[channel]
     if (!handler) throw new Error(`Canal no simulado: ${channel}`)
     return handler(...args)
   })
-  window.electronDB = { invoke, on: vi.fn(() => () => {}) } as never
+  window.vortaq = { invoke, on: vi.fn(() => () => {}) } as never
   return invoke
 }
 
@@ -47,8 +47,8 @@ const vuetify = createVuetify({
   directives: vuetifyDirectives,
   icons: { defaultSet: 'mdi', aliases, sets: { mdi } },
   theme: {
-    defaultTheme: 'electrondbDark',
-    themes: { electrondbDark: { dark: true }, electrondbLight: { dark: false } }
+    defaultTheme: 'vortaqDark',
+    themes: { vortaqDark: { dark: true }, vortaqLight: { dark: false } }
   }
 })
 

@@ -15,7 +15,7 @@ import {
 } from './screenshots'
 
 /**
- * CLI: `ElectronDB --run-job=<jobId>` executes one job headless and exits.
+ * CLI: `Vortaq --run-job=<jobId>` executes one job headless and exits.
  * Used by launchd agents created by the scheduler.
  */
 function parseRunJobArg(argv: string[]): string | null {
@@ -31,7 +31,7 @@ const switches = readEnvSwitches()
 // The screenshot harness drives the UI, so it is only allowed on a scratch profile.
 const screenshotDir = screenshotDirFromEnv()
 if (screenshotDir && !switches.userDataPath) {
-  console.error('ELECTRONDB_SCREENSHOTS requires ELECTRONDB_USER_DATA (a scratch profile).')
+  console.error('VORTAQ_SCREENSHOTS requires VORTAQ_USER_DATA (a scratch profile).')
   process.exit(1)
 }
 
@@ -39,8 +39,8 @@ app.setName(APP_NAME)
 // Before 'ready': Chromium storage must also follow the alternative profile.
 const userDataPath = applyProfilePath(switches)
 configureFileLog(userDataPath)
-// First start after the Navidog -> ElectronDB rename: copy the old profile
-// (also before 'ready', so Chromium sees the copied Local Storage).
+// First start under the Vortaq name: copy the ElectronDB (or older Navidog)
+// profile, also before 'ready' so Chromium sees the copied Local Storage.
 runProfileMigration({
   appData: app.getPath('appData'),
   userData: userDataPath,
@@ -110,7 +110,7 @@ app.whenReady().then(async () => {
   const { startBackgroundServices } = await import('./services')
   await startBackgroundServices(ctx)
 
-  // Like Navicat: connections stay open until the user disconnects them or quits.
+  // Connections stay open until the user disconnects them or quits.
   // On quit, close every pool and SSH tunnel cleanly (bounded so quitting never hangs).
   const { getConnectionManager } = await import('./db/manager')
   const { describeForLog } = await import('./db/errors')

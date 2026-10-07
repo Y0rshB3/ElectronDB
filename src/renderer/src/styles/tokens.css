@@ -2,14 +2,14 @@
  * Nebula design tokens: the only place where raw colours, radii, fonts and
  * motion values live. Every area styles itself with var(--nd-*).
  * The nd- prefix (tokens, utility classes) dates from the app's former name,
- * Navidog; it is internal and intentionally kept after the ElectronDB rename.
+ * Navidog; it is internal and intentionally kept after the later renames.
  *
  * Dark is the default (declared on :root so teleported overlays inherit it);
- * the light theme re-declares the same names under .v-theme--electrondbLight,
+ * the light theme re-declares the same names under .v-theme--vortaqLight,
  * a class Vuetify puts on v-app and on every overlay (menus, dialogs...).
  */
 :root,
-.v-theme--electrondbDark {
+.v-theme--vortaqDark {
   color-scheme: dark;
 
   /* Surfaces */
@@ -141,14 +141,14 @@
  * Also re-declared on the dark theme root, which repeats the :root metrics.
  */
 :root.nd-window-controls,
-.nd-window-controls .v-theme--electrondbDark {
+.nd-window-controls .v-theme--vortaqDark {
   --nd-drag-region: max(12px, env(titlebar-area-x, 0px));
   --nd-window-controls: calc(
     100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))
   );
 }
 
-.v-theme--electrondbLight {
+.v-theme--vortaqLight {
   color-scheme: light;
 
   --nd-bg-app: #f3f5fa;

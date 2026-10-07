@@ -171,7 +171,7 @@ export const GROUP_COLUMNS: Record<GroupKind, ObjectColumn<unknown>[]> = {
 
 const BACKUP_SOURCE_LABELS: Record<string, string> = {
   navicat: 'Navicat',
-  electrondb: 'ElectronDB',
+  vortaq: 'Vortaq',
   unknown: 'Desconocido'
 }
 

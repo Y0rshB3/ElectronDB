@@ -13,7 +13,7 @@ import {
 describe('raised notices', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-notices-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-notices-'))
     clearRaisedNotices()
   })
   afterEach(() => {

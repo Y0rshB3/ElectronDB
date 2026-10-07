@@ -5,7 +5,7 @@ import type { UpdateInstallMode } from '@shared/types'
  * Pure (no electron) so it is unit tested; index.ts passes app.isPackaged and process.env.
  *
  * Never 'auto' or 'mac-dmg' for a copy that runs from a folder (`npm run dev`, `electron .`)
- * or with a scratch profile (ELECTRONDB_USER_DATA: smoke tests, screenshots, manual test runs):
+ * or with a scratch profile (VORTAQ_USER_DATA: smoke tests, screenshots, manual test runs):
  * those must never download or replace an installed app.
  */
 export function detectInstallMode(options: {

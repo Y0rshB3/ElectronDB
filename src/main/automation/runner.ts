@@ -516,7 +516,7 @@ class RunExecution {
     const latest = await findLatestJobBackup(this.ctx, source.connectionId, source.schema)
     if (!latest)
       throw new Error(
-        `No hay ninguna copia completa (con datos) de «${source.schema}» de ${name} hecha por una tarea de ElectronDB. Ejecuta antes una tarea que la copie con «Incluir datos»; no se restaura nada.`
+        `No hay ninguna copia completa (con datos) de «${source.schema}» de ${name} hecha por una tarea de Vortaq. Ejecuta antes una tarea que la copie con «Incluir datos»; no se restaura nada.`
       )
     this.say(`  Copia más reciente con datos: tarea «${latest.jobName}», ${latest.fileName}`)
     return { path: latest.path, schema: source.schema, connectionId: source.connectionId }

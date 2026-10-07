@@ -1,15 +1,18 @@
 import { execFile } from 'node:child_process'
-import { LEGACY_APP_NAME } from '../brand'
+import { LEGACY_NAVIDOG, type LegacyApp } from '../brand'
 
 /**
- * Keychain items that may hold the pre-rename safeStorage password. Electron
- * names the item "<app name> Safe Storage"; the lowercase variant covers runs
- * where the name came from package.json ("navidog") instead of app.setName.
+ * Keychain items that may hold the safeStorage password of an earlier product
+ * name. Electron names the item "<app name> Safe Storage"; the lowercase
+ * variant covers runs where the name came from package.json ("navidog")
+ * instead of app.setName.
  */
-export const LEGACY_SAFE_STORAGE_SERVICES = [
-  `${LEGACY_APP_NAME} Safe Storage`,
-  `${LEGACY_APP_NAME.toLowerCase()} Safe Storage`
-]
+export function legacySafeStorageServices(source: Pick<LegacyApp, 'name'>): string[] {
+  return [`${source.name} Safe Storage`, `${source.name.toLowerCase()} Safe Storage`]
+}
+
+/** The Navidog items (the only legacy name before Vortaq). */
+export const LEGACY_SAFE_STORAGE_SERVICES = legacySafeStorageServices(LEGACY_NAVIDOG)
 
 export type KeychainExecFn = (file: string, args: string[]) => Promise<{ stdout: string }>
 
@@ -70,8 +73,8 @@ function classifySecurityError(err: unknown): KeychainReadResult {
 }
 
 /**
- * The pre-rename safeStorage password: tries each legacy service name until
- * one exists. Stops at the first denial (asking again would just repeat the
+ * The safeStorage password of an earlier product name: tries each of its
+ * service names (default: Navidog's) until one exists. Stops at the first denial (asking again would just repeat the
  * prompt the user already refused).
  */
 export async function readLegacySafeStoragePassword(

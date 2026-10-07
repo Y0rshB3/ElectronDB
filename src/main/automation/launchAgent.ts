@@ -4,14 +4,22 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { build as buildPlist, type PlistValue } from 'plist'
 import type { Job, StartupNotice } from '@shared/types'
+import { APP_NAME, LEGACY_APPS, LEGACY_NAVIDOG } from '../brand'
 import type { AppContext } from '../context'
 import { getLogger, type Logger } from '../log'
 import { raiseNotice } from '../notices'
 import { cronToCalendarIntervals } from './cron'
 
-export const LAUNCH_AGENT_PREFIX = 'dev.y0rshb3.electrondb.job.'
-/** Label prefix used before the Navidog -> ElectronDB rename; such agents are removed at start. */
-export const LEGACY_LAUNCH_AGENT_PREFIX = 'dev.y0rshb3.navidog.job.'
+export const LAUNCH_AGENT_PREFIX = 'dev.y0rshb3.vortaq.job.'
+/**
+ * Label prefixes of earlier product names (ElectronDB, Navidog), newest first;
+ * their agents are moved to LAUNCH_AGENT_PREFIX at start.
+ */
+export const LEGACY_LAUNCH_AGENT_PREFIXES: readonly string[] = LEGACY_APPS.map(
+  (a) => a.launchAgentPrefix
+)
+/** The Navidog prefix (kept for code written before the Vortaq rename). */
+export const LEGACY_LAUNCH_AGENT_PREFIX = LEGACY_NAVIDOG.launchAgentPrefix
 
 /** Host facts the agent writer needs; injectable so tests never touch electron. */
 export interface PlatformInfo {
@@ -162,61 +170,80 @@ function installedJobIds(homeDir: string, prefix = LAUNCH_AGENT_PREFIX): string[
 
 export const LEGACY_LAUNCH_AGENTS_NOTICE = 'legacy-launch-agents'
 
+/** A launch agent written under an earlier product name. */
+export interface LegacyAgent {
+  jobId: string
+  /** Its plist file name (`<prefix><jobId>.plist`). */
+  file: string
+}
+
 /**
- * Unloads and deletes the agents written before the rename
- * (dev.y0rshb3.navidog.job.*) whose job exists in `knownJobIds` (the
- * ElectronDB jobs repo): the following sync installs them again under the new
- * label when the job still wants one. Agents of jobs ElectronDB does not know
- * (profile not migrated, jobs.json missing) are left alone, since deleting
- * them would silently stop those schedules. Returns both lists of job ids.
+ * Unloads and deletes the agents written under earlier product names
+ * (dev.y0rshb3.electrondb.job.*, dev.y0rshb3.navidog.job.*) whose job exists
+ * in `knownJobIds` (the Vortaq jobs repo): the following sync installs them
+ * again under the new label when the job still wants one. Agents of jobs
+ * Vortaq does not know (profile not migrated, jobs.json missing) are left
+ * alone, since deleting them would silently stop those schedules. Returns the
+ * removed job ids and the agents kept.
  */
 export async function removeLegacyLaunchAgents(
   deps: LaunchAgentDeps,
   knownJobIds: ReadonlySet<string>
-): Promise<{ removed: string[]; unknown: string[] }> {
-  if (!supportsLaunchAgents(deps.platform.os)) return { removed: [], unknown: [] }
+): Promise<{ removed: string[]; unknown: string[]; unknownAgents: LegacyAgent[] }> {
+  if (!supportsLaunchAgents(deps.platform.os))
+    return { removed: [], unknown: [], unknownAgents: [] }
   const log = deps.log ?? getLogger('launchd')
   const removed: string[] = []
-  const unknown: string[] = []
-  for (const id of installedJobIds(deps.platform.homeDir, LEGACY_LAUNCH_AGENT_PREFIX)) {
-    if (!knownJobIds.has(id)) {
-      unknown.push(id)
-      continue
-    }
-    const plistPath = join(
-      launchAgentsDir(deps.platform.homeDir),
-      `${LEGACY_LAUNCH_AGENT_PREFIX}${id}.plist`
-    )
-    try {
-      await bootout(plistPath, deps)
-      unlinkSync(plistPath)
-      removed.push(id)
-      log.info(`legacy launch agent removed for job ${id}`)
-    } catch (err) {
-      log.warn(`could not remove legacy launch agent for job ${id}`, err)
+  const unknownAgents: LegacyAgent[] = []
+  for (const prefix of LEGACY_LAUNCH_AGENT_PREFIXES) {
+    for (const id of installedJobIds(deps.platform.homeDir, prefix)) {
+      const file = `${prefix}${id}.plist`
+      if (!knownJobIds.has(id)) {
+        unknownAgents.push({ jobId: id, file })
+        continue
+      }
+      try {
+        await bootout(join(launchAgentsDir(deps.platform.homeDir), file), deps)
+        unlinkSync(join(launchAgentsDir(deps.platform.homeDir), file))
+        if (!removed.includes(id)) removed.push(id)
+        log.info(`legacy launch agent ${prefix}* removed for job ${id}`)
+      } catch (err) {
+        log.warn(`could not remove legacy launch agent for job ${id}`, err)
+      }
     }
   }
+  const unknown = [...new Set(unknownAgents.map((a) => a.jobId))]
   if (unknown.length)
     log.warn(
-      `legacy launch agent(s) kept for job(s) missing from ElectronDB: ${unknown.join(', ')}`
+      `legacy launch agent(s) kept for job(s) missing from ${APP_NAME}: ${unknown.join(', ')}`
     )
-  return { removed, unknown }
+  return { removed, unknown, unknownAgents }
 }
 
-/** Startup notice for legacy agents left in place (shown once per set of ids). */
-export function legacyLaunchAgentsNotice(ids: string[], homeDir: string): StartupNotice {
-  const sorted = [...ids].sort()
+/**
+ * Startup notice for legacy agents left in place. Its id lists the job ids, so
+ * it shows once per set of jobs (a set already dismissed in an earlier
+ * profile, copied with notices.json, stays dismissed).
+ */
+export function legacyLaunchAgentsNotice(
+  agents: Array<LegacyAgent | string>,
+  homeDir: string
+): StartupNotice {
+  const list = agents.map((a) =>
+    typeof a === 'string' ? { jobId: a, file: `${LEGACY_LAUNCH_AGENT_PREFIX}${a}.plist` } : a
+  )
+  const ids = [...new Set(list.map((a) => a.jobId))].sort()
+  const files = list.map((a) => a.file).sort()
+  const one = ids.length === 1
   return {
-    id: `${LEGACY_LAUNCH_AGENTS_NOTICE}:${sorted.join(',')}`,
+    id: `${LEGACY_LAUNCH_AGENTS_NOTICE}:${ids.join(',')}`,
     level: 'warning',
-    title: 'Trabajos programados de Navidog sin migrar',
+    title: 'Trabajos programados de una versión anterior sin migrar',
     message:
-      `En ${launchAgentsDir(homeDir)} hay ${sorted.length === 1 ? 'un trabajo programado' : `${sorted.length} trabajos programados`} ` +
-      `de Navidog que no existe${sorted.length === 1 ? '' : 'n'} en ElectronDB (${sorted
-        .map((id) => `${LEGACY_LAUNCH_AGENT_PREFIX}${id}.plist`)
-        .join(', ')}). ` +
-      'No se han borrado: siguen lanzando Navidog y dejan de ejecutarse si lo desinstalas. ' +
-      'Crea esos trabajos en Automatización y borra después esos archivos, o bórralos si ya no los necesitas.'
+      `En ${launchAgentsDir(homeDir)} hay ${one ? 'un trabajo programado' : `${ids.length} trabajos programados`} ` +
+      `de una versión anterior de la app (ElectronDB o Navidog) que no existe${one ? '' : 'n'} en ${APP_NAME} (${files.join(', ')}). ` +
+      'No se han borrado: siguen lanzando la versión anterior y dejan de ejecutarse si la desinstalas. ' +
+      `Crea esos trabajos en Automatización y borra después esos archivos, o bórralos si ya no los necesitas.`
   }
 }
 
@@ -240,8 +267,8 @@ export async function syncLaunchAgents(
   const known = new Map(jobs.map((j) => [j.id, j]))
   if (!jobId) {
     const legacy = await removeLegacyLaunchAgents({ ...deps, log }, new Set(known.keys()))
-    if (legacy.unknown.length)
-      raiseNotice(legacyLaunchAgentsNotice(legacy.unknown, deps.platform.homeDir))
+    if (legacy.unknownAgents.length)
+      raiseNotice(legacyLaunchAgentsNotice(legacy.unknownAgents, deps.platform.homeDir))
   }
   const candidates = jobId
     ? [jobId]

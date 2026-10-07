@@ -8,6 +8,7 @@ import {
   dismissStartupNotice,
   legacySecretsToRetry,
   MAX_SECRET_ATTEMPTS,
+  PROFILE_MOVED_NOTICE,
   REENTER_PASSWORDS_NOTICE,
   runProfileMigration,
   runSecretMigration,
@@ -19,7 +20,7 @@ import { readMigrationMarker, writeMigrationMarker } from './profile'
 
 const OLD_PASSWORD = 'legacy-safe-storage-password'
 
-describe('Navidog -> ElectronDB migration flow', () => {
+describe('Navidog -> Vortaq migration flow', () => {
   let root: string
   let appData: string
   let legacy: string
@@ -29,7 +30,7 @@ describe('Navidog -> ElectronDB migration flow', () => {
     root = mkdtempSync(join(tmpdir(), 'electrondb-flow-'))
     appData = join(root, 'Application Support')
     legacy = join(appData, 'Navidog')
-    current = join(appData, 'ElectronDB')
+    current = join(appData, 'Vortaq')
     mkdirSync(legacy, { recursive: true })
     writeFileSync(
       join(legacy, 'connections.json'),
@@ -55,6 +56,9 @@ describe('Navidog -> ElectronDB migration flow', () => {
     )
   })
   afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+  /** Notices about passwords (the one-time "moved" notice has its own tests). */
+  const secretNotices = () => startupNotices(current).filter((n) => n.id !== PROFILE_MOVED_NOTICE)
 
   const contextFor = (dir: string) => ({
     userDataPath: dir,
@@ -113,7 +117,7 @@ describe('Navidog -> ElectronDB migration flow', () => {
     expect(ctx.credentials.get('mysql', 'c1')).toBe('dev-pass')
     expect(ctx.credentials.get('mysql', 'c2')).toBe('prod-pass')
     expect(readMigrationMarker(current)).toMatchObject({ secrets: 'done', passwordsToReenter: [] })
-    expect(startupNotices(current)).toEqual([])
+    expect(secretNotices()).toEqual([])
 
     // runs once: a second start does not ask the keychain again
     await runSecretMigration(contextFor(current), { platform: 'darwin', exec })
@@ -145,11 +149,11 @@ describe('Navidog -> ElectronDB migration flow', () => {
         secretAttempts: attempt,
         passwordsToReenter: ['Dev', 'Producción']
       })
-      const notices = startupNotices(current)
+      const notices = secretNotices()
       expect(notices).toHaveLength(1)
       expect(notices[0].message).toContain('lo intentará de nuevo en el próximo arranque')
       dismissStartupNotice(current, REENTER_PASSWORDS_NOTICE)
-      expect(startupNotices(current)).toEqual([])
+      expect(secretNotices()).toEqual([])
     }
 
     const ctx = contextFor(current)
@@ -158,13 +162,13 @@ describe('Navidog -> ElectronDB migration flow', () => {
       secrets: 'done',
       secretAttempts: MAX_SECRET_ATTEMPTS
     })
-    const notices = startupNotices(current)
+    const notices = secretNotices()
     expect(notices).toHaveLength(1)
     expect(notices[0]).toMatchObject({ id: REENTER_PASSWORDS_NOTICE, level: 'warning' })
     expect(notices[0].message).toContain('Vuelve a escribir la contraseña de: Dev, Producción')
 
     dismissStartupNotice(current, REENTER_PASSWORDS_NOTICE)
-    expect(startupNotices(current)).toEqual([])
+    expect(secretNotices()).toEqual([])
     // the legacy profile still holds every value
     expect(Object.keys(legacySecretsToRetry(legacy, ctx).items).sort()).toEqual([
       'mysql:c1',
@@ -187,7 +191,7 @@ describe('Navidog -> ElectronDB migration flow', () => {
       secretAttempts: 2,
       passwordsToReenter: []
     })
-    expect(startupNotices(current)).toEqual([])
+    expect(secretNotices()).toEqual([])
   })
 
   it('a missing legacy key is final, and setting the marker back to pending recovers later', async () => {
@@ -224,5 +228,193 @@ describe('Navidog -> ElectronDB migration flow', () => {
       runSecretMigration(contextFor(fresh), { platform: 'darwin', exec })
     ).resolves.toBeUndefined()
     expect(startupNotices(fresh)).toEqual([])
+  })
+})
+
+describe('ElectronDB -> Vortaq migration flow', () => {
+  const ED_PASSWORD = 'electrondb-safe-storage-password'
+  const ND_PASSWORD = 'navidog-safe-storage-password'
+  let root: string
+  let appData: string
+  let electronDb: string
+  let navidog: string
+  let current: string
+
+  const writeJson = (dir: string, name: string, value: unknown): void => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, name), JSON.stringify(value))
+  }
+  const contextFor = (dir: string) => ({
+    userDataPath: dir,
+    connections: new ConnectionsRepo(dir),
+    credentials: new CredentialStore(dir, plainCodec, 'plain')
+  })
+  /** Fake `security`: answers per keychain item and records the items asked for. */
+  const keychain =
+    (items: Record<string, string>, asked: string[]): KeychainExecFn =>
+    async (_file, args) => {
+      const service = args[args.indexOf('-s') + 1]
+      asked.push(service)
+      if (service in items) return { stdout: `${items[service]}\n` }
+      throw Object.assign(new Error('not found'), { code: 44 })
+    }
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'vortaq-chain-'))
+    appData = join(root, 'Application Support')
+    electronDb = join(appData, 'ElectronDB')
+    navidog = join(appData, 'Navidog')
+    current = join(appData, 'Vortaq')
+    const ed = deriveMacOsCryptKey(ED_PASSWORD)
+    const nd = deriveMacOsCryptKey(ND_PASSWORD)
+    writeJson(electronDb, 'connections.json', {
+      version: 1,
+      items: [
+        { id: 'c1', name: 'Dev' },
+        { id: 'c2', name: 'Producción' }
+      ]
+    })
+    writeJson(electronDb, 'credentials.json', {
+      version: 1,
+      codec: 'safeStorage',
+      items: {
+        'mysql:c1': encryptMacOsCrypt('dev-pass', ed).toString('base64'),
+        'ai:p1': encryptMacOsCrypt('sk-test-key', ed).toString('base64'),
+        // left behind by an unfinished Navidog -> ElectronDB migration
+        'mysql:c2': encryptMacOsCrypt('prod-pass', nd).toString('base64')
+      }
+    })
+    writeJson(electronDb, 'jobs.json', { version: 1, items: [{ id: 'j1', name: 'Nightly' }] })
+    writeJson(electronDb, 'tour.json', { completed: true })
+    writeJson(electronDb, 'updates.json', { lastSeenVersion: '0.1.9' })
+    writeJson(electronDb, 'filter-profiles.json', { version: 1, items: [] })
+    writeJson(electronDb, 'ai-providers.json', { version: 1, items: [{ id: 'p1' }] })
+    writeJson(join(electronDb, 'ai'), 'c1.json', { conversations: [] })
+    writeJson(electronDb, 'migrated-from-navidog.json', { version: 1, from: navidog })
+    writeJson(navidog, 'connections.json', { version: 1, items: [{ id: 'old', name: 'Old' }] })
+  })
+  afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+  const migrate = () =>
+    runProfileMigration({
+      appData,
+      userData: current,
+      userDataOverride: null,
+      legacyUserDataOverride: null
+    })
+
+  it('prefers the ElectronDB profile and copies every profile file, conversations included', () => {
+    const result = migrate()
+    expect(result.status).toBe('migrated')
+    for (const name of [
+      'connections.json',
+      'credentials.json',
+      'jobs.json',
+      'tour.json',
+      'updates.json',
+      'filter-profiles.json',
+      'ai-providers.json',
+      join('ai', 'c1.json')
+    ])
+      expect(existsSync(join(current, name))).toBe(true)
+    // ElectronDB's own marker describes the copy into ElectronDB: never carried over
+    expect(existsSync(join(current, 'migrated-from-navidog.json'))).toBe(false)
+    expect(existsSync(join(current, 'migrated-from-electrondb.json'))).toBe(true)
+    expect(readMigrationMarker(current)).toMatchObject({
+      source: 'ElectronDB',
+      from: electronDb,
+      secrets: 'pending',
+      movedNoticeShown: false
+    })
+    expect(contextFor(current).connections.get('old')).toBeFalsy()
+    // a second start does nothing
+    expect(migrate()).toEqual({ status: 'skipped', reason: 'already migrated' })
+  })
+
+  it('falls back to Navidog when the ElectronDB folder holds no data', () => {
+    rmSync(electronDb, { recursive: true })
+    mkdirSync(join(electronDb, 'Cache'), { recursive: true })
+    const result = migrate()
+    expect(result.status).toBe('migrated')
+    expect(readMigrationMarker(current)).toMatchObject({ source: 'Navidog', from: navidog })
+    expect(existsSync(join(current, 'migrated-from-navidog.json'))).toBe(true)
+  })
+
+  it('re-encrypts with the ElectronDB key and asks for the Navidog key only for what is left', async () => {
+    migrate()
+    const asked: string[] = []
+    const ctx = contextFor(current)
+    await runSecretMigration(ctx, {
+      platform: 'darwin',
+      exec: keychain(
+        { 'ElectronDB Safe Storage': ED_PASSWORD, 'Navidog Safe Storage': ND_PASSWORD },
+        asked
+      )
+    })
+    expect(asked).toEqual(['ElectronDB Safe Storage', 'Navidog Safe Storage'])
+    expect(ctx.credentials.get('mysql', 'c1')).toBe('dev-pass')
+    expect(ctx.credentials.get('mysql', 'c2')).toBe('prod-pass')
+    expect(ctx.credentials.get('ai', 'p1')).toBe('sk-test-key')
+    expect(readMigrationMarker(current)).toMatchObject({ secrets: 'done', passwordsToReenter: [] })
+  })
+
+  it('never reads the Navidog key when the ElectronDB key decrypts everything', async () => {
+    const ed = deriveMacOsCryptKey(ED_PASSWORD)
+    writeJson(electronDb, 'credentials.json', {
+      version: 1,
+      codec: 'safeStorage',
+      items: { 'mysql:c1': encryptMacOsCrypt('dev-pass', ed).toString('base64') }
+    })
+    migrate()
+    const asked: string[] = []
+    await runSecretMigration(contextFor(current), {
+      platform: 'darwin',
+      exec: keychain({ 'ElectronDB Safe Storage': ED_PASSWORD }, asked)
+    })
+    expect(asked).toEqual(['ElectronDB Safe Storage'])
+  })
+
+  it('a denied ElectronDB key stops the chain and is retried later', async () => {
+    migrate()
+    const asked: string[] = []
+    const denied: KeychainExecFn = async (_file, args) => {
+      asked.push(args[args.indexOf('-s') + 1])
+      throw Object.assign(new Error('User canceled the operation.'), { code: 128 })
+    }
+    await runSecretMigration(contextFor(current), { platform: 'darwin', exec: denied })
+    expect(asked).toEqual(['ElectronDB Safe Storage'])
+    expect(readMigrationMarker(current)).toMatchObject({ secrets: 'pending', secretAttempts: 1 })
+    const notice = startupNotices(current).find((n) => n.id === REENTER_PASSWORDS_NOTICE)
+    expect(notice?.title).toBe('Contraseñas de ElectronDB pendientes')
+  })
+
+  it('Windows/Linux: values the current store cannot read are listed to type again', async () => {
+    migrate()
+    await runSecretMigration(contextFor(current), { platform: 'linux' })
+    expect(readMigrationMarker(current)).toMatchObject({
+      secrets: 'done',
+      passwordsToReenter: expect.arrayContaining(['Dev', 'Producción'])
+    })
+  })
+
+  it('shows the "moved" notice once', () => {
+    migrate()
+    const moved = startupNotices(current).filter((n) => n.id === PROFILE_MOVED_NOTICE)
+    expect(moved).toHaveLength(1)
+    expect(moved[0]).toMatchObject({ level: 'info', title: 'ElectronDB ahora se llama Vortaq' })
+    expect(moved[0].message).toContain(electronDb)
+    dismissStartupNotice(current, PROFILE_MOVED_NOTICE)
+    expect(startupNotices(current).some((n) => n.id === PROFILE_MOVED_NOTICE)).toBe(false)
+    expect(readMigrationMarker(current)).toMatchObject({ movedNoticeShown: true })
+  })
+
+  it('an ElectronDB-era marker (no source) never shows the "moved" notice', () => {
+    writeJson(current, 'migrated-from-navidog.json', {
+      version: 1,
+      from: navidog,
+      secrets: 'done'
+    })
+    expect(startupNotices(current)).toEqual([])
+    expect(readMigrationMarker(current)).toMatchObject({ source: 'Navidog' })
   })
 })

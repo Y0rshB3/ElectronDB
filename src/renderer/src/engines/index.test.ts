@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 import { ENGINES } from '@shared/engines'
 import { mysqlDialect } from '@shared/dialects'
-import { electronDBMySQL } from '@renderer/components/common/editor/sqlCompletion'
+import { vortaqMySQL } from '@renderer/components/common/editor/sqlCompletion'
 import { buildDesignerAlter } from '@renderer/components/designer/alterTable'
 import { ENGINES as TABLE_ENGINES } from '@renderer/components/designer/columnType'
 import {
@@ -25,7 +25,7 @@ describe('engine UI registry', () => {
     expect(engineUi()).toBe(mysqlUi)
     expect(ui.descriptor).toBe(ENGINES.mysql)
     expect(ui.dialect).toBe(mysqlDialect)
-    expect(ui.editorLanguage).toBe(electronDBMySQL)
+    expect(ui.editorLanguage).toBe(vortaqMySQL)
     expect(ui.designer).toEqual({
       emptyTable,
       draftFromStructure,
@@ -46,7 +46,7 @@ describe('engine UI registry', () => {
   it('refuses engines without a renderer module in this build', () => {
     for (const id of ['mariadb', 'postgresql', 'sqlite', 'mongodb'] as const)
       expect(() => engineUi(id)).toThrow(
-        `${ENGINES[id].label} todavía no está disponible en esta versión de ElectronDB.`
+        `${ENGINES[id].label} todavía no está disponible en esta versión de Vortaq.`
       )
   })
 })
@@ -88,7 +88,7 @@ describe('useEngine', () => {
   it('useEngineUi throws the "not available" message for an engine without a module', () => {
     expect(useEngineUi('my').value).toBe(mysqlUi)
     expect(() => useEngineUi('pg').value).toThrow(
-      'PostgreSQL todavía no está disponible en esta versión de ElectronDB.'
+      'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
     )
   })
 })

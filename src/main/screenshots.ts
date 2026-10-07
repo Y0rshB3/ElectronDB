@@ -6,9 +6,9 @@ import { envVar } from './env'
 /**
  * Screenshot harness (development only).
  *
- * ELECTRONDB_SCREENSHOTS=<dir> together with ELECTRONDB_USER_DATA=<scratch profile>
+ * VORTAQ_SCREENSHOTS=<dir> together with VORTAQ_USER_DATA=<scratch profile>
  * opens a 1600x1000 window whose renderer installs a debug hook
- * (`window.__electronDBShots`, see renderer main.ts, enabled by the
+ * (`window.__vortaqShots`, see renderer main.ts, enabled by the
  * `nd-screenshots=1` query parameter), drives the UI through the stores and
  * saves one PNG per screen. Each step is isolated: a failure is logged and the
  * run continues. Never enabled in normal runs.
@@ -37,10 +37,10 @@ interface Step {
 }
 
 const LOCAL = 'Local Test'
-/** Database of the throwaway test MySQL (its name predates the ElectronDB rename). */
+/** Database of the throwaway test MySQL (its name predates the Vortaq rename). */
 const SCHEMA = 'navidog_test'
 /** Scratch schema created and dropped by the live job log steps. */
-const BIG_SCHEMA = 'electrondb_shots_big'
+const BIG_SCHEMA = 'vortaq_shots_big'
 const LIVE_JOB = 'Backup con errores'
 /** Seeded job backing up rb_shop/rb_crm on the 5.7 "staging"; its run is restored into Local Test. */
 const ROLLBACK_JOB = 'Backup staging 5.7'
@@ -611,7 +611,7 @@ const STEPS: Step[] = [
         tasks: [
           { id: 'l1', type: 'backupschema', connectionId: c.id, schema: '${SCHEMA}', referenceName: 'Backup ${SCHEMA}', includeData: true },
           { id: 'l2', type: 'backupschema', connectionId: c.id, schema: big, referenceName: 'Backup ' + big, includeData: true },
-          { id: 'l3', type: 'backupschema', connectionId: c.id, schema: 'electrondb_missing', referenceName: 'Backup electrondb_missing', includeData: true },
+          { id: 'l3', type: 'backupschema', connectionId: c.id, schema: 'vortaq_missing', referenceName: 'Backup vortaq_missing', includeData: true },
           { id: 'l4', type: 'runquery', connectionId: c.id, schema: '${SCHEMA}', referenceName: 'Comprobar pedidos', sql: 'DO 1;' }
         ],
         schedule: { enabled: false, cron: '', launchAgent: false }
@@ -839,7 +839,7 @@ const STEPS: Step[] = [
         for (const db of ['rb_shop', 'rb_crm'])
           await S.api.invokeSilent('db:execute', id, 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
   },
-  // Update check screens: main answers from ELECTRONDB_UPDATES_FIXTURE (a fake v0.1.3).
+  // Update check screens: main answers from VORTAQ_UPDATES_FIXTURE (a fake v0.1.3).
   {
     // Startup popup in source mode (unpackaged run) with «Cómo actualizar» expanded.
     name: '18a-update-popup-source',
@@ -848,7 +848,7 @@ const STEPS: Step[] = [
       S.workspace.showObjects()
       await S.updates.runStartupCheck()
       if (S.updates.result?.status !== 'available')
-        throw new Error('no update available: run with ELECTRONDB_UPDATES_FIXTURE (see npm run screenshots)')
+        throw new Error('no update available: run with VORTAQ_UPDATES_FIXTURE (see npm run screenshots)')
       await H.until(() => S.updates.noticeOpen, 8000)
       await H.click('[data-test="update-notice-howto"]', 5000)
       await H.waitFor('[data-test="update-notice-commands"]', 5000)
@@ -856,11 +856,11 @@ const STEPS: Step[] = [
     cleanup: `S.updates.hideNotice()`
   },
   {
-    // Needs ELECTRONDB_WHATS_NEW_FROM=0.1.2 and ELECTRONDB_WHATS_NEW_VERSION=0.1.4 (npm run screenshots sets them).
+    // Needs VORTAQ_WHATS_NEW_FROM=0.1.2 and VORTAQ_WHATS_NEW_VERSION=0.1.4 (npm run screenshots sets them).
     name: '18f-whats-new',
     script: `
       await S.whatsNew.load()
-      if (!S.whatsNew.info) throw new Error('nothing to show: run with ELECTRONDB_WHATS_NEW_FROM (see npm run screenshots)')
+      if (!S.whatsNew.info) throw new Error('nothing to show: run with VORTAQ_WHATS_NEW_FROM (see npm run screenshots)')
       await H.until(() => S.whatsNew.open, 8000)
       await H.waitFor('[data-test="whats-new"]', 5000)
       await H.settle(S, 700)`,
@@ -983,7 +983,7 @@ const STEPS: Step[] = [
     cleanup: `S.updates.dialogOpen = false`
   },
   {
-    // AI assistant with the fake provider (ELECTRONDB_AI_FIXTURE=1): a conversation with an SQL block.
+    // AI assistant with the fake provider (VORTAQ_AI_FIXTURE=1): a conversation with an SQL block.
     name: '20a-ai-panel-chat',
     script: `
       const c = H.local(S)
@@ -1055,11 +1055,11 @@ const STEPS: Step[] = [
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Welcome tour, Navicat detection and «Mostrarme cómo» (ELECTRONDB_SHOTS_ONLY=21).
+ * Welcome tour, Navicat detection and «Mostrarme cómo» (VORTAQ_SHOTS_ONLY=21).
  * Run them on a fresh scratch profile with
- * ELECTRONDB_NAVICAT_CANDIDATES=tests/fixtures/navicat (the anonymised fixture
+ * VORTAQ_NAVICAT_CANDIDATES=tests/fixtures/navicat (the anonymised fixture
  * instead of the real Navicat folder) and, for 21f/21g,
- * ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7.
+ * VORTAQ_WHATS_NEW_FROM=0.1.5 VORTAQ_WHATS_NEW_VERSION=0.1.7.
  */
 const TOUR_STEPS: Step[] = [
   {
@@ -1105,7 +1105,7 @@ const TOUR_STEPS: Step[] = [
     script: `
       await S.whatsNew.load()
       if (!S.whatsNew.tourSteps.length)
-        throw new Error('no «Mostrarme cómo» steps: run with ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7')
+        throw new Error('no «Mostrarme cómo» steps: run with VORTAQ_WHATS_NEW_FROM=0.1.5 VORTAQ_WHATS_NEW_VERSION=0.1.7')
       S.whatsNew.open = true
       await H.waitFor('[data-test="whats-new-show-me"]', 5000)
       await H.sleep(600)`
@@ -1122,7 +1122,7 @@ const TOUR_STEPS: Step[] = [
 STEPS.push(...TOUR_STEPS)
 
 function wrap(body: string): string {
-  return `(async () => { const S = window.__electronDBShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
+  return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }
 
 /**
@@ -1147,7 +1147,7 @@ export function watchScreenshots(win: BrowserWindow, dir: string): void {
         `await H.until(() => S && S.connections.loaded && S.settings.loaded, 20000); await H.sleep(800)`
       )
     )
-    // ELECTRONDB_SHOTS_ONLY=05,05b runs just the steps whose name starts with one of the prefixes.
+    // VORTAQ_SHOTS_ONLY=05,05b runs just the steps whose name starts with one of the prefixes.
     const only = (envVar('SHOTS_ONLY') ?? '')
       .split(',')
       .map((p) => p.trim())

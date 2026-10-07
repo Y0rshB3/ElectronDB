@@ -404,7 +404,7 @@ const title = computed(() => {
         v-if="connections.loaded && connections.items.length === 0"
         icon="mdi-database-import-outline"
         title="Importa tus conexiones de Navicat"
-        description="ElectronDB puede leer tus conexiones, tareas de automatización y copias de seguridad de Navicat for MySQL."
+        description="Vortaq puede leer tus conexiones, tareas de automatización y copias de seguridad de Navicat for MySQL."
         data-test="objects-empty-connections"
       >
         <v-btn

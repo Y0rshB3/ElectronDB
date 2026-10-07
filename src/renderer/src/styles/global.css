@@ -47,7 +47,7 @@ html .v-application::after {
     radial-gradient(1000px 760px at 106% 112%, var(--nd-nebula-violet), transparent 60%);
   mix-blend-mode: screen;
 }
-html .v-theme--electrondbLight.v-application::after {
+html .v-theme--vortaqLight.v-application::after {
   mix-blend-mode: multiply;
   opacity: 0.7;
 }

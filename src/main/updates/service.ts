@@ -273,7 +273,7 @@ export class UpdateService {
         method: 'GET',
         headers: {
           Accept: 'application/vnd.github+json',
-          'User-Agent': `ElectronDB/${this.options.currentVersion}`,
+          'User-Agent': `Vortaq/${this.options.currentVersion}`,
           'X-GitHub-Api-Version': '2022-11-28'
         },
         signal: AbortSignal.timeout(this.options.timeoutMs ?? FETCH_TIMEOUT_MS)

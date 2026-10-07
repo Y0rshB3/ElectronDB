@@ -63,7 +63,7 @@ export async function loadInitialData(): Promise<void> {
 
 /**
  * One-off messages from main (e.g. passwords to type again after the
- * Navidog -> ElectronDB migration). Each one is dismissed in main once shown,
+ * Navidog -> Vortaq migration). Each one is dismissed in main once shown,
  * so it appears a single time. Best effort: failures only skip the notice.
  */
 export async function showStartupNotices(): Promise<void> {

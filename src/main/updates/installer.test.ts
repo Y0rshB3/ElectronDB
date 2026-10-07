@@ -203,7 +203,7 @@ describe('UpdateInstaller (auto: Windows NSIS / Linux AppImage)', () => {
     const state = inst.state()
     expect(state.phase).toBe('error')
     expect(state.error).toMatch(/no coincide con la suma sha512/)
-    expect(state.manualUrl).toBe(`${RELEASES_BASE}/download/v0.1.3/ElectronDB-0.1.3-x64-setup.exe`)
+    expect(state.manualUrl).toBe(`${RELEASES_BASE}/download/v0.1.3/Vortaq-0.1.3-x64-setup.exe`)
     // Retry works from the error state.
     inst.download('0.1.3')
     expect(inst.state().phase).toBe('downloading')
@@ -261,10 +261,10 @@ describe('UpdateInstaller (mac-dmg)', () => {
   let events: UpdateInstallState[]
   const dmg = Buffer.from('dmg-bytes '.repeat(5000))
   const sum = createHash('sha256').update(dmg).digest('hex')
-  const DMG = 'ElectronDB-0.1.3-arm64.dmg'
+  const DMG = 'Vortaq-0.1.3-arm64.dmg'
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-macupd-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-macupd-'))
     events = []
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))

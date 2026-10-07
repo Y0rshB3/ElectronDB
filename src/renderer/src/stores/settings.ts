@@ -48,7 +48,7 @@ export const useSettingsStore = defineStore('settings', () => {
     return requiresTypedConfirm(environment, typedEnvironments.value)
   }
   const themeName = computed(() =>
-    settings.value.theme === 'light' ? 'electrondbLight' : 'electrondbDark'
+    settings.value.theme === 'light' ? 'vortaqLight' : 'vortaqDark'
   )
 
   return {

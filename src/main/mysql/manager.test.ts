@@ -57,7 +57,7 @@ describe('ConnectionManager authentication modes', () => {
   let secrets: Map<string, string>
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-manager-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-manager-'))
     secrets = new Map()
     ctx = {
       userDataPath: dir,
@@ -209,7 +209,7 @@ describe('isAuthRejected', () => {
 describe('SSL options', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-ssl-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-ssl-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

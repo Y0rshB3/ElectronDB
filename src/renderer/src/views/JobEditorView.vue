@@ -263,7 +263,7 @@ onMounted(load)
                 v-model="draft.launchAgent"
                 :disabled="!draft.scheduleEnabled"
                 label="Ejecutar aunque la app esté cerrada"
-                hint="Instala un agente de launchd en ~/Library/LaunchAgents que lanza la tarea aunque ElectronDB no esté abierto."
+                hint="Instala un agente de launchd en ~/Library/LaunchAgents que lanza la tarea aunque Vortaq no esté abierto."
                 persistent-hint
                 color="primary"
                 density="compact"

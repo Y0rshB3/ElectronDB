@@ -92,13 +92,13 @@ describe('engine availability', () => {
       'Motor de base de datos desconocido: "oracle".'
     )
     expect(engineAvailabilityError({ engine: 'postgresql' })).toBe(
-      'PostgreSQL todavía no está disponible en esta versión de ElectronDB.'
+      'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
     )
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
-      'SQLite todavía no está disponible en esta versión de ElectronDB.'
+      'SQLite todavía no está disponible en esta versión de Vortaq.'
     )
     expect(connectionFormErrors(input({ engine: 'mongodb' }))).toEqual([
-      'MongoDB todavía no está disponible en esta versión de ElectronDB.'
+      'MongoDB todavía no está disponible en esta versión de Vortaq.'
     ])
   })
 })

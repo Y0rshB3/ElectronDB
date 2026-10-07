@@ -15,7 +15,7 @@ import { AiConversationsRepo, AiMemoryRepo } from './store'
 
 let dir: string
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'electrondb-ai-'))
+  dir = mkdtempSync(join(tmpdir(), 'vortaq-ai-'))
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })

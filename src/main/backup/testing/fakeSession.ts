@@ -196,7 +196,7 @@ export function connectionFixture(overrides: Partial<ConnectionConfig> = {}): Co
       savePassword: false
     },
     ssl: { enabled: false, verifyServer: false },
-    backupDir: '/tmp/electrondb-unused',
+    backupDir: '/tmp/vortaq-unused',
     extraBackupDirs: []
   }
   return { ...base, engine: 'mysql', id: 'conn-1', createdAt: '', updatedAt: '', ...overrides }

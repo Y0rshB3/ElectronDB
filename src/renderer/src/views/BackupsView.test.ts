@@ -9,7 +9,7 @@ import {
   freshPinia,
   makeBackup,
   makeConnection,
-  mockElectronDB,
+  mockVortaq,
   mountWith,
   settle
 } from '@renderer/components/dialogs/testing'
@@ -19,7 +19,7 @@ const navicatFile = makeBackup({
   source: 'navicat',
   label: 'staging'
 })
-const electronDBFile = makeBackup({
+const vortaqFile = makeBackup({
   path: '/nd/billing/20260401100000-manual.nb3',
   source: 'electrondb',
   createdAt: '2026-04-01T10:00:00.000Z'
@@ -29,8 +29,8 @@ describe('BackupsView', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    mockElectronDB({
-      'backups:list': () => [navicatFile, electronDBFile],
+    mockVortaq({
+      'backups:list': () => [navicatFile, vortaqFile],
       'backups:meta': () => ({
         metaVersion: '30101',
         databaseType: 'MYSQL',
@@ -69,7 +69,7 @@ describe('BackupsView', () => {
     return row
   }
 
-  it('disables Eliminar for Navicat backups and enables it for ElectronDB ones', async () => {
+  it('disables Eliminar for Navicat backups and enables it for Vortaq ones', async () => {
     const w = await mountView()
     expect(w.findAll('tbody tr')).toHaveLength(2)
 
@@ -77,7 +77,7 @@ describe('BackupsView', () => {
     await settle()
     expect(w.get('[data-test="backups-delete"]').attributes('disabled')).toBeDefined()
 
-    await rowFor(w, electronDBFile.fileName).trigger('click')
+    await rowFor(w, vortaqFile.fileName).trigger('click')
     await settle()
     expect(w.get('[data-test="backups-delete"]').attributes('disabled')).toBeUndefined()
   })
@@ -164,10 +164,10 @@ function planOf(source: unknown, target: unknown): RollbackPlan {
 
 describe('BackupsView packages', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
-  let invoke: ReturnType<typeof mockElectronDB>
+  let invoke: ReturnType<typeof mockVortaq>
 
   function mockList(list: BackupFile[]) {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'backups:list': () => list,
       'jobs:rollbackPlan': planOf
     })

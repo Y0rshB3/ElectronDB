@@ -35,8 +35,7 @@ export function getAiService(ctx: AppContext): AiService {
   const log = getLogger('ai')
   // Test-only fake provider, honoured only with a scratch profile.
   const fixture = ctx.isolatedProfile === true && envVar('AI_FIXTURE') === '1'
-  if (fixture)
-    log.info('ai: ELECTRONDB_AI_FIXTURE=1, answers come from the fake provider (test mode)')
+  if (fixture) log.info('ai: VORTAQ_AI_FIXTURE=1, answers come from the fake provider (test mode)')
   const manager = getConnectionManager(ctx)
   service = new AiService({
     userDataPath: ctx.userDataPath,

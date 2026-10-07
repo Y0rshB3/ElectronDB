@@ -51,7 +51,7 @@ export interface AiServiceDeps {
   emit<E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]): void
   log: AiLogger
   fetch?: FetchFn
-  /** Replaces the real adapters (tests, ELECTRONDB_AI_FIXTURE). */
+  /** Replaces the real adapters (tests, VORTAQ_AI_FIXTURE). */
   adapterFactory?: (profile: AiProviderProfile, key: string | null) => ChatAdapter
   /** Snapshot cache lifetime (ms). */
   snapshotTtlMs?: number

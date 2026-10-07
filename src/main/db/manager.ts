@@ -116,7 +116,7 @@ export class ConnectionManager implements SessionFactory {
     const { connection } = await this.ensureOpen(id)
     if (!isMysqlFamily(connection)) {
       throw new DbUserError(
-        `${engineOf(connection.config).label} todavía no está disponible en esta versión de ElectronDB.`,
+        `${engineOf(connection.config).label} todavía no está disponible en esta versión de Vortaq.`,
         'E_ENGINE_UNAVAILABLE'
       )
     }
@@ -131,7 +131,7 @@ export class ConnectionManager implements SessionFactory {
     const { connection } = await this.ensureOpen(id)
     if (!isMysqlFamily(connection)) {
       throw new DbUserError(
-        `${engineOf(connection.config).label} todavía no está disponible en esta versión de ElectronDB.`,
+        `${engineOf(connection.config).label} todavía no está disponible en esta versión de Vortaq.`,
         'E_ENGINE_UNAVAILABLE'
       )
     }

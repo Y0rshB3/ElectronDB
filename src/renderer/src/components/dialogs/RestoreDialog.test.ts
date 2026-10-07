@@ -10,7 +10,7 @@ import {
   freshPinia,
   makeBackup,
   makeConnection,
-  mockElectronDB,
+  mockVortaq,
   mountWith,
   settle
 } from './testing'
@@ -36,7 +36,7 @@ describe('RestoreDialog', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'backups:meta': () => meta,
       'connections:open': () => ({ version: '8.4.7' }),
       'db:databases': () => [

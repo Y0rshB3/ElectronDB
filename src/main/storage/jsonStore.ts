@@ -28,7 +28,7 @@ export class JsonStore<T extends object> {
       } catch {
         /* ignore */
       }
-      console.error(`electrondb: could not parse ${this.filePath}, moved to ${backup}`, err)
+      console.error(`vortaq: could not parse ${this.filePath}, moved to ${backup}`, err)
       return this.defaults()
     }
   }

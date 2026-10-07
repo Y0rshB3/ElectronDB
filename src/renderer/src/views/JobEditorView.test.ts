@@ -22,7 +22,7 @@ import {
   freshPinia,
   makeConnection,
   makeJob,
-  mockElectronDB,
+  mockVortaq,
   mountWith,
   settle
 } from '@renderer/components/dialogs/testing'
@@ -124,7 +124,7 @@ describe('JobEditorView', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:list': () => [
         makeConnection({ id: 'c1', name: 'Staging', environment: 'staging' })
       ],
@@ -185,7 +185,7 @@ describe('JobEditorView', () => {
 
   for (const os of ['win32', 'linux']) {
     it(`disables the launchd switch on ${os} and explains Task Scheduler/cron`, async () => {
-      ;(window.electronDB as { platform?: string }).platform = os
+      ;(window.vortaq as { platform?: string }).platform = os
       const { w } = await mountEditor('job-1')
       const block = w.get('[data-test="job-launch-agent-unsupported"]')
       expect((block.get('input').element as HTMLInputElement).disabled).toBe(true)
@@ -237,7 +237,7 @@ describe('JobEditorView', () => {
       ],
       schedule: { enabled: false, cron: '', launchAgent: false }
     })
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:list': () => [
         makeConnection({ id: 'c1', name: 'Staging', environment: 'staging' }),
         makeConnection({ id: 'l1', name: 'Local', environment: 'local' })
@@ -265,7 +265,7 @@ describe('JobEditorView', () => {
   })
 
   it('asks for confirmation before running SQL on a production connection', async () => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:list': () => [
         makeConnection({ id: 'p1', name: 'Prod', environment: 'production' })
       ],
@@ -298,7 +298,7 @@ describe('JobEditorView', () => {
   })
 
   function stagingSqlJob() {
-    return mockElectronDB({
+    return mockVortaq({
       'connections:list': () => [makeConnection({ id: 's1', name: 'Pre', environment: 'staging' })],
       'jobs:get': () =>
         makeJob({

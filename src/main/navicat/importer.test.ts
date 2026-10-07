@@ -16,7 +16,7 @@ describe('importFromNavicat', () => {
   let credentials: CredentialStore
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-import-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-import-'))
     const settings = new SettingsRepo(dir, dir)
     settings.update({ navicatRootPath: FIXTURE_ROOT, backupsRootDir: join(dir, 'backups') })
     credentials = new CredentialStore(dir, plainCodec, 'plain')
@@ -153,7 +153,7 @@ describe('importFromNavicat re-import safety', () => {
   let dir: string
   let ctx: ImportContext
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-import-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-import-'))
     const settings = new SettingsRepo(dir, dir)
     settings.update({ navicatRootPath: FIXTURE_ROOT, backupsRootDir: join(dir, 'backups') })
     ctx = { connections: new ConnectionsRepo(dir), jobs: new JobsRepo(dir), settings }
@@ -197,7 +197,7 @@ describe('importFromNavicat engine model', () => {
   let dir: string
   let ctx: ImportContext
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-import-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-import-'))
     const settings = new SettingsRepo(dir, dir)
     settings.update({ navicatRootPath: FIXTURE_ROOT, backupsRootDir: join(dir, 'backups') })
     ctx = { connections: new ConnectionsRepo(dir), jobs: new JobsRepo(dir), settings }

@@ -39,7 +39,7 @@ describe('readNavicatJobs', () => {
   })
 
   it('skips a malformed profile with a warning instead of failing', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'electrondb-jobs-'))
+    const root = mkdtempSync(join(tmpdir(), 'vortaq-jobs-'))
     try {
       const profiles = join(root, 'Navicat for MySQL', 'Profiles')
       cpSync(join(FIXTURE_ROOT, 'Navicat for MySQL', 'Profiles'), profiles, { recursive: true })

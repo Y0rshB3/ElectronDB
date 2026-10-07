@@ -23,7 +23,7 @@ const filter: TableFilter = {
 
 describe('FilterProfilesRepo', () => {
   let dir: string
-  beforeEach(() => (dir = mkdtempSync(join(tmpdir(), 'electrondb-fp-'))))
+  beforeEach(() => (dir = mkdtempSync(join(tmpdir(), 'vortaq-fp-'))))
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
   it('keeps profiles per connection, schema and table, sorted and replaced by name', () => {

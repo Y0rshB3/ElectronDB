@@ -5,7 +5,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useTourStore } from '@renderer/stores/tour'
 import { useUiStore } from '@renderer/stores/ui'
 import SettingsDialog from './SettingsDialog.vue'
-import { calls, freshPinia, mockElectronDB, mountWith, settle } from './testing'
+import { calls, freshPinia, mockVortaq, mountWith, settle } from './testing'
 
 const base: AppSettings = {
   navicatRootPath: '',
@@ -28,7 +28,7 @@ describe('SettingsDialog › Seguridad typed-confirmation environments', () => {
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'app:info': () => ({ version: '0.1.5' }),
       // Echo the patch like main does (normalised by SettingsRepo there).
       'settings:update': (patch) => ({ ...base, ...(patch as Partial<AppSettings>) })
@@ -102,7 +102,7 @@ describe('SettingsDialog › Seguridad typed-confirmation environments', () => {
 
 describe('SettingsDialog › Ver tour de bienvenida', () => {
   it('closes Ajustes and starts the welcome tour', async () => {
-    const invoke = mockElectronDB({
+    const invoke = mockVortaq({
       'app:info': () => ({ version: '0.1.7' }),
       'navicat:findCandidates': () => ({ supportedPlatform: true, candidates: [] })
     })
@@ -145,7 +145,7 @@ describe('SettingsDialog preview engines switch', () => {
 
   beforeEach(() => {
     stored = { ...legacySettings }
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'app:info': () => ({ version: '0.1.9' }),
       'settings:get': () => ({ ...stored }),
       'settings:update': (patch) => {

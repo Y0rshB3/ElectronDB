@@ -217,7 +217,7 @@ export function createAutomationService(
       if (!stored || (stored.status !== 'running' && stored.status !== 'queued')) return
       if (!isStaleRun(stored, { isActive: (id) => active.has(id) })) {
         throw new Error(
-          'Esta ejecución la está realizando otro proceso de ElectronDB (agente de launchd); espera a que termine.'
+          'Esta ejecución la está realizando otro proceso de Vortaq (agente de launchd); espera a que termine.'
         )
       }
       log.info(`run ${runId} closed as interrupted (no process executes it)`)

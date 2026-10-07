@@ -21,7 +21,7 @@ describe('driver registry', () => {
       const err = await getDriver(engine).catch((e: unknown) => e)
       expect(err).toBeInstanceOf(DbUserError)
       expect((err as Error).message).toBe(
-        `${label} todavía no está disponible en esta versión de ElectronDB.`
+        `${label} todavía no está disponible en esta versión de Vortaq.`
       )
     }
   })

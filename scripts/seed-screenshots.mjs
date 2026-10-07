@@ -1,13 +1,13 @@
 /* global process, console, Buffer, URL */
 /**
  * Seeds a scratch profile and the throwaway test MySQL for the screenshot
- * harness (`npm run screenshots`). Never touches the real ElectronDB profile,
+ * harness (`npm run screenshots`). Never touches the real Vortaq profile,
  * the real Navicat folder or MySQL on the usual local ports (3306-3309).
  *
  * Env:
- *   ELECTRONDB_SHOTS_PROFILE  scratch profile dir (default below; wiped and recreated)
- *   ELECTRONDB_SHOTS_MYSQL    mysql://user:pass@host:port/db (default throwaway container)
- *   ELECTRONDB_SHOTS_MYSQL57  same for the MySQL 5.7 "staging" of the rollback screens
+ *   VORTAQ_SHOTS_PROFILE  scratch profile dir (default below; wiped and recreated)
+ *   VORTAQ_SHOTS_MYSQL    mysql://user:pass@host:port/db (default throwaway container)
+ *   VORTAQ_SHOTS_MYSQL57  same for the MySQL 5.7 "staging" of the rollback screens
  *                             (default throwaway 5.7 container on port 33357)
  * (the pre-rename NAVIDOG_SHOTS_* names are still accepted as a fallback)
  */
@@ -18,8 +18,11 @@ import mysql from 'mysql2/promise'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // Must match the default in the `screenshots` npm script.
-const env = (name) => process.env[`ELECTRONDB_${name}`] ?? process.env[`NAVIDOG_${name}`]
-const DEFAULT_PROFILE = join(process.env.TMPDIR || '/tmp', 'electrondb-shots', 'profile')
+const env = (name) =>
+  process.env[`VORTAQ_${name}`] ??
+  process.env[`ELECTRONDB_${name}`] ??
+  process.env[`NAVIDOG_${name}`]
+const DEFAULT_PROFILE = join(process.env.TMPDIR || '/tmp', 'vortaq-shots', 'profile')
 const PROFILE = resolve(env('SHOTS_PROFILE') || DEFAULT_PROFILE)
 // The throwaway test container keeps its original credentials and schema name.
 const MYSQL_URL = env('SHOTS_MYSQL') || 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
@@ -110,7 +113,7 @@ const credentials = {
   codec: 'plain',
   items: {
     ...Object.fromEntries(connections.map((c) => [`mysql:${c.id}`, b64(passwordOf(c))])),
-    // Fake key for the AI screens (answered by ELECTRONDB_AI_FIXTURE, never sent anywhere).
+    // Fake key for the AI screens (answered by VORTAQ_AI_FIXTURE, never sent anywhere).
     'ai:shot-ai-claude': b64('sk-ant-fixture-not-a-real-key')
   }
 }

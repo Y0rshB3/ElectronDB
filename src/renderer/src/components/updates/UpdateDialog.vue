@@ -186,8 +186,8 @@ const subtitle = computed(() => {
               la versión en GitHub.
             </p>
             <p v-if="!updates.selfUpdate" class="update-hint">
-              La descarga se abre en el navegador. Cierra ElectronDB antes de instalar la versión
-              nueva: tus conexiones, trabajos y ajustes se conservan.
+              La descarga se abre en el navegador. Cierra Vortaq antes de instalar la versión nueva:
+              tus conexiones, trabajos y ajustes se conservan.
             </p>
           </section>
 

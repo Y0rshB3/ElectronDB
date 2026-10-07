@@ -30,7 +30,7 @@ export function engineUi(engine: EngineId = DEFAULT_ENGINE): EngineUi {
   const ui = UIS[engine]
   if (!ui) {
     const label = ENGINES[engine]?.label ?? String(engine)
-    throw new Error(`${label} todavía no está disponible en esta versión de ElectronDB.`)
+    throw new Error(`${label} todavía no está disponible en esta versión de Vortaq.`)
   }
   return ui
 }
@@ -80,7 +80,7 @@ export function useEngineUi(
     const { descriptor, ui } = engine.value
     if (ui) return ui
     throw new Error(
-      `${descriptor?.label ?? 'Este motor'} todavía no está disponible en esta versión de ElectronDB.`
+      `${descriptor?.label ?? 'Este motor'} todavía no está disponible en esta versión de Vortaq.`
     )
   })
 }

@@ -11,21 +11,21 @@ export const releaseAsset = (name: string, size = 100, tag = 'v0.1.3'): ReleaseA
 
 /** Artifact names as electron-builder publishes them (checked against the real v0.1.2 release). */
 export const RELEASE_ASSETS: ReleaseAsset[] = [
-  'ElectronDB-0.1.3-arm64-mac.zip',
-  'ElectronDB-0.1.3-arm64.dmg',
-  'ElectronDB-0.1.3-x64-mac.zip',
-  'ElectronDB-0.1.3-x64-portable.exe',
-  'ElectronDB-0.1.3-x64-setup.exe',
-  'ElectronDB-0.1.3-x64.dmg',
-  'ElectronDB-0.1.3-x86_64.AppImage',
-  'electrondb_0.1.3_amd64.deb'
+  'Vortaq-0.1.3-arm64-mac.zip',
+  'Vortaq-0.1.3-arm64.dmg',
+  'Vortaq-0.1.3-x64-mac.zip',
+  'Vortaq-0.1.3-x64-portable.exe',
+  'Vortaq-0.1.3-x64-setup.exe',
+  'Vortaq-0.1.3-x64.dmg',
+  'Vortaq-0.1.3-x86_64.AppImage',
+  'vortaq_0.1.3_amd64.deb'
 ].map((n) => releaseAsset(n))
 
 /** A /releases/latest payload in GitHub's shape. */
 export function apiRelease(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     tag_name: 'v0.1.3',
-    name: 'ElectronDB v0.1.3',
+    name: 'Vortaq v0.1.3',
     draft: false,
     prerelease: false,
     html_url: `${RELEASES_BASE}/tag/v0.1.3`,

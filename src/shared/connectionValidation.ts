@@ -62,7 +62,7 @@ export function engineAvailabilityError(input: Pick<ConnectionInput, 'engine'>):
   const engine = engineOf(input)
   return engine.available
     ? null
-    : `${engine.label} todavía no está disponible en esta versión de ElectronDB.`
+    : `${engine.label} todavía no está disponible en esta versión de Vortaq.`
 }
 
 /** True when the port field is not used (SQLite files, MongoDB SRV records). */

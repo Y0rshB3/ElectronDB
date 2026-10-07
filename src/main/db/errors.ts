@@ -1,7 +1,7 @@
 /**
  * Engine-neutral error taxonomy (docs/multi-engine-design.md, section 5.7).
  *
- * - DbUserError: written by ElectronDB, safe to show AND safe to log. It never
+ * - DbUserError: written by Vortaq, safe to show AND safe to log. It never
  *   carries server text. Each driver may subclass it (MysqlUserError) so its
  *   own `code` keeps appearing where its describeForUser appends one.
  * - ServerError: server-derived text that may echo values (a duplicate key, a

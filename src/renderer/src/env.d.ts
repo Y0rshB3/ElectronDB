@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
-import type { ElectronDBApi } from '@shared/ipc'
+import type { VortaqApi } from '@shared/ipc'
 
 declare global {
   interface Window {
-    electronDB: ElectronDBApi
+    vortaq: VortaqApi
   }
 }
 

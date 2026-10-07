@@ -15,7 +15,7 @@ export interface MockBridge {
   listenerCount(channel: IpcEventChannel): number
 }
 
-/** Installs a fake window.electronDB that answers from `handlers` (undefined otherwise). */
+/** Installs a fake window.vortaq that answers from `handlers` (undefined otherwise). */
 export function installBridge(handlers: Record<string, Handler | unknown> = {}): MockBridge {
   const listeners = new Map<string, Set<(payload: unknown) => void>>()
   const invoke = vi.fn(async (channel: string, ...args: unknown[]) => {
@@ -28,7 +28,7 @@ export function installBridge(handlers: Record<string, Handler | unknown> = {}):
     listeners.get(channel)!.add(listener)
     return () => listeners.get(channel)?.delete(listener)
   })
-  window.electronDB = { invoke, on } as never
+  window.vortaq = { invoke, on } as never
   return {
     invoke,
     on,

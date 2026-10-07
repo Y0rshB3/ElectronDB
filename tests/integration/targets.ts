@@ -5,7 +5,7 @@ import { envVar } from '@main/env'
  * MySQL servers the integration suites run against (docs/multi-engine-design.md, 15.3).
  *
  * Each suite is registered once per server. Without its URL a server's suite is skipped,
- * unless ELECTRONDB_REQUIRE_INTEGRATION=1 (set by `npm run test:integration:required`):
+ * unless VORTAQ_REQUIRE_INTEGRATION=1 (set by `npm run test:integration:required`):
  * then the missing URL is a failing test, so a green gate always means the suites ran.
  *
  * Start the throwaway servers with `docker compose -f tests/docker-compose.yml up -d --wait`.
@@ -15,7 +15,7 @@ export interface MysqlTarget {
   label: string
   /** Version prefix the server must report (`VERSION()` starts with it). */
   version: '8.4' | '5.7'
-  /** Env var name without the ELECTRONDB_/NAVIDOG_ prefix. */
+  /** Env var name without the VORTAQ_/NAVIDOG_ prefix. */
   envName: string
   /** Throwaway server URL, e.g. mysql://root:navidog@127.0.0.1:33357/navidog_test. */
   url: string
@@ -76,17 +76,17 @@ export function describeMysql(name: string, body: (target: MysqlTarget) => void)
       )
     } else if (integrationRequired()) {
       describe(title, () => {
-        it(`needs ELECTRONDB_${spec.envName}`, () => {
+        it(`needs VORTAQ_${spec.envName}`, () => {
           throw new Error(
-            `ELECTRONDB_${spec.envName} is not set, and ELECTRONDB_REQUIRE_INTEGRATION=1 forbids skipping. ` +
+            `VORTAQ_${spec.envName} is not set, and VORTAQ_REQUIRE_INTEGRATION=1 forbids skipping. ` +
               `Start the test servers (docker compose -f tests/docker-compose.yml up -d --wait) and set ` +
-              `ELECTRONDB_${spec.envName}=${spec.example}`
+              `VORTAQ_${spec.envName}=${spec.example}`
           )
         })
       })
     } else {
       describe.skip(title, () => {
-        it(`needs ELECTRONDB_${spec.envName}`, () => undefined)
+        it(`needs VORTAQ_${spec.envName}`, () => undefined)
       })
     }
   }

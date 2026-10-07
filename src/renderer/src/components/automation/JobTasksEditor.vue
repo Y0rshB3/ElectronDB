@@ -236,7 +236,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
                 label="Origen (copia a restaurar)"
                 :hint="
                   task.restoreSource?.kind === 'latest'
-                    ? 'La copia con datos más reciente de ese esquema hecha por una tarea de ElectronDB (nunca copias manuales, parciales, solo de estructura ni de Navicat).'
+                    ? 'La copia con datos más reciente de ese esquema hecha por una tarea de Vortaq (nunca copias manuales, parciales, solo de estructura ni de Navicat).'
                     : undefined
                 "
                 persistent-hint

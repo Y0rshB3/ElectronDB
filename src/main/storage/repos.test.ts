@@ -40,7 +40,7 @@ const connInput = (name: string): ConnectionInput => ({
 describe('repos', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-repos-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-repos-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -219,7 +219,7 @@ describe('repos', () => {
 describe('ConnectionsRepo engine model', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-repos-engine-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-repos-engine-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -305,7 +305,7 @@ describe('ConnectionsRepo engine model', () => {
 describe('SettingsRepo previewEngines', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-repos-settings-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-repos-settings-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

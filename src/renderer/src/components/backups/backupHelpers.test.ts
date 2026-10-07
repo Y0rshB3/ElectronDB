@@ -19,7 +19,7 @@ describe('backupObjectTypeLabel', () => {
 describe('sourceChip', () => {
   it('never throws on an unexpected backup source (e.g. "navidog" from a pre-rename main)', async () => {
     const { sourceChip } = await import('./backupHelpers')
-    expect(sourceChip('electrondb').label).toBe('ElectronDB')
+    expect(sourceChip('electrondb').label).toBe('Vortaq')
     expect(sourceChip('navicat').label).toBe('Navicat')
     expect(sourceChip('navidog').label).toBe('Desconocido')
     expect(sourceChip(undefined).label).toBe('Desconocido')

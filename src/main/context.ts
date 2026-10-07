@@ -16,7 +16,7 @@ export interface AppContext {
   /** True when started with --run-job (no window). */
   headless: boolean
   /**
-   * True when the profile was redirected with ELECTRONDB_USER_DATA. launchd
+   * True when the profile was redirected with VORTAQ_USER_DATA. launchd
    * agents are global per macOS user, so an isolated profile neither
    * installs nor removes them (it would delete the real profile's agents).
    */

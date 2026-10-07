@@ -20,7 +20,7 @@ describe('detectInstallMode', () => {
       detectInstallMode({
         ...base,
         platform: 'win32',
-        env: { PORTABLE_EXECUTABLE_FILE: 'C:\\E\\ElectronDB.exe' }
+        env: { PORTABLE_EXECUTABLE_FILE: 'C:\\E\\Vortaq.exe' }
       })
     ).toBe('manual')
     expect(detectInstallMode({ ...base, platform: 'linux' })).toBe('manual')

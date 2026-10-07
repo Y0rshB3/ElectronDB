@@ -64,7 +64,7 @@ const sourceSchema: FakeSchema = {
 }
 
 beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'electrondb-restore-'))
+  dir = mkdtempSync(join(tmpdir(), 'vortaq-restore-'))
   const result = await createBackup(
     {
       connections: connectionsOf(connectionFixture({ backupDir: dir })),
@@ -201,9 +201,9 @@ describe('restoreBackup', () => {
     expect(stripAutoIncrementOption(ddl)).toBe(
       'CREATE TABLE `t` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
     )
-    expect(stripAutoIncrementOption('CREATE TABLE `t` (`id` int) AUTO_INCREMENT=3 ENGINE=InnoDB')).toBe(
-      'CREATE TABLE `t` (`id` int) ENGINE=InnoDB'
-    )
+    expect(
+      stripAutoIncrementOption('CREATE TABLE `t` (`id` int) AUTO_INCREMENT=3 ENGINE=InnoDB')
+    ).toBe('CREATE TABLE `t` (`id` int) ENGINE=InnoDB')
     expect(stripAutoIncrementOption('CREATE TABLE `t` (`id` int) ENGINE=InnoDB')).toBe(
       'CREATE TABLE `t` (`id` int) ENGINE=InnoDB'
     )

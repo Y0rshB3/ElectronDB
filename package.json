@@ -1,8 +1,8 @@
 {
-  "name": "electrondb",
-  "productName": "ElectronDB",
+  "name": "vortaq",
+  "productName": "Vortaq",
   "version": "0.1.9",
-  "description": "ElectronDB: open-source desktop MySQL client inspired by other database managers (connections, object explorer, query editor, backups and automation).",
+  "description": "Vortaq: independent, open-source desktop database client (connections, object explorer, query editor, backups and automation).",
   "private": true,
   "main": "./out/main/index.js",
   "author": "Y0rshB3",
@@ -38,7 +38,7 @@
     "test:integration": "vitest run --project node",
     "test:integration:required": "node scripts/test-integration-required.mjs",
     "check": "npm run lint && npm run typecheck && npm run test",
-    "screenshots": "node scripts/seed-screenshots.mjs && npm run build && ELECTRONDB_USER_DATA=${ELECTRONDB_SHOTS_PROFILE:-${NAVIDOG_SHOTS_PROFILE:-${TMPDIR:-/tmp}/electrondb-shots/profile}} ELECTRONDB_PLAIN_SECRETS=1 ELECTRONDB_AI_FIXTURE=1 ELECTRONDB_NAVICAT_CANDIDATES=${ELECTRONDB_NAVICAT_CANDIDATES:-tests/fixtures/navicat} ELECTRONDB_UPDATES_FIXTURE=${ELECTRONDB_UPDATES_FIXTURE:-tests/fixtures/updates/latest-release.json} ELECTRONDB_WHATS_NEW_FROM=${ELECTRONDB_WHATS_NEW_FROM:-0.1.2} ELECTRONDB_WHATS_NEW_VERSION=${ELECTRONDB_WHATS_NEW_VERSION:-0.1.4} ELECTRONDB_SCREENSHOTS=${ELECTRONDB_SHOTS_DIR:-${NAVIDOG_SHOTS_DIR:-${TMPDIR:-/tmp}/electrondb-shots}} npx electron ."
+    "screenshots": "node scripts/seed-screenshots.mjs && npm run build && VORTAQ_USER_DATA=${VORTAQ_SHOTS_PROFILE:-${ELECTRONDB_SHOTS_PROFILE:-${NAVIDOG_SHOTS_PROFILE:-${TMPDIR:-/tmp}/vortaq-shots/profile}}} VORTAQ_PLAIN_SECRETS=1 VORTAQ_AI_FIXTURE=1 VORTAQ_NAVICAT_CANDIDATES=${VORTAQ_NAVICAT_CANDIDATES:-tests/fixtures/navicat} VORTAQ_UPDATES_FIXTURE=${VORTAQ_UPDATES_FIXTURE:-tests/fixtures/updates/latest-release.json} VORTAQ_WHATS_NEW_FROM=${VORTAQ_WHATS_NEW_FROM:-0.1.2} VORTAQ_WHATS_NEW_VERSION=${VORTAQ_WHATS_NEW_VERSION:-0.1.4} VORTAQ_SCREENSHOTS=${VORTAQ_SHOTS_DIR:-${ELECTRONDB_SHOTS_DIR:-${NAVIDOG_SHOTS_DIR:-${TMPDIR:-/tmp}/vortaq-shots}}} npx electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

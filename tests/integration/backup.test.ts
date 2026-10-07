@@ -16,8 +16,8 @@ import { describeMysql } from './targets'
 
 /**
  * End-to-end .nb3 backup/restore against a throwaway MySQL server
- * (ELECTRONDB_TEST_MYSQL_URL, e.g. mysql://root:navidog@127.0.0.1:33306/navidog_test, and
- * ELECTRONDB_TEST_MYSQL57_URL, e.g. mysql://root:navidog@127.0.0.1:33357/navidog_test).
+ * (VORTAQ_TEST_MYSQL_URL, e.g. mysql://root:navidog@127.0.0.1:33306/navidog_test, and
+ * VORTAQ_TEST_MYSQL57_URL, e.g. mysql://root:navidog@127.0.0.1:33357/navidog_test).
  */
 
 const SRC = 'nb_src'
@@ -129,7 +129,7 @@ describeMysql('backup module (integration)', ({ url, is57 }) => {
 
   beforeAll(async () => {
     const u = new URL(url)
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-backup-it-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-backup-it-'))
     ctx = {
       userDataPath: dir,
       logDir: join(dir, 'logs'),

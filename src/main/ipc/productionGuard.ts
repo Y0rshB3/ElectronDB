@@ -47,7 +47,7 @@ export function assertProductionWriteConfirmed(
   const connection = ctx.connections.get(connectionId)
   if (!connection || !needsTypedConfirm(ctx, connection)) return
   throw new MysqlUserError(
-    `${action} en «${connection.name}» (${environmentPhrase(connection.environment)}) necesita confirmación explícita. Vuelve a intentarlo desde ElectronDB y confirma la operación escribiendo el nombre de la conexión.`,
+    `${action} en «${connection.name}» (${environmentPhrase(connection.environment)}) necesita confirmación explícita. Vuelve a intentarlo desde Vortaq y confirma la operación escribiendo el nombre de la conexión.`,
     CODE
   )
 }
@@ -87,7 +87,7 @@ export function assertJobRunAllowed(
   const targets = guardedTargets(ctx, job)
   if (!targets.length) return
   throw new MysqlUserError(
-    `La tarea «${job.name}» ejecuta SQL sobre ${describeTargets(targets)} y necesita confirmación explícita. Ejecútala desde ElectronDB y confirma la operación.`,
+    `La tarea «${job.name}» ejecuta SQL sobre ${describeTargets(targets)} y necesita confirmación explícita. Ejecútala desde Vortaq y confirma la operación.`,
     CODE
   )
 }
@@ -114,7 +114,7 @@ export function assertJobSaveAllowed(
   )
     return
   throw new MysqlUserError(
-    `Programar «${input.name}» ejecutará SQL sobre ${describeTargets(guardedTargets(ctx, input))} sin supervisión y necesita confirmación explícita. Guarda la tarea desde ElectronDB y confirma la operación.`,
+    `Programar «${input.name}» ejecutará SQL sobre ${describeTargets(guardedTargets(ctx, input))} sin supervisión y necesita confirmación explícita. Guarda la tarea desde Vortaq y confirma la operación.`,
     CODE
   )
 }

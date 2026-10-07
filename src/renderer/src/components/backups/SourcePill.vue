@@ -2,7 +2,7 @@
 import type { BackupFile } from '@shared/types'
 import { sourceChip } from './backupHelpers'
 
-/** Who created a backup (Navicat / ElectronDB), as a small tinted pill. */
+/** Who created a backup (Navicat / Vortaq), as a small tinted pill. */
 defineProps<{ source: BackupFile['source'] }>()
 </script>
 

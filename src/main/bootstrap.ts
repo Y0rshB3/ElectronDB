@@ -33,23 +33,27 @@ export const PLAIN_SECRETS_NOTICE: StartupNotice = {
 }
 
 /**
- * Test/diagnostic switches read from the environment (ELECTRONDB_*, with the
- * pre-rename NAVIDOG_* spelling as fallback). Never set by the app itself;
+ * Test/diagnostic switches read from the environment (VORTAQ_*, with the
+ * earlier ELECTRONDB_* and NAVIDOG_* spellings as fallbacks). Never set by the app itself;
  * see README "Variables de entorno".
  */
 export interface EnvSwitches {
-  /** ELECTRONDB_USER_DATA: alternative profile directory (connections, jobs, secrets, logs). */
+  /** VORTAQ_USER_DATA: alternative profile directory (connections, jobs, secrets, logs). */
   userDataPath: string | null
-  /** ELECTRONDB_PLAIN_SECRETS=1: store secrets base64-only instead of safeStorage (tests). */
+  /** VORTAQ_PLAIN_SECRETS=1: store secrets base64-only instead of safeStorage (tests). */
   plainSecrets: boolean
-  /** ELECTRONDB_SMOKE=1: quit right after the renderer finished loading (smoke test). */
+  /** VORTAQ_SMOKE=1: quit right after the renderer finished loading (smoke test). */
   smoke: boolean
   /**
-   * ELECTRONDB_LEGACY_USER_DATA (tests only): pre-rename profile to migrate
-   * from, even into a scratch profile. No NAVIDOG_ fallback.
+   * VORTAQ_LEGACY_USER_DATA (tests only): profile of an earlier product
+   * name to migrate from, even into a scratch profile; its folder name
+   * (ElectronDB or Navidog) says which. ELECTRONDB_ fallback, no NAVIDOG_ one.
    */
   legacyUserDataPath: string | null
-  /** ELECTRONDB_LEGACY_KEYCHAIN (tests only): keychain file holding "Navidog Safe Storage". */
+  /**
+   * VORTAQ_LEGACY_KEYCHAIN (tests only): keychain file holding the
+   * "ElectronDB Safe Storage" / "Navidog Safe Storage" items.
+   */
   legacyKeychain: string | null
 }
 
@@ -63,14 +67,14 @@ export function readEnvSwitches(env: NodeJS.ProcessEnv = process.env): EnvSwitch
     userDataPath: absolute(envVar('USER_DATA', env)),
     plainSecrets: envVar('PLAIN_SECRETS', env) === '1',
     smoke: envVar('SMOKE', env) === '1',
-    legacyUserDataPath: absolute(env.ELECTRONDB_LEGACY_USER_DATA),
-    legacyKeychain: absolute(env.ELECTRONDB_LEGACY_KEYCHAIN)
+    legacyUserDataPath: absolute(env.VORTAQ_LEGACY_USER_DATA ?? env.ELECTRONDB_LEGACY_USER_DATA),
+    legacyKeychain: absolute(env.VORTAQ_LEGACY_KEYCHAIN ?? env.ELECTRONDB_LEGACY_KEYCHAIN)
   }
 }
 
 /**
- * Fixes the profile folder: ELECTRONDB_USER_DATA when set, else
- * <appData>/ElectronDB (explicit, so it never depends on how Electron derived
+ * Fixes the profile folder: VORTAQ_USER_DATA when set, else
+ * <appData>/Vortaq (explicit, so it never depends on how Electron derived
  * the name from package.json). Must run before app 'ready' so Chromium's own
  * storage lands in the same folder. Returns the folder.
  */
@@ -80,7 +84,7 @@ export function applyProfilePath(switches: EnvSwitches): string {
   return dir
 }
 
-/** Points the file log at <profile>/logs/electrondb.log. */
+/** Points the file log at <profile>/logs/vortaq.log. */
 export function configureFileLog(userDataPath: string): void {
   configureLog({
     filePath: join(userDataPath, 'logs', LOG_FILE_NAME),
@@ -98,7 +102,7 @@ export function createContext(options: { headless: boolean }): AppContext {
 
   let credentials: CredentialStore
   if (switches.plainSecrets) {
-    log.warn('ELECTRONDB_PLAIN_SECRETS=1: secrets are stored obfuscated only (test mode)')
+    log.warn('VORTAQ_PLAIN_SECRETS=1: secrets are stored obfuscated only (test mode)')
     credentials = new CredentialStore(userDataPath, plainCodec, 'plain')
   } else {
     try {

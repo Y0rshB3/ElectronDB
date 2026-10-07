@@ -115,7 +115,7 @@ async function save(): Promise<void> {
 <template>
   <v-dialog v-model="open" max-width="620" scrollable>
     <v-card data-test="settings-dialog">
-      <DialogHeader icon="mdi-cog-outline" title="Ajustes" subtitle="Preferencias de ElectronDB" />
+      <DialogHeader icon="mdi-cog-outline" title="Ajustes" subtitle="Preferencias de Vortaq" />
       <v-card-text class="settings-dialog__body">
         <section class="settings-section" aria-label="Carpetas">
           <div class="settings-section__title">
@@ -137,7 +137,7 @@ async function save(): Promise<void> {
               :title="form.backupsRootDir || undefined"
               kind="directory"
               label="Carpeta raíz de copias de seguridad"
-              hint="Destino por defecto de las copias creadas por ElectronDB"
+              hint="Destino por defecto de las copias creadas por Vortaq"
               class="nd-path-field"
             />
           </div>

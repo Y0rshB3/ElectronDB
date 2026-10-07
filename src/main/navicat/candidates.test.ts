@@ -52,7 +52,7 @@ function snapshot(dir: string): string[] {
 describe('findNavicatCandidates', () => {
   let home: string
   beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), 'electrondb-candidates-'))
+    home = mkdtempSync(join(tmpdir(), 'vortaq-candidates-'))
   })
   afterEach(() => rmSync(home, { recursive: true, force: true }))
 

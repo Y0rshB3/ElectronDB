@@ -49,7 +49,7 @@ export function navicatCounts(
 /** Feature steps of the welcome tour (1–8). Targets are `data-tour` values. */
 export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
-    title: 'Te damos la bienvenida a ElectronDB',
+    title: 'Te damos la bienvenida a Vortaq',
     text: 'Un cliente de MySQL para escritorio, compatible con las conexiones, tareas y copias .nb3 de Navicat. Te enseñamos lo principal en un minuto.',
     testId: 'tour-welcome',
     logo: true

@@ -27,7 +27,7 @@ export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    title: 'ElectronDB',
+    title: 'Vortaq',
     ...windowChromeOptions({ platform: process.platform, theme: options.theme ?? 'dark' }),
     ...(icon ? { icon } : {}),
     backgroundColor: '#090c13',
@@ -58,7 +58,7 @@ export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow
 }
 
 /**
- * ELECTRONDB_SMOKE=1: records renderer console warnings/errors and load failures,
+ * VORTAQ_SMOKE=1: records renderer console warnings/errors and load failures,
  * waits for the renderer to finish loading and mount, prints one
  * `[smoke] {json}` line to stdout and exits (0 = clean, 1 = problems).
  */
@@ -96,9 +96,9 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
           `(async () => {
             const ipc = {}
             for (const channel of ['app:info', 'app:startupNotices', 'settings:get', 'connections:list', 'jobs:list', 'jobs:runs', 'updates:check', 'ai:providers']) {
-              try { await window.electronDB.invoke(channel); ipc[channel] = 'ok' } catch (e) { ipc[channel] = String(e && e.message) }
+              try { await window.vortaq.invoke(channel); ipc[channel] = 'ok' } catch (e) { ipc[channel] = String(e && e.message) }
             }
-            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.electronDB?.invoke === 'function', title: document.title, ipc }
+            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.vortaq?.invoke === 'function', title: document.title, ipc }
           })()`
         )
         .then((info: Record<string, unknown>) => finish(info))

@@ -45,12 +45,12 @@ app.use(pinia).use(vuetify).mount('#app')
 
 /**
  * Screenshot harness hook (src/main/screenshots.ts). The main process only
- * adds `?nd-screenshots=1` when ELECTRONDB_SCREENSHOTS and ELECTRONDB_USER_DATA are
+ * adds `?nd-screenshots=1` when VORTAQ_SCREENSHOTS and VORTAQ_USER_DATA are
  * set, so this is inert in normal runs. It exposes the stores so the harness
  * can drive the UI through the same actions a user would trigger.
  */
 if (new URLSearchParams(window.location.search).get('nd-screenshots') === '1') {
-  ;(window as unknown as { __electronDBShots: unknown }).__electronDBShots = {
+  ;(window as unknown as { __vortaqShots: unknown }).__vortaqShots = {
     api,
     theme: vuetify.theme,
     ui: useUiStore(pinia),

@@ -4,7 +4,7 @@ import DialogHeader from '@renderer/components/dialogs/DialogHeader.vue'
 import { useWhatsNewStore } from '@renderer/stores/whatsNew'
 import { formatReleaseDate } from './updateFormat'
 
-/** «ElectronDB se actualizó a x.y.z»: curated highlights of the versions just installed. */
+/** «Vortaq se actualizó a x.y.z»: curated highlights of the versions just installed. */
 const whatsNew = useWhatsNewStore()
 
 const info = computed(() => whatsNew.info)
@@ -27,7 +27,7 @@ const open = computed({
     <v-card v-if="info" data-test="whats-new">
       <DialogHeader
         icon="mdi-party-popper"
-        :title="`ElectronDB se actualizó a ${info.currentVersion}`"
+        :title="`Vortaq se actualizó a ${info.currentVersion}`"
         :subtitle="subtitle"
       />
       <v-card-text class="whats-new__body">

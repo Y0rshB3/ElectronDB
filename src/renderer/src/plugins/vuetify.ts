@@ -16,9 +16,9 @@ export const vuetifyOptions: VuetifyOptions = {
   locale: { locale: 'es', fallback: 'es', messages: { es } },
   icons: { defaultSet: 'mdi', aliases, sets: { mdi } },
   theme: {
-    defaultTheme: 'electrondbDark',
+    defaultTheme: 'vortaqDark',
     themes: {
-      electrondbDark: {
+      vortaqDark: {
         dark: true,
         colors: {
           background: '#090c13',
@@ -51,7 +51,7 @@ export const vuetifyOptions: VuetifyOptions = {
           'theme-overlay-multiplier': 1
         }
       },
-      electrondbLight: {
+      vortaqLight: {
         dark: false,
         colors: {
           background: '#f3f5fa',

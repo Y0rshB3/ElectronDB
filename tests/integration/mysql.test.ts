@@ -26,7 +26,7 @@ import {
 } from '../../src/renderer/src/components/query/resultEditability'
 import { describeMysql } from './targets'
 
-const SCHEMA = `electrondb_it_${process.pid}`
+const SCHEMA = `vortaq_it_${process.pid}`
 
 function connectionInput(u: URL): ConnectionInput {
   return {
@@ -38,7 +38,7 @@ function connectionInput(u: URL): ConnectionInput {
     username: decodeURIComponent(u.username),
     savePassword: true,
     customDatabases: [],
-    initialQueries: "SET @electrondb_init = 'yes'",
+    initialQueries: "SET @vortaq_init = 'yes'",
     ssh: {
       enabled: false,
       host: '',
@@ -48,7 +48,7 @@ function connectionInput(u: URL): ConnectionInput {
       savePassword: false
     },
     ssl: { enabled: false, verifyServer: false },
-    backupDir: '/tmp/electrondb-it',
+    backupDir: '/tmp/vortaq-it',
     extraBackupDirs: []
   }
 }
@@ -64,7 +64,7 @@ describeMysql('mysql module (integration)', ({ url, version, is57 }) => {
 
   beforeAll(async () => {
     const u = new URL(url)
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-it-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-it-'))
     ctx = {
       userDataPath: dir,
       logDir: join(dir, 'logs'),
@@ -135,7 +135,7 @@ describeMysql('mysql module (integration)', ({ url, version, is57 }) => {
   it('runs initial queries on every pooled connection', async () => {
     const s = await manager.acquire(connectionId)
     try {
-      const [row] = await s.query<{ v: string }>('SELECT @electrondb_init AS v')
+      const [row] = await s.query<{ v: string }>('SELECT @vortaq_init AS v')
       expect(row.v).toBe('yes')
     } finally {
       await s.release()

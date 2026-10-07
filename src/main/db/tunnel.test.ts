@@ -13,7 +13,7 @@ let plainPath: string
 let garbagePath: string
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), 'electrondb-tunnel-'))
+  dir = mkdtempSync(join(tmpdir(), 'vortaq-tunnel-'))
   encryptedPath = join(dir, 'id_encrypted')
   plainPath = join(dir, 'id_plain')
   garbagePath = join(dir, 'id_garbage')

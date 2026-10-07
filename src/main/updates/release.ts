@@ -100,7 +100,7 @@ export function parseRelease(payload: unknown): ParsedRelease | null {
   return {
     version: formatVersion(parsed),
     tag,
-    name: name || `ElectronDB ${tag}`,
+    name: name || `Vortaq ${tag}`,
     htmlUrl,
     publishedAt: published && !Number.isNaN(Date.parse(published)) ? published : null,
     notes: truncateNotes(str(r.body) ?? ''),

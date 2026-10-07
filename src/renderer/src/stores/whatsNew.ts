@@ -7,7 +7,7 @@ import { showWhenFree } from '@renderer/composables/useModalQueue'
 import { useTourStore } from './tour'
 
 /**
- * «ElectronDB se actualizó a x.y.z»: shown once on the first start of a new
+ * «Vortaq se actualizó a x.y.z»: shown once on the first start of a new
  * version, with the curated highlights of every version in between (main
  * decides what to show, see src/shared/whatsNew.ts). Waits for other modals.
  * Closing it in any way records the version as seen.

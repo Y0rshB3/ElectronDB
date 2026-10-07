@@ -46,7 +46,7 @@ function primary(): void {
       <DialogHeader icon="mdi-rocket-launch-outline" title="Hay una nueva actualización">
         <template #subtitle>
           <span id="update-notice-title" data-test="update-notice-subtitle"
-            >ElectronDB {{ result.latestVersion }} ya está disponible (tienes
+            >Vortaq {{ result.latestVersion }} ya está disponible (tienes
             {{ result.currentVersion }})</span
           >
         </template>

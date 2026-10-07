@@ -35,7 +35,7 @@ describe('backup handlers', () => {
   let typed: Environment[]
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'electrondb-handlers-'))
+    root = mkdtempSync(join(tmpdir(), 'vortaq-handlers-'))
     own = join(root, 'own')
     navicat = join(root, 'navicat')
     mkdirSync(join(own, 'demo'), { recursive: true })

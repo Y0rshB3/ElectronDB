@@ -51,12 +51,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         target: 'toolbar-others',
         title: 'Tour de bienvenida',
-        text: 'Puedes repetir el recorrido por ElectronDB cuando quieras desde Otros › Ver tour de bienvenida, o desde Ajustes.'
+        text: 'Puedes repetir el recorrido por Vortaq cuando quieras desde Otros › Ver tour de bienvenida, o desde Ajustes.'
       },
       {
         target: 'toolbar-connection',
         title: 'Detección automática de Navicat',
-        text: 'En Conexión › Importar desde Navicat, ElectronDB busca la carpeta de Navicat por ti y te pregunta si es la correcta antes de importar.'
+        text: 'En Conexión › Importar desde Navicat, Vortaq busca la carpeta de Navicat por ti y te pregunta si es la correcta antes de importar.'
       }
     ]
   },

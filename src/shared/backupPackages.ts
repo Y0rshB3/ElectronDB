@@ -5,7 +5,7 @@ import type { BackupFile } from './types'
  * list can show and restore them as a unit. Pure (names, dates and the run
  * reference main attached while listing; no archive is opened).
  *
- *   1. Files written by an ElectronDB automation run (`file.run`) belong to
+ *   1. Files written by an Vortaq automation run (`file.run`) belong to
  *      that run: «<job name> · <run date>».
  *   2. Any other file (Navicat batch jobs, older copies) is grouped with the
  *      files of the same connection and label whose timestamps follow each

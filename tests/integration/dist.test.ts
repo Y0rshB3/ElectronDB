@@ -8,17 +8,18 @@ import {
   parseUpdateYml,
   type Platform
 } from '../../scripts/release-lib.mjs'
+import { envVar } from '../../src/main/env'
 import { parseSha256Sums } from '../../src/main/updates/macDmg'
 
 /**
  * Real installer builds (slow: several minutes). Opt-in:
  *   npm run build
- *   ELECTRONDB_TEST_DIST_DIR=<scratch dir> npx vitest run tests/integration/dist.test.ts
+ *   VORTAQ_TEST_DIST_DIR=<scratch dir> npx vitest run tests/integration/dist.test.ts
  * Builds every target with scripts/release.mjs into that folder (never publishes) and checks
  * that latest.yml / latest-linux.yml / latest-mac.yml reference the public file names with the
  * sha512 of the files, and that SHA256SUMS.txt matches.
  */
-const DIR = process.env.ELECTRONDB_TEST_DIST_DIR
+const DIR = envVar('TEST_DIST_DIR')
 const ROOT = resolve(__dirname, '..', '..')
 const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version as string
 
@@ -36,9 +37,9 @@ describe.skipIf(!DIR)('release build (electron-builder, real)', () => {
       expect(res.status, `${res.stdout}\n${res.stderr}`).toBe(0)
 
       const feeds: Record<Platform, string> = {
-        win: `ElectronDB-${version}-x64-setup.exe`,
-        linux: `ElectronDB-${version}-x86_64.AppImage`,
-        mac: `ElectronDB-${version}-arm64-mac.zip`
+        win: `Vortaq-${version}-x64-setup.exe`,
+        linux: `Vortaq-${version}-x86_64.AppImage`,
+        mac: `Vortaq-${version}-arm64-mac.zip`
       }
       const artifacts = expectedArtifacts(version)
       for (const platform of ['win', 'linux', 'mac'] as const) {
@@ -59,15 +60,15 @@ describe.skipIf(!DIR)('release build (electron-builder, real)', () => {
       )
       expect(macNames.sort()).toEqual(
         [
-          `ElectronDB-${version}-arm64-mac.zip`,
-          `ElectronDB-${version}-arm64.dmg`,
-          `ElectronDB-${version}-x64-mac.zip`,
-          `ElectronDB-${version}-x64.dmg`
+          `Vortaq-${version}-arm64-mac.zip`,
+          `Vortaq-${version}-arm64.dmg`,
+          `Vortaq-${version}-x64-mac.zip`,
+          `Vortaq-${version}-x64.dmg`
         ].sort()
       )
 
       const sums = parseSha256Sums(readFileSync(join(out, 'SHA256SUMS.txt'), 'utf8'))
-      const dmg = `ElectronDB-${version}-arm64.dmg`
+      const dmg = `Vortaq-${version}-arm64.dmg`
       expect(sums.get(dmg)).toBe(await hashFile(join(out, dmg), 'sha256', 'hex'))
       expect([...sums.keys()].sort()).toEqual(
         Object.values(artifacts)

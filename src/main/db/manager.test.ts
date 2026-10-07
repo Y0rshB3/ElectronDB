@@ -104,7 +104,7 @@ describe('ConnectionManager (engine-neutral)', () => {
   let logs: LogEvent[]
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-dbmanager-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-dbmanager-'))
     events = []
     logs = []
     configureLog({ minLevel: 'debug', sink: (e) => logs.push(e) })
@@ -248,7 +248,7 @@ describe('ConnectionManager (engine-neutral)', () => {
     const other = saved('Otro')
     driver.dialectId = 'postgresql'
     await expect(manager.acquire(other)).rejects.toThrow(
-      'MySQL todavía no está disponible en esta versión de ElectronDB.'
+      'MySQL todavía no está disponible en esta versión de Vortaq.'
     )
   })
 })
@@ -258,7 +258,7 @@ describe('ConnectionManager with the real registry', () => {
   let ctx: AppContext
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-dbmanager-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-dbmanager-'))
     ctx = {
       userDataPath: dir,
       logDir: join(dir, 'logs'),
@@ -278,13 +278,13 @@ describe('ConnectionManager with the real registry', () => {
     ctx.credentials.set('mysql', id, 'pw')
     const manager = getConnectionManager(ctx)
     await expect(manager.open(id)).rejects.toThrow(
-      'PostgreSQL todavía no está disponible en esta versión de ElectronDB.'
+      'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
     )
     expect(manager.isOpen(id)).toBe(false)
     const res = await manager.test(input('PG', 'postgresql'), 'pw', null)
     expect(res).toMatchObject({
       ok: false,
-      error: 'PostgreSQL todavía no está disponible en esta versión de ElectronDB.'
+      error: 'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
     })
   })
 

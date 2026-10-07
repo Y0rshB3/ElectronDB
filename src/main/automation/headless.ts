@@ -17,7 +17,7 @@ async function closeConnections(ctx: AppContext): Promise<void> {
 }
 
 /**
- * Entry point for `ElectronDB --run-job=<jobId>` (launchd agents). Runs the
+ * Entry point for `Vortaq --run-job=<jobId>` (launchd agents). Runs the
  * job to completion and returns the process exit code.
  */
 export async function runJobHeadless(ctx: AppContext, jobId: string): Promise<number> {

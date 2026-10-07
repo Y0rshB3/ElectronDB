@@ -3,8 +3,8 @@
  * `npm run test:integration:required`: the integration suites with skipping turned off.
  *
  * Runs `vitest run --project node` (same as `npm run test:integration`) with
- * ELECTRONDB_REQUIRE_INTEGRATION=1, so a missing ELECTRONDB_TEST_MYSQL_URL (MySQL 8.4) or
- * ELECTRONDB_TEST_MYSQL57_URL (MySQL 5.7) makes the run fail instead of skip
+ * VORTAQ_REQUIRE_INTEGRATION=1, so a missing VORTAQ_TEST_MYSQL_URL (MySQL 8.4) or
+ * VORTAQ_TEST_MYSQL57_URL (MySQL 5.7) makes the run fail instead of skip
  * (tests/integration/targets.ts). Extra arguments are passed to vitest.
  * A script instead of `VAR=1 vitest` so it also works from PowerShell and cmd.
  */
@@ -21,7 +21,7 @@ const result = spawnSync(
   {
     cwd: root,
     stdio: 'inherit',
-    env: { ...process.env, ELECTRONDB_REQUIRE_INTEGRATION: '1' }
+    env: { ...process.env, VORTAQ_REQUIRE_INTEGRATION: '1' }
   }
 )
 if (result.error) throw result.error

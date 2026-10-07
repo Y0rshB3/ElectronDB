@@ -3,7 +3,7 @@
  * that do not set it behave like macOS, the primary platform.
  */
 export function hostPlatform(): string {
-  return (typeof window !== 'undefined' && window.electronDB?.platform) || 'darwin'
+  return (typeof window !== 'undefined' && window.vortaq?.platform) || 'darwin'
 }
 
 export const isMac = (): boolean => hostPlatform() === 'darwin'

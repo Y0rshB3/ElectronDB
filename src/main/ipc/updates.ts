@@ -25,7 +25,7 @@ export function registerUpdatesHandlers(ctx: AppContext): void {
     // Only this repository's release pages/downloads: the renderer never opens arbitrary URLs.
     if (!isAllowedReleaseUrl(url))
       throw new Error(
-        'Solo se pueden abrir enlaces de las versiones publicadas de ElectronDB en GitHub.'
+        'Solo se pueden abrir enlaces de las versiones publicadas de Vortaq en GitHub.'
       )
     await shell.openExternal(url)
   })

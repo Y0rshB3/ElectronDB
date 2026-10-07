@@ -90,7 +90,7 @@ function findByNavicatName(connections: ConnectionConfig[], name: string): Conne
 }
 
 /**
- * Resolves a batch-job `Server` to a ElectronDB connection: same-request imports first, then Navicat name, then display name.
+ * Resolves a batch-job `Server` to a Vortaq connection: same-request imports first, then Navicat name, then display name.
  * Only connections whose engine has automation (MySQL) are candidates (section 11).
  */
 function resolveServer(
@@ -132,7 +132,7 @@ function buildTasks(
     const connection = resolveServer(task.server, imported, all)
     if (!connection) {
       warnings.push(
-        `Tarea "${label}" de "${preview.name}" omitida: la conexión "${task.server}" no existe en ElectronDB (impórtala primero)`
+        `Tarea "${label}" de "${preview.name}" omitida: la conexión "${task.server}" no existe en Vortaq (impórtala primero)`
       )
       continue
     }
@@ -159,7 +159,7 @@ const stringList = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
 
 /**
- * Imports the selected Navicat connections and batch jobs into ElectronDB.
+ * Imports the selected Navicat connections and batch jobs into Vortaq.
  * Idempotent: a connection already imported (same Navicat name) or a job with
  * the same source file is updated in place, keeping its id and stored secrets.
  */

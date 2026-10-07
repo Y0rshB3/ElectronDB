@@ -13,7 +13,11 @@ export interface SavedQuery {
 }
 
 const PREFIX = 'electrondb.queries.'
-/** Key prefix before the Navidog -> ElectronDB rename; read once and moved to PREFIX. */
+/**
+ * Key prefix used by Navidog; read once and moved to PREFIX. PREFIX itself keeps
+ * the ElectronDB-era spelling on purpose: it is an internal storage key, and
+ * renaming it would hide every saved query copied from an ElectronDB profile.
+ */
 const LEGACY_PREFIX = 'navidog.queries.'
 
 function storage(): Storage | null {

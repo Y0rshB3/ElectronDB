@@ -29,7 +29,7 @@ function installBridge(handlers: Record<string, (...args: unknown[]) => unknown>
 } {
   const listeners: Record<string, Listener[]> = {}
   const invoke = vi.fn(async (channel: string, ...args: unknown[]) => handlers[channel]?.(...args))
-  window.electronDB = {
+  window.vortaq = {
     platform: 'darwin',
     invoke,
     on: (channel: string, l: Listener) => {

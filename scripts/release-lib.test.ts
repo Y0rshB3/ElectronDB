@@ -32,25 +32,25 @@ describe('release artifacts', () => {
         size: 1
       }))
     expect(pickAssets(asAssets(a.win.binaries), 'win32', 'x64').download?.fileName).toBe(
-      'ElectronDB-0.1.9-x64-setup.exe'
+      'Vortaq-0.1.9-x64-setup.exe'
     )
     expect(pickAssets(asAssets(a.mac.binaries), 'darwin', 'arm64').download?.fileName).toBe(
-      'ElectronDB-0.1.9-arm64.dmg'
+      'Vortaq-0.1.9-arm64.dmg'
     )
     expect(pickAssets(asAssets(a.mac.binaries), 'darwin', 'x64').download?.fileName).toBe(
-      'ElectronDB-0.1.9-x64.dmg'
+      'Vortaq-0.1.9-x64.dmg'
     )
     expect(pickAssets(asAssets(a.linux.binaries), 'linux', 'x64').download?.fileName).toBe(
-      'ElectronDB-0.1.9-x86_64.AppImage'
+      'Vortaq-0.1.9-x86_64.AppImage'
     )
-    expect(a.linux.binaries).toContain('electrondb_0.1.9_amd64.deb')
-    expect(a.win.binaries).toContain('ElectronDB-0.1.9-x64-portable.exe')
+    expect(a.linux.binaries).toContain('vortaq_0.1.9_amd64.deb')
+    expect(a.win.binaries).toContain('Vortaq-0.1.9-x64-portable.exe')
   })
 
   it('electron-builder.yml keeps the identity, the feed and the artifact patterns', () => {
     const yml = readFileSync(resolve(ROOT, 'electron-builder.yml'), 'utf8')
     expect(yml).toMatch(/^appId: dev\.y0rshb3\.electrondb$/m)
-    expect(yml).toMatch(/^productName: ElectronDB$/m)
+    expect(yml).toMatch(/^productName: Vortaq$/m)
     expect(yml).toMatch(
       /^publish:\n {2}provider: github\n {2}owner: Y0rshB3\n {2}repo: ElectronDB$/m
     )
@@ -66,8 +66,8 @@ describe('release artifacts', () => {
     expect(yml).toMatch(/^ {2}nsis: '1\.2\.1'$/m)
     expect(yml).toMatch(/^ {2}appimage: '1\.0\.3'$/m)
     const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'))
-    expect(pkg.name).toBe('electrondb')
-    expect(pkg.productName).toBe('ElectronDB')
+    expect(pkg.name).toBe('vortaq')
+    expect(pkg.productName).toBe('Vortaq')
     expect(pkg.homepage).toBe('https://github.com/Y0rshB3/ElectronDB')
     for (const script of ['dist', 'dist:mac', 'dist:win', 'dist:linux'])
       expect(pkg.scripts[script]).toContain('--publish never')
@@ -78,20 +78,20 @@ describe('release artifacts', () => {
       [
         'version: 0.1.9',
         'files:',
-        '  - url: ElectronDB-0.1.9-x64-setup.exe',
+        '  - url: Vortaq-0.1.9-x64-setup.exe',
         '    sha512: 6VciFtd/d9+IVFruWQ==',
         '    size: 130115627',
-        'path: ElectronDB-0.1.9-x64-setup.exe',
+        'path: Vortaq-0.1.9-x64-setup.exe',
         'sha512: 6VciFtd/d9+IVFruWQ==',
         "releaseDate: '2026-10-07T17:23:55.396Z'"
       ].join('\n')
     )
     expect(yml).toEqual({
       version: '0.1.9',
-      path: 'ElectronDB-0.1.9-x64-setup.exe',
+      path: 'Vortaq-0.1.9-x64-setup.exe',
       sha512: '6VciFtd/d9+IVFruWQ==',
       files: [
-        { url: 'ElectronDB-0.1.9-x64-setup.exe', sha512: '6VciFtd/d9+IVFruWQ==', size: 130115627 }
+        { url: 'Vortaq-0.1.9-x64-setup.exe', sha512: '6VciFtd/d9+IVFruWQ==', size: 130115627 }
       ]
     })
   })

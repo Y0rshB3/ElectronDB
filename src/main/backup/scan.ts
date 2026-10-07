@@ -154,7 +154,7 @@ export async function listBackups(
   const byPath = new Map<string, BackupFile>()
   for (const file of results.flat()) {
     if (byPath.has(file.path)) continue
-    // An ElectronDB root may contain an extra dir (or vice versa): the file's location decides.
+    // An Vortaq root may contain an extra dir (or vice versa): the file's location decides.
     const located: BackupFile = underExtra(file.path) ? { ...file, source: 'navicat' } : file
     byPath.set(file.path, { ...located, run: runs.get(backupPathKey(file.path)) ?? null })
   }

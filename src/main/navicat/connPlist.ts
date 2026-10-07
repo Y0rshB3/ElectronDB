@@ -11,7 +11,7 @@ import { readMarkerColors } from './colors'
 import { connectionSettingsDir, navicatPaths } from './paths'
 import { isPlistDict as isDict, parsePlistXml, type PlistDict as Dict } from './plist'
 
-/** A connection as stored by Navicat, independent of ElectronDB state. */
+/** A connection as stored by Navicat, independent of Vortaq state. */
 export interface NavicatConnection {
   name: string
   host: string
@@ -150,7 +150,7 @@ export function isImportedFromNavicat(connection: ConnectionConfig, navicatName:
 
 /**
  * Reads connections + colours from a Navicat root and enriches them with
- * ElectronDB state (backup counts, alreadyImported).
+ * Vortaq state (backup counts, alreadyImported).
  */
 export async function readNavicatConnections(
   root: string,

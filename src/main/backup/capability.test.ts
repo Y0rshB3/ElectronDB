@@ -13,7 +13,7 @@ import { FakeSessionFactory, connectionFixture, connectionsOf } from './testing/
 describe('backup capability gates', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-backup-gate-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-backup-gate-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

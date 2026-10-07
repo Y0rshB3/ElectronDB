@@ -2,16 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { applyPlatformClass, hostPlatform, isMac } from './platform'
 
 function setBridgePlatform(platform: string | undefined): void {
-  window.electronDB = { invoke: async () => undefined, on: () => () => {}, platform } as never
+  window.vortaq = { invoke: async () => undefined, on: () => () => {}, platform } as never
 }
 
 describe('platform', () => {
   afterEach(() => {
-    window.electronDB = undefined as never
+    window.vortaq = undefined as never
   })
 
   it('defaults to macOS when the bridge does not report a platform', () => {
-    window.electronDB = undefined as never
+    window.vortaq = undefined as never
     expect(hostPlatform()).toBe('darwin')
     expect(isMac()).toBe(true)
   })

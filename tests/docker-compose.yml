@@ -16,7 +16,7 @@
 name: electrondb-test
 
 services:
-  # ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test
+  # VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test
   mysql84:
     image: mysql:8.4.7
     environment:
@@ -31,7 +31,7 @@ services:
       retries: 60
       start_period: 10s
 
-  # ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test
+  # VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test
   # mysql:5.7 is amd64-only: on Apple Silicon it runs emulated (slower first start).
   # Stock server settings on purpose (latin1 server charset, 5.7 default sql_mode), so the
   # tests see what a default 5.7 production server does.

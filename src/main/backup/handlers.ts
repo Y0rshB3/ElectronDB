@@ -17,7 +17,7 @@ import { readObjectMeta } from './nb3/reader'
  */
 
 export const NAVICAT_DELETE_MESSAGE =
-  'Este backup está en una carpeta de Navicat (solo lectura) y ElectronDB no lo borra. Elimínalo desde Navicat o desde Finder.'
+  'Este backup está en una carpeta de Navicat (solo lectura) y Vortaq no lo borra. Elimínalo desde Navicat o desde Finder.'
 export const OUTSIDE_DELETE_MESSAGE =
   'Solo se pueden borrar backups que estén dentro de la carpeta de backups de una conexión.'
 

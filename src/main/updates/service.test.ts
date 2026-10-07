@@ -19,7 +19,7 @@ const T0 = Date.parse('2026-10-06T09:00:00Z')
 const PACKAGED: RunModeInfo = { runMode: 'packaged' }
 const SOURCE: RunModeInfo = {
   runMode: 'source',
-  source: { dir: '/w/ElectronDB', isGit: true, branch: 'main', commands: ['git pull'] }
+  source: { dir: '/w/Vortaq', isGit: true, branch: 'main', commands: ['git pull'] }
 }
 
 function okFetch(payload: unknown = apiRelease()): ReturnType<typeof vi.fn> & FetchLike {
@@ -34,7 +34,7 @@ describe('UpdateService', () => {
   let now: number
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-updates-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-updates-'))
     now = T0
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -65,7 +65,7 @@ describe('UpdateService', () => {
     expect(init.method).toBe('GET')
     expect(init.headers).toEqual({
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'ElectronDB/0.1.2',
+      'User-Agent': 'Vortaq/0.1.2',
       'X-GitHub-Api-Version': '2022-11-28'
     })
     expect(init.signal).toBeInstanceOf(AbortSignal)
@@ -85,7 +85,7 @@ describe('UpdateService', () => {
       status: 'available',
       currentVersion: '0.1.2',
       latestVersion: '0.1.3',
-      releaseName: 'ElectronDB v0.1.3',
+      releaseName: 'Vortaq v0.1.3',
       releaseUrl: 'https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.3',
       publishedAt: '2026-10-01T10:00:00Z',
       notes: '## Novedades\n\n- Algo nuevo',
@@ -93,8 +93,8 @@ describe('UpdateService', () => {
       dismissed: false,
       checkedAt: new Date(T0).toISOString()
     })
-    expect(result.download?.fileName).toBe('ElectronDB-0.1.3-arm64.dmg')
-    expect(result.alternatives?.map((a) => a.fileName)).toEqual(['ElectronDB-0.1.3-arm64-mac.zip'])
+    expect(result.download?.fileName).toBe('Vortaq-0.1.3-arm64.dmg')
+    expect(result.alternatives?.map((a) => a.fileName)).toEqual(['Vortaq-0.1.3-arm64-mac.zip'])
     expect(result.source).toBeUndefined()
   })
 

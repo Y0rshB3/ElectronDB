@@ -62,8 +62,8 @@ export function getUpdateService(ctx: AppContext): UpdateService {
   if (service) return service
   const fixtureEnv = ctx.isolatedProfile ? envVar('UPDATES_FIXTURE')?.trim() : undefined
   const fixture = fixtureEnv ? resolve(fixtureEnv) : undefined
-  if (fixture) log.info('updates: answering from ELECTRONDB_UPDATES_FIXTURE (test mode)')
-  // ELECTRONDB_UPDATES_RUN_MODE (scratch profile only) forces the packaged/source UI in screenshots.
+  if (fixture) log.info('updates: answering from VORTAQ_UPDATES_FIXTURE (test mode)')
+  // VORTAQ_UPDATES_RUN_MODE (scratch profile only) forces the packaged/source UI in screenshots.
   const forcedMode = ctx.isolatedProfile ? envVar('UPDATES_RUN_MODE')?.trim() : undefined
   service = new UpdateService({
     stateDir: ctx.userDataPath,
@@ -102,7 +102,7 @@ async function* chunksOf(stream: ReadableStream<Uint8Array> | null): AsyncIterab
 /** Only this repository's release downloads (GitHub then redirects to its CDN). */
 function assertReleaseUrl(url: string): void {
   if (!isAllowedReleaseUrl(url))
-    throw new Error('Solo se descargan archivos de las versiones de ElectronDB en GitHub.')
+    throw new Error('Solo se descargan archivos de las versiones de Vortaq en GitHub.')
 }
 
 let CancellationTokenClass: (new () => import('electron-updater').CancellationToken) | null = null
@@ -207,7 +207,7 @@ export function getUpdateInstaller(ctx: AppContext): UpdateInstaller {
       const restores = automationModule?.getAutomationService(ctx).activeRestores?.() ?? []
       if (!restores.length) return null
       const names = [...new Set(restores.map((r) => `«${r.jobName}»`))].join(', ')
-      return `Hay una restauración en curso (${names}). Espera a que termine antes de reiniciar para actualizar; la actualización también se instalará al cerrar ElectronDB.`
+      return `Hay una restauración en curso (${names}). Espera a que termine antes de reiniciar para actualizar; la actualización también se instalará al cerrar Vortaq.`
     },
     log: ilog
   })
@@ -226,8 +226,8 @@ export function rememberProfileState(ctx: AppContext): void {
 
 /**
  * «Novedades» after an update. Smoke and screenshot runs never show it unless
- * ELECTRONDB_WHATS_NEW_FROM=<version> asks for it (scratch profile only);
- * ELECTRONDB_WHATS_NEW_VERSION=<version> pretends the running version.
+ * VORTAQ_WHATS_NEW_FROM=<version> asks for it (scratch profile only);
+ * VORTAQ_WHATS_NEW_VERSION=<version> pretends the running version.
  */
 export function whatsNewFor(ctx: AppContext): WhatsNewInfo | null {
   rememberProfileState(ctx)

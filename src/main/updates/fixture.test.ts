@@ -6,10 +6,10 @@ import { fixtureFetch } from './fixture'
 import { UpdateService } from './service'
 import { apiRelease } from './testing'
 
-describe('fixtureFetch (ELECTRONDB_UPDATES_FIXTURE)', () => {
+describe('fixtureFetch (VORTAQ_UPDATES_FIXTURE)', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-fixture-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-fixture-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -28,7 +28,7 @@ describe('fixtureFetch (ELECTRONDB_UPDATES_FIXTURE)', () => {
     writeFileSync(file, JSON.stringify(apiRelease()))
     const result = await svc(file).check(true)
     expect(result).toMatchObject({ status: 'available', latestVersion: '0.1.3' })
-    expect(result.download?.fileName).toBe('ElectronDB-0.1.3-x64-setup.exe')
+    expect(result.download?.fileName).toBe('Vortaq-0.1.3-x64-setup.exe')
   })
 
   it('simulates HTTP errors and malformed bodies', async () => {

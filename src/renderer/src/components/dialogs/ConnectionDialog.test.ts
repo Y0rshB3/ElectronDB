@@ -3,14 +3,14 @@ import type { Mock } from 'vitest'
 import type { ConnectionInput } from '@shared/types'
 import { useUiStore } from '@renderer/stores/ui'
 import ConnectionDialog from './ConnectionDialog.vue'
-import { calls, freshPinia, makeConnection, mockElectronDB, mountWith, settle } from './testing'
+import { calls, freshPinia, makeConnection, mockVortaq, mountWith, settle } from './testing'
 
 describe('ConnectionDialog', () => {
   let invoke: Mock
   let wrapper: ReturnType<typeof mountWith> | null = null
 
   beforeEach(() => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:save': (input) => makeConnection({ ...(input as ConnectionInput), id: 'new-1' }),
       'connections:setPassword': () => undefined,
       'connections:hasPassword': () => true,
@@ -52,7 +52,7 @@ describe('ConnectionDialog', () => {
 
   it('does not create a duplicate when storing the password fails and the user retries', async () => {
     let attempts = 0
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:save': (input) =>
         makeConnection({
           ...(input as ConnectionInput),
@@ -119,7 +119,7 @@ describe('ConnectionDialog', () => {
   }
 
   it("saves «Sin contraseña» as authMode 'none', hides the password and tests without one", async () => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:save': (input) => makeConnection({ ...(input as ConnectionInput), id: 'new-1' }),
       'connections:setPassword': () => undefined,
       'connections:hasPassword': () => false,
@@ -188,7 +188,7 @@ describe('ConnectionDialog', () => {
   })
 
   it('suggests «Sin contraseña» when the server accepted an empty password', async () => {
-    invoke = mockElectronDB({
+    invoke = mockVortaq({
       'connections:hasPassword': () => false,
       'connections:hasSshPassword': () => false,
       'connections:test': () => ({

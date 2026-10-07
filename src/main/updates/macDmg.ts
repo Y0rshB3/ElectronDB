@@ -5,7 +5,7 @@ import type { ParsedRelease } from './release'
 
 /**
  * macOS update download. Squirrel.Mac (electron-updater's mac path) only installs apps signed
- * with an Apple Developer ID, which ElectronDB does not have, so the app downloads the .dmg,
+ * with an Apple Developer ID, which Vortaq does not have, so the app downloads the .dmg,
  * checks its SHA-256 against the published SHA256SUMS.txt (or a SHA256SUMS block in the release
  * notes) and opens it; the user drags the app to Applications.
  * Network access is injected so this is unit tested without electron.

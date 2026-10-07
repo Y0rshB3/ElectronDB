@@ -30,7 +30,7 @@ describe('automation service', () => {
     backups = fakeBackupService(t.dir)
     platform = {
       os: 'darwin',
-      execPath: '/bin/electrondb',
+      execPath: '/bin/vortaq',
       appArgs: [],
       uid: 501,
       homeDir: join(t.dir, 'home')
@@ -228,7 +228,7 @@ describe('automation service', () => {
     })
     t.ctx.runs.upsert(stale('stale', 999_999_999)) // crashed process
     t.ctx.runs.upsert(stale('legacy', undefined)) // written before runs recorded their pid
-    t.ctx.runs.upsert(stale('launchd', process.ppid)) // another live ElectronDB process
+    t.ctx.runs.upsert(stale('launchd', process.ppid)) // another live Vortaq process
 
     await service.start()
 

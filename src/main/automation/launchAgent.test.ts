@@ -11,6 +11,8 @@ import {
   launchAgentsDir,
   launchAgentStatus,
   LEGACY_LAUNCH_AGENT_PREFIX,
+  LEGACY_LAUNCH_AGENT_PREFIXES,
+  LAUNCH_AGENT_PREFIX,
   LEGACY_LAUNCH_AGENTS_NOTICE,
   removeLaunchAgent,
   removeLegacyLaunchAgents,
@@ -47,7 +49,7 @@ describe('launchAgent', () => {
     t = makeContext()
     platform = {
       os: 'darwin',
-      execPath: '/Applications/ElectronDB.app/Contents/MacOS/ElectronDB',
+      execPath: '/Applications/Vortaq.app/Contents/MacOS/Vortaq',
       appArgs: [],
       uid: 501,
       homeDir: join(t.dir, 'home')
@@ -63,7 +65,7 @@ describe('launchAgent', () => {
   it('builds a packaged-app plist that parses back', () => {
     const xml = buildLaunchAgentPlist(job, t.ctx, platform)
     const parsed = parse(xml) as Record<string, unknown>
-    expect(parsed.Label).toBe(`dev.y0rshb3.electrondb.job.${job.id}`)
+    expect(parsed.Label).toBe(`dev.y0rshb3.vortaq.job.${job.id}`)
     expect(parsed.ProgramArguments).toEqual([platform.execPath, `--run-job=${job.id}`])
     expect(parsed.RunAtLoad).toBe(false)
     expect(parsed.StandardOutPath).toBe(
@@ -82,14 +84,10 @@ describe('launchAgent', () => {
     const dev: PlatformInfo = {
       ...platform,
       execPath: '/dev/electron',
-      appArgs: ['/src/electrondb']
+      appArgs: ['/src/vortaq']
     }
     const parsed = parse(buildLaunchAgentPlist(job, t.ctx, dev)) as Record<string, unknown>
-    expect(parsed.ProgramArguments).toEqual([
-      '/dev/electron',
-      '/src/electrondb',
-      `--run-job=${job.id}`
-    ])
+    expect(parsed.ProgramArguments).toEqual(['/dev/electron', '/src/vortaq', `--run-job=${job.id}`])
   })
 
   it('installs: writes the plist then runs bootout and bootstrap in order', async () => {
@@ -196,7 +194,7 @@ describe('launchAgent', () => {
       ])
     })
 
-    it('a full sync keeps old-label agents of jobs ElectronDB does not have and raises a notice', async () => {
+    it('a full sync keeps old-label agents of jobs Vortaq does not have and raises a notice', async () => {
       clearRaisedNotices()
       mkdirSync(launchAgentsDir(platform.homeDir), { recursive: true })
       writeFileSync(legacyPath('not-migrated'), 'old')
@@ -208,6 +206,32 @@ describe('launchAgent', () => {
       expect(notices).toHaveLength(1)
       expect(notices[0].id).toBe(`${LEGACY_LAUNCH_AGENTS_NOTICE}:not-migrated`)
       expect(notices[0].message).toContain(`${LEGACY_LAUNCH_AGENT_PREFIX}not-migrated.plist`)
+      clearRaisedNotices()
+    })
+
+    it('moves ElectronDB-label agents too, and both old labels of the same job', async () => {
+      clearRaisedNotices()
+      const electronDbPath = (id: string): string =>
+        join(launchAgentsDir(platform.homeDir), `dev.y0rshb3.electrondb.job.${id}.plist`)
+      expect(LEGACY_LAUNCH_AGENT_PREFIXES).toEqual([
+        'dev.y0rshb3.electrondb.job.',
+        'dev.y0rshb3.navidog.job.'
+      ])
+      expect(LAUNCH_AGENT_PREFIX).toBe('dev.y0rshb3.vortaq.job.')
+      mkdirSync(launchAgentsDir(platform.homeDir), { recursive: true })
+      writeFileSync(electronDbPath(job.id), 'old')
+      writeFileSync(legacyPath(job.id), 'older')
+      writeFileSync(electronDbPath('gone'), 'old')
+      const calls: ExecCall[] = []
+      await syncLaunchAgents(t.ctx, { platform, execFile: stubExec(calls), log: silentLogger })
+      expect(existsSync(electronDbPath(job.id))).toBe(false)
+      expect(existsSync(legacyPath(job.id))).toBe(false)
+      expect(existsSync(electronDbPath('gone'))).toBe(true)
+      expect(launchAgentStatus(job.id, platform.homeDir, platform.os)).toBe(true)
+      expect(launchAgentPath(platform.homeDir, job.id)).toContain('dev.y0rshb3.vortaq.job.')
+      const notices = raisedNotices(t.ctx.userDataPath)
+      expect(notices.map((n) => n.id)).toEqual([`${LEGACY_LAUNCH_AGENTS_NOTICE}:gone`])
+      expect(notices[0].message).toContain('dev.y0rshb3.electrondb.job.gone.plist')
       clearRaisedNotices()
     })
 

@@ -36,7 +36,7 @@ let view: EditorView | null = null
 const langCompartment = new Compartment()
 const readonlyCompartment = new Compartment()
 
-/** The engine's CodeMirror dialect (MySQL: electronDBMySQL); plain SQL for an engine without a UI. */
+/** The engine's CodeMirror dialect (MySQL: vortaqMySQL); plain SQL for an engine without a UI. */
 function editorDialect(): SQLDialect {
   try {
     return engineUi(props.engine).editorLanguage

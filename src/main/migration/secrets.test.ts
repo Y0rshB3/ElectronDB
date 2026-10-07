@@ -36,7 +36,7 @@ describe('migrateLegacySecrets', () => {
     writeFileSync(join(dir, 'credentials.json'), JSON.stringify({ version: 1, codec, items }))
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-secrets-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-secrets-'))
     writeFileSync(
       join(dir, 'connections.json'),
       JSON.stringify({

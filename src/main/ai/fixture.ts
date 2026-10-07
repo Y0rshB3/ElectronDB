@@ -2,8 +2,8 @@ import type { AiTestResult } from '@shared/ai'
 import type { AdapterCallbacks, AdapterRequest, AdapterResult, ChatAdapter } from './adapter'
 
 /**
- * ELECTRONDB_AI_FIXTURE=1 (screenshots and manual checks only, honoured only
- * with a scratch profile ELECTRONDB_USER_DATA): a fake provider that streams
+ * VORTAQ_AI_FIXTURE=1 (screenshots and manual checks only, honoured only
+ * with a scratch profile VORTAQ_USER_DATA): a fake provider that streams
  * canned Spanish answers and never touches the network.
  */
 

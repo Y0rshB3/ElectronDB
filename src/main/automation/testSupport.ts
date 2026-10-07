@@ -35,7 +35,7 @@ export interface TestContext {
 }
 
 export function makeContext(options: { headless?: boolean } = {}): TestContext {
-  const dir = mkdtempSync(join(tmpdir(), 'electrondb-automation-'))
+  const dir = mkdtempSync(join(tmpdir(), 'vortaq-automation-'))
   const events: EmittedEvent[] = []
   const ctx: AppContext = {
     userDataPath: dir,
@@ -76,7 +76,7 @@ export function connectionInput(name: string): ConnectionInput {
       savePassword: false
     },
     ssl: { enabled: false, verifyServer: false },
-    backupDir: '/tmp/electrondb-test-backups',
+    backupDir: '/tmp/vortaq-test-backups',
     extraBackupDirs: []
   }
 }

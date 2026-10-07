@@ -78,7 +78,7 @@ function schemaFixture(): FakeSchema {
 describe('createBackup', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-create-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-create-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

@@ -12,7 +12,7 @@ function flatten(items: MenuItemConstructorOptions[]): MenuItemConstructorOption
 describe('buildAppMenuTemplate', () => {
   for (const dev of [false, true]) {
     it(`never binds Cmd+W or Cmd+R (dev=${dev})`, () => {
-      const items = flatten(buildAppMenuTemplate({ appName: 'ElectronDB', dev }))
+      const items = flatten(buildAppMenuTemplate({ appName: 'Vortaq', dev }))
       const accelerators = items.map((i) => i.accelerator).filter(Boolean)
       for (const forbidden of RENDERER_ACCELERATORS) expect(accelerators).not.toContain(forbidden)
       // roles with a default Cmd+W / Cmd+R accelerator must carry an explicit other one
@@ -25,7 +25,7 @@ describe('buildAppMenuTemplate', () => {
   }
 
   it('keeps reload and devtools out of production builds', () => {
-    const roles = flatten(buildAppMenuTemplate({ appName: 'ElectronDB', dev: false })).map(
+    const roles = flatten(buildAppMenuTemplate({ appName: 'Vortaq', dev: false })).map(
       (i) => i.role
     )
     expect(roles).not.toContain('reload')
@@ -38,13 +38,13 @@ describe('buildAppMenuTemplate', () => {
   it('offers «Buscar actualizaciones…» in the app menu when a handler is given', () => {
     let calls = 0
     const items = flatten(
-      buildAppMenuTemplate({ appName: 'ElectronDB', dev: false, onCheckUpdates: () => calls++ })
+      buildAppMenuTemplate({ appName: 'Vortaq', dev: false, onCheckUpdates: () => calls++ })
     )
     const item = items.find((i) => i.label === 'Buscar actualizaciones…')
     expect(item).toBeTruthy()
     ;(item!.click as () => void)()
     expect(calls).toBe(1)
-    const without = flatten(buildAppMenuTemplate({ appName: 'ElectronDB', dev: false }))
+    const without = flatten(buildAppMenuTemplate({ appName: 'Vortaq', dev: false }))
     expect(without.some((i) => i.label === 'Buscar actualizaciones…')).toBe(false)
   })
 })

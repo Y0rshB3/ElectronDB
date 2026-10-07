@@ -13,7 +13,7 @@ import {
 import { parseRelease } from './release'
 import { apiRelease, RELEASES_BASE } from './testing'
 
-const DMG = 'ElectronDB-0.1.3-arm64.dmg'
+const DMG = 'Vortaq-0.1.3-arm64.dmg'
 const payload = Buffer.from('fake dmg payload '.repeat(4096))
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex')
 
@@ -29,10 +29,10 @@ describe('parseSha256Sums', () => {
     const a = 'a'.repeat(64)
     const b = 'B'.repeat(64)
     const sums = parseSha256Sums(
-      `${a}  ${DMG}\n${b} *ElectronDB-0.1.3-x64-setup.exe\r\n\`${a}  x.AppImage\`\nnot a line\n${a.slice(1)}  short.dmg`
+      `${a}  ${DMG}\n${b} *Vortaq-0.1.3-x64-setup.exe\r\n\`${a}  x.AppImage\`\nnot a line\n${a.slice(1)}  short.dmg`
     )
     expect(sums.get(DMG)).toBe(a)
-    expect(sums.get('ElectronDB-0.1.3-x64-setup.exe')).toBe('b'.repeat(64))
+    expect(sums.get('Vortaq-0.1.3-x64-setup.exe')).toBe('b'.repeat(64))
     expect(sums.get('x.AppImage')).toBe(a)
     expect(sums.has('short.dmg')).toBe(false)
   })
@@ -95,7 +95,7 @@ describe('findExpectedSha256', () => {
 describe('downloadVerified', () => {
   let dir: string
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'electrondb-dmg-'))
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-dmg-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 

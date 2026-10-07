@@ -15,8 +15,8 @@ import {
  * on MySQL 8.4 and 5.7, row values never appear in the context, the guard
  * refuses user tables and EXPLAIN only runs for one SELECT.
  *
- *   ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
- *   ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
+ *   VORTAQ_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test     (8.4)
+ *   VORTAQ_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test   (5.7)
  */
 
 const servers = [

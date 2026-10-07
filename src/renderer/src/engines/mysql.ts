@@ -1,6 +1,6 @@
 import { ENGINES } from '@shared/engines'
 import { mysqlDialect } from '@shared/dialects/mysql'
-import { electronDBMySQL } from '@renderer/components/common/editor/sqlCompletion'
+import { vortaqMySQL } from '@renderer/components/common/editor/sqlCompletion'
 import { buildDesignerAlter } from '@renderer/components/designer/alterTable'
 import { ENGINES as TABLE_ENGINES } from '@renderer/components/designer/columnType'
 import {
@@ -21,7 +21,7 @@ export const mysqlUi: EngineUi = {
   id: 'mysql',
   descriptor: ENGINES.mysql,
   dialect: mysqlDialect,
-  editorLanguage: electronDBMySQL,
+  editorLanguage: vortaqMySQL,
   designer: {
     emptyTable,
     draftFromStructure,

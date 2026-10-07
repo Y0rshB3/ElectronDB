@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_EVENT_CHANNELS, IPC_INVOKE_CHANNELS } from '@shared/ipc'
-import type { ElectronDBApi } from '@shared/ipc'
+import type { VortaqApi } from '@shared/ipc'
 
 const invokeChannels = new Set<string>(IPC_INVOKE_CHANNELS)
 const eventChannels = new Set<string>(IPC_EVENT_CHANNELS)
 
-const api: ElectronDBApi = {
+const api: VortaqApi = {
   platform: process.platform,
   invoke: (channel, ...args) => {
     if (!invokeChannels.has(channel))
@@ -22,4 +22,4 @@ const api: ElectronDBApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('electronDB', api)
+contextBridge.exposeInMainWorld('vortaq', api)

@@ -264,7 +264,7 @@ export function summaryLines(input: {
   status: RunStatus
   durationMs: number
   steps: SummaryStep[]
-  /** The process died mid-run; the run was closed when ElectronDB started again. */
+  /** The process died mid-run; the run was closed when Vortaq started again. */
   interrupted?: boolean
   /** Safety copies taken by restore steps: listed so the user knows how to undo. */
   safetyCopies?: SafetyCopy[]
@@ -308,7 +308,7 @@ export function summaryLines(input: {
 export const SKIPPED_MESSAGE = 'Omitido por un error anterior.'
 export const CANCELLED_MESSAGE = 'Ejecución cancelada.'
 export const INTERRUPTED_MESSAGE =
-  'Interrumpida: ElectronDB se cerró o se reinició antes de terminar este paso.'
+  'Interrumpida: Vortaq se cerró o se reinició antes de terminar este paso.'
 
 /* ---------- parser (renderer) ---------- */
 
