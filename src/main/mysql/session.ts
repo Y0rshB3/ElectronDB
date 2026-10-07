@@ -29,6 +29,9 @@ export interface StatementRunner {
 
 export type FullSession = MysqlSession & StatementRunner
 
+/** MySQL collation id of the `binary` character set. */
+const BINARY_CHARSET = 63
+
 function isResultSetHeader(value: unknown): value is ResultSetHeader {
   return (
     typeof value === 'object' && value !== null && !Array.isArray(value) && 'affectedRows' in value
@@ -90,6 +93,33 @@ export class PooledSession implements MysqlSession, StatementRunner {
     this.assertOpen()
     this.dirty = true
     const [res] = params ? await this.conn.query(sql, params) : await this.conn.query(sql)
+    if (isResultSetHeader(res)) {
+      return {
+        affectedRows: res.affectedRows,
+        insertId: res.insertId ? Number(res.insertId) : null
+      }
+    }
+    return { affectedRows: 0, insertId: null }
+  }
+
+  async executeRaw(sql: string): Promise<{ affectedRows: number; insertId: number | null }> {
+    this.assertOpen()
+    this.dirty = true
+    // mysql2 encodes a query with the connection's charset. With the binary
+    // charset (63) each character of `sql` (0-255) is written as one byte.
+    // The packet is built synchronously when the command starts, and this
+    // session runs one command at a time, so the change never reaches another
+    // query (the config object is shared by the pool's connections).
+    const config = (this.core as unknown as { config: { charsetNumber: number } }).config
+    const saved = config.charsetNumber
+    let pending: Promise<unknown>
+    config.charsetNumber = BINARY_CHARSET
+    try {
+      pending = this.conn.query(sql)
+    } finally {
+      config.charsetNumber = saved
+    }
+    const [res] = (await pending) as [unknown]
     if (isResultSetHeader(res)) {
       return {
         affectedRows: res.affectedRows,

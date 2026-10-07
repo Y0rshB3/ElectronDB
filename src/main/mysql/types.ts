@@ -16,6 +16,14 @@ export interface MysqlSession {
     sql: string,
     params?: unknown[]
   ): Promise<{ affectedRows: number; insertId: number | null }>
+  /**
+   * Runs one statement given as a binary string (each character is one byte,
+   * as `Buffer#toString('latin1')` gives): the bytes reach the server exactly
+   * as they are, the way the mysql client sends a dump file. Used by the SQL
+   * dump import (mysqldump writes BLOBs as raw bytes). Optional: sessions
+   * without it get the statement through `execute` as UTF-8 text.
+   */
+  executeRaw?(sql: string): Promise<{ affectedRows: number; insertId: number | null }>
   /** Stream rows of a SELECT as plain arrays (column order as returned). */
   streamRows(sql: string, params?: unknown[]): Promise<{ columns: string[]; rows: Readable }>
   /** Switch default schema for subsequent statements. */
