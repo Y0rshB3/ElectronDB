@@ -67,6 +67,9 @@ function toConnectionInput(
     host: connection.host,
     port: connection.port,
     username: connection.username,
+    // Navicat files never say whether a password is needed: keep what the user
+    // chose on a re-import, otherwise assume one (it is never stored there).
+    authMode: existing?.authMode ?? 'password',
     savePassword: connection.savePassword,
     customDatabases: connection.customDatabases,
     initialQueries: connection.initialQueries,

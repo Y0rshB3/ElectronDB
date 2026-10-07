@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { ConnectionConfig, ConnectionInput, ConnectionTestResult } from '@shared/types'
+import type {
+  ConnectionConfig,
+  ConnectionInput,
+  ConnectionTestResult,
+  MysqlAuthMode
+} from '@shared/types'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -39,7 +44,13 @@ const testResult = ref<ConnectionTestResult | null>(null)
 const saving = ref(false)
 const errors = ref<string[]>([])
 
+const AUTH_MODES: { value: MysqlAuthMode; title: string }[] = [
+  { value: 'password', title: 'Contraseña' },
+  { value: 'none', title: 'Sin contraseña' }
+]
+
 const editing = computed(() => ui.connectionDialog.editing)
+const noPassword = computed(() => form.value.authMode === 'none')
 const open = computed({
   get: () => ui.connectionDialog.open,
   set: (value: boolean) => {
@@ -94,7 +105,7 @@ async function test(): Promise<void> {
   try {
     testResult.value = await connections.test(
       normalizeConnectionInput(form.value),
-      password.value || null,
+      noPassword.value ? null : password.value || null,
       sshPassword.value || null
     )
   } catch (err) {
@@ -123,7 +134,10 @@ async function save(): Promise<void> {
   form.value = { ...form.value, id: saved.id }
   ui.connectionDialog = { ...ui.connectionDialog, editing: saved }
   try {
-    if (password.value && input.savePassword)
+    // 'none' never uses a password: drop a stored one instead of keeping an unused secret.
+    if (input.authMode === 'none') {
+      if (hasPassword.value) await api.connections.setPassword(saved.id, null)
+    } else if (password.value && input.savePassword)
       await api.connections.setPassword(saved.id, password.value)
     else if (clearPassword.value || (!input.savePassword && hasPassword.value))
       await api.connections.setPassword(saved.id, null)
@@ -277,6 +291,29 @@ async function save(): Promise<void> {
                 />
               </v-col>
               <v-col cols="12" sm="6">
+                <v-select
+                  v-model="form.authMode"
+                  :items="AUTH_MODES"
+                  label="Autenticación"
+                  prepend-inner-icon="mdi-shield-key-outline"
+                  data-test="conn-auth-mode"
+                />
+              </v-col>
+              <v-col v-if="noPassword" cols="12">
+                <v-alert
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  icon="mdi-certificate-outline"
+                  data-test="conn-no-password-hint"
+                >
+                  Útil con Cloud SQL Auth Proxy, túneles o certificados de cliente (pestaña SSL).
+                  <template v-if="hasPassword">
+                    La contraseña guardada de esta conexión se borrará al guardar.</template
+                  >
+                </v-alert>
+              </v-col>
+              <v-col v-if="!noPassword" cols="12" sm="6">
                 <v-text-field
                   v-model="password"
                   label="Contraseña"
@@ -290,7 +327,7 @@ async function save(): Promise<void> {
                   @click:append-inner="showPassword = !showPassword"
                 />
               </v-col>
-              <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
+              <v-col v-if="!noPassword" cols="12" class="d-flex align-center flex-wrap ga-2">
                 <v-checkbox
                   v-model="form.savePassword"
                   label="Guardar contraseña"
@@ -508,6 +545,26 @@ async function save(): Promise<void> {
           </v-window-item>
         </v-window>
 
+        <v-alert
+          v-if="testResult?.ok && testResult.connectedWithoutPassword && !noPassword"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+          data-test="conn-suggest-no-password"
+        >
+          El servidor aceptó la conexión sin contraseña. Si no la necesita, marca «Sin contraseña»
+          para no tener que guardarla.
+          <template #append>
+            <v-btn
+              size="small"
+              variant="text"
+              data-test="conn-use-no-password"
+              @click="form.authMode = 'none'"
+              >Usar «Sin contraseña»</v-btn
+            >
+          </template>
+        </v-alert>
         <v-alert
           v-if="errors.length"
           type="error"

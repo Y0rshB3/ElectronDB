@@ -509,6 +509,26 @@ const STEPS: Step[] = [
     cleanup: `S.ui.connectionDialog = { open: false, editing: null }`
   },
   {
+    // New connection through a local auth proxy: «Autenticación › Sin contraseña».
+    name: '10b-connection-no-password',
+    script: `
+      S.ui.openConnectionDialog(null)
+      const name = await H.waitFor('[data-test="conn-name"] input', 5000)
+      name.value = 'Producción (Cloud SQL Proxy)'
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+      const field = await H.waitFor('[data-test="conn-auth-mode"] .v-field', 5000)
+      field.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      field.click()
+      const option = await H.until(() =>
+        [...document.querySelectorAll('.v-overlay--active .v-list-item')].find((el) =>
+          el.textContent.includes('Sin contraseña')
+        ), 5000)
+      option.click()
+      await H.waitFor('[data-test="conn-no-password-hint"]', 5000)
+      await H.settle(S, 900)`,
+    cleanup: `S.ui.connectionDialog = { open: false, editing: null }`
+  },
+  {
     name: '11-import-dialog',
     script: `
       S.ui.openImportDialog()

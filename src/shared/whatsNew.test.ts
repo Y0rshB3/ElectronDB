@@ -81,6 +81,12 @@ describe('WHATS_NEW (curated list)', () => {
     ])
   })
 
+  it('0.1.8 announces connections without a password', () => {
+    expect(whatsNewFor('0.1.8')?.highlights).toEqual([
+      'Conexiones sin contraseña: para proxies, túneles o certificados (Autenticación › Sin contraseña)'
+    ])
+  })
+
   it('«Mostrarme cómo» steps are short and point at data-tour names', () => {
     for (const e of WHATS_NEW) {
       for (const step of e.tour ?? []) {

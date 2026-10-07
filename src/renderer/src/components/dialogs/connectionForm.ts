@@ -20,6 +20,7 @@ export function emptyConnectionInput(): ConnectionInput {
     host: '127.0.0.1',
     port: 3306,
     username: 'root',
+    authMode: 'password',
     savePassword: true,
     customDatabases: [],
     initialQueries: '',
@@ -48,6 +49,7 @@ export function inputFromConnection(c: ConnectionConfig): ConnectionInput {
   const { createdAt: _c, updatedAt: _u, ...rest } = c
   return {
     ...rest,
+    authMode: c.authMode ?? 'password',
     customDatabases: [...c.customDatabases],
     extraBackupDirs: [...c.extraBackupDirs],
     ssh: { ...c.ssh },

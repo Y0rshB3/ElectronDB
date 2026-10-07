@@ -1,7 +1,7 @@
 {
   "name": "electrondb",
   "productName": "ElectronDB",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "ElectronDB: open-source desktop MySQL client inspired by other database managers (connections, object explorer, query editor, backups and automation).",
   "private": true,
   "main": "./out/main/index.js",

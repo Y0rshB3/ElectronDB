@@ -25,6 +25,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.8',
+    date: '2026-10-07',
+    highlights: [
+      'Conexiones sin contraseña: para proxies, túneles o certificados (Autenticación › Sin contraseña)'
+    ]
+  },
+  {
     version: '0.1.7',
     date: '2026-10-07',
     highlights: [

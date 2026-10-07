@@ -19,6 +19,14 @@ export interface SshConfig {
   savePassword: boolean
 }
 
+/**
+ * How the MySQL user authenticates.
+ * - 'password': a password typed or stored in the CredentialStore (default).
+ * - 'none': no password at all (local auth proxy such as Cloud SQL Auth Proxy,
+ *   a user with an empty password, or client-certificate auth via SSL).
+ */
+export type MysqlAuthMode = 'password' | 'none'
+
 export interface SslConfig {
   enabled: boolean
   caCertPath?: string
@@ -36,6 +44,8 @@ export interface ConnectionConfig {
   host: string
   port: number
   username: string
+  /** Missing on records saved before 0.1.8: treated as 'password'. */
+  authMode?: MysqlAuthMode
   savePassword: boolean
   /** Restrict object tree to these schemas when non-empty. */
   customDatabases: string[]
@@ -58,6 +68,11 @@ export type ConnectionInput = Omit<ConnectionConfig, 'id' | 'createdAt' | 'updat
 export interface ConnectionTestResult {
   ok: boolean
   serverVersion?: string
+  /**
+   * True when no password was typed or stored in 'password' mode and the
+   * server accepted an empty one: the dialog suggests «Sin contraseña».
+   */
+  connectedWithoutPassword?: boolean
   durationMs: number
   error?: string
 }

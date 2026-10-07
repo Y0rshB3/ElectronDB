@@ -31,7 +31,8 @@ La interfaz está en español. El código y los comentarios están en inglés.
 ## Funciones
 
 - **Conexiones MySQL/MariaDB** con colores, entorno (Local, Staging, Producción, Otro), túnel SSH (contraseña o
-  clave privada), SSL, lista de bases de datos personalizada y consultas iniciales de sesión.
+  clave privada), SSL, sin contraseña para proxies o certificados, lista de bases de datos personalizada y
+  consultas iniciales de sesión.
 - **Explorador de objetos**: tablas, vistas, funciones, procedimientos, eventos y usuarios.
 - **Editor de consultas** con autocompletado, formateo de SQL, varias sentencias y resultados editables cuando
   vienen de una sola tabla con clave primaria. La conexión se puede cambiar desde la propia pestaña.
@@ -272,6 +273,16 @@ no está en pantalla, la tarjeta sale centrada.
    real que no quieras modificar por accidente.
 3. Opcional: túnel SSH (contraseña o archivo de clave privada) y SSL (CA, certificado y clave de cliente).
 4. **Probar conexión** y guarda.
+
+**Conexiones sin contraseña.** Si el servidor no pide contraseña (un proxy local que autentica por su cuenta,
+como Cloud SQL Auth Proxy con IAM; un usuario MySQL con contraseña vacía; o autenticación solo con certificado
+de cliente en la pestaña SSL), elige **Autenticación › Sin contraseña (proxy, certificado o usuario sin clave)**.
+El campo de contraseña desaparece, no se guarda ninguna y la conexión, los trabajos automáticos, las copias y
+el asistente de IA conectan sin ella. Si dejas **Contraseña** pero no hay ninguna guardada, ElectronDB prueba
+una vez sin contraseña: si el servidor la acepta conecta (y **Probar conexión** sugiere marcar «Sin
+contraseña»); si la rechaza verás «No hay contraseña guardada para la conexión X: escríbela en la conexión o
+marca «Sin contraseña»». Las conexiones importadas de Navicat quedan en modo **Contraseña**, porque Navicat no
+guarda si hace falta.
 
 ### Importar desde otros gestores (macOS)
 

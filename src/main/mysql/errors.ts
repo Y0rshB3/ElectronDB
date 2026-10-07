@@ -49,6 +49,26 @@ export function isConnectionLost(err: unknown): boolean {
 }
 
 /**
+ * MySQL server errnos / mysql2 client codes meaning "these credentials were
+ * rejected" (wrong or missing password, or an auth plugin the attempt cannot
+ * satisfy). Database-level denials (1044) are not authentication failures.
+ */
+const AUTH_REJECTED_ERRNOS = new Set([1045, 1698, 1251])
+const AUTH_REJECTED_CODES = new Set([
+  'ER_ACCESS_DENIED_ERROR',
+  'ER_ACCESS_DENIED_NO_PASSWORD_ERROR',
+  'ER_NOT_SUPPORTED_AUTH_MODE',
+  'AUTH_SWITCH_PLUGIN_ERROR',
+  'MYSQL_CLEAR_PASSWORD_NOT_ENABLED'
+])
+
+export function isAuthRejected(err: unknown): boolean {
+  if (!isMysqlErrorLike(err)) return false
+  if (err.errno !== undefined && AUTH_REJECTED_ERRNOS.has(err.errno)) return true
+  return !!err.code && AUTH_REJECTED_CODES.has(err.code)
+}
+
+/**
  * Human readable description of a MySQL error: "<message> (<code>)".
  * Never includes SQL text or parameter values.
  */

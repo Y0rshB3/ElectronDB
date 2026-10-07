@@ -3,7 +3,7 @@ import type { Mock } from 'vitest'
 import type { ConnectionInput } from '@shared/types'
 import { useUiStore } from '@renderer/stores/ui'
 import ConnectionDialog from './ConnectionDialog.vue'
-import { freshPinia, makeConnection, mockElectronDB, mountWith, settle } from './testing'
+import { calls, freshPinia, makeConnection, mockElectronDB, mountWith, settle } from './testing'
 
 describe('ConnectionDialog', () => {
   let invoke: Mock
@@ -108,5 +108,105 @@ describe('ConnectionDialog', () => {
     wrapper = mountWith(ConnectionDialog, pinia)
     await settle()
     expect(wrapper.get('[data-test="conn-password-saved"]').text()).toContain('contraseña guardada')
+  })
+
+  function authSelect(w: NonNullable<typeof wrapper>) {
+    const select = w
+      .findAllComponents({ name: 'VSelect' })
+      .find((c) => c.attributes('data-test') === 'conn-auth-mode')
+    if (!select) throw new Error('auth mode select not found')
+    return select
+  }
+
+  it("saves «Sin contraseña» as authMode 'none', hides the password and tests without one", async () => {
+    invoke = mockElectronDB({
+      'connections:save': (input) => makeConnection({ ...(input as ConnectionInput), id: 'new-1' }),
+      'connections:setPassword': () => undefined,
+      'connections:hasPassword': () => false,
+      'connections:hasSshPassword': () => false,
+      'connections:test': () => ({ ok: true, serverVersion: '8.4.0', durationMs: 3 })
+    })
+    const pinia = freshPinia()
+    const ui = useUiStore()
+    ui.connectionDialog = { open: true, editing: null }
+    wrapper = mountWith(ConnectionDialog, pinia)
+    await settle()
+
+    await wrapper.get('[data-test="conn-name"] input').setValue('Proxy')
+    await wrapper.get('[data-test="conn-password"] input').setValue('typed-but-unused')
+    authSelect(wrapper).vm.$emit('update:modelValue', 'none')
+    await settle()
+    expect(wrapper.find('[data-test="conn-password"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Guardar contraseña')
+    expect(wrapper.get('[data-test="conn-no-password-hint"]').text()).toContain(
+      'Cloud SQL Auth Proxy'
+    )
+
+    await wrapper.get('[data-test="conn-test"]').trigger('click')
+    await settle()
+    const [testInput, testPassword] = calls(invoke, 'connections:test')[0] as [
+      ConnectionInput,
+      string | null
+    ]
+    expect(testInput.authMode).toBe('none')
+    expect(testPassword).toBeNull()
+
+    await wrapper.get('[data-test="conn-save"]').trigger('click')
+    await settle()
+    const saved = calls(invoke, 'connections:save')[0][0] as ConnectionInput
+    expect(saved.authMode).toBe('none')
+    expect(calls(invoke, 'connections:setPassword')).toEqual([])
+    expect(ui.connectionDialog.open).toBe(false)
+  })
+
+  it("drops the stored password when an edited connection switches to 'none'", async () => {
+    const pinia = freshPinia()
+    useUiStore().connectionDialog = {
+      open: true,
+      editing: makeConnection({ id: 'c1', name: 'Local' })
+    }
+    wrapper = mountWith(ConnectionDialog, pinia)
+    await settle()
+    authSelect(wrapper).vm.$emit('update:modelValue', 'none')
+    await settle()
+    expect(wrapper.get('[data-test="conn-no-password-hint"]').text()).toContain('se borrará')
+    await wrapper.get('[data-test="conn-save"]').trigger('click')
+    await settle()
+    expect(calls(invoke, 'connections:setPassword')).toEqual([['new-1', null]]) // the beforeEach mock answers save with id new-1
+  })
+
+  it('treats records without authMode as password mode', async () => {
+    const pinia = freshPinia()
+    useUiStore().connectionDialog = {
+      open: true,
+      editing: makeConnection({ id: 'c1', name: 'Legacy' })
+    }
+    wrapper = mountWith(ConnectionDialog, pinia)
+    await settle()
+    expect(wrapper.find('[data-test="conn-password"]').exists()).toBe(true)
+    expect(authSelect(wrapper).props('modelValue')).toBe('password')
+  })
+
+  it('suggests «Sin contraseña» when the server accepted an empty password', async () => {
+    invoke = mockElectronDB({
+      'connections:hasPassword': () => false,
+      'connections:hasSshPassword': () => false,
+      'connections:test': () => ({
+        ok: true,
+        serverVersion: '8.4.0',
+        durationMs: 3,
+        connectedWithoutPassword: true
+      })
+    })
+    const pinia = freshPinia()
+    useUiStore().connectionDialog = { open: true, editing: null }
+    wrapper = mountWith(ConnectionDialog, pinia)
+    await settle()
+    await wrapper.get('[data-test="conn-test"]').trigger('click')
+    await settle()
+    await wrapper.get('[data-test="conn-use-no-password"]').trigger('click')
+    await settle()
+    expect(authSelect(wrapper).props('modelValue')).toBe('none')
+    expect(wrapper.find('[data-test="conn-suggest-no-password"]').exists()).toBe(false)
   })
 })

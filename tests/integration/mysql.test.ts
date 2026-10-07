@@ -109,7 +109,7 @@ describe.skipIf(!url)('mysql module (integration)', () => {
 
   it('refuses to open a connection without a stored password', async () => {
     await expect(manager.open(noPasswordId)).rejects.toThrow(
-      'No hay contraseña guardada para la conexión Sin clave'
+      'No hay contraseña guardada para la conexión Sin clave: escríbela en la conexión o marca «Sin contraseña»'
     )
     expect(manager.isOpen(noPasswordId)).toBe(false)
   })

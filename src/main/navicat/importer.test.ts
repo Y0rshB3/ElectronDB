@@ -40,6 +40,8 @@ describe('importFromNavicat', () => {
       port: 13306,
       username: 'root',
       environment: 'local',
+      // Navicat never says whether a password is needed: assume one.
+      authMode: 'password',
       savePassword: true,
       color: null,
       backupDir: join(dir, 'backups', 'Dev'),
@@ -137,6 +139,13 @@ describe('importFromNavicat', () => {
       host: '127.0.0.1'
     })
     expect(ctx.connections.list()).toHaveLength(1)
+  })
+
+  it("keeps a user's «Sin contraseña» choice on re-import", async () => {
+    const first = await importFromNavicat(ctx, { connections: ['Dev'], jobs: [] })
+    ctx.connections.save({ ...first.connections[0], authMode: 'none' })
+    const second = await importFromNavicat(ctx, { connections: ['Dev'], jobs: [] })
+    expect(second.connections[0].authMode).toBe('none')
   })
 })
 

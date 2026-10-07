@@ -6,7 +6,15 @@ import { handle } from './typed'
 
 /** Fields whose change invalidates an open pool. */
 function endpointSignature(c: ConnectionInput | ConnectionConfig): string {
-  return JSON.stringify([c.host, c.port, c.username, c.ssh, c.ssl, c.initialQueries])
+  return JSON.stringify([
+    c.host,
+    c.port,
+    c.username,
+    c.authMode ?? 'password',
+    c.ssh,
+    c.ssl,
+    c.initialQueries
+  ])
 }
 
 function validateInput(input: ConnectionInput): void {

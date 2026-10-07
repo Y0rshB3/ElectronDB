@@ -17,7 +17,7 @@ import type {
 } from '@shared/types'
 import type { AppContext } from '../context'
 import { getLogger } from '../log'
-import { MysqlUserError, describeError, isConnectionLost } from './errors'
+import { MysqlUserError, describeError, isAuthRejected, isConnectionLost } from './errors'
 import { fetchServerInfo, type Queryable } from './introspect'
 import { PooledSession } from './session'
 import { splitStatements } from './sqlSplit'
@@ -47,7 +47,36 @@ interface Resolved {
   tunnel: SshTunnel | null
 }
 
-async function buildSsl(config: ConnectionInput): Promise<SslOptions | undefined> {
+/**
+ * Password to send, decided before connecting.
+ * - 'none' mode: never a password, never the missing-password error.
+ * - 'password' mode with a typed or stored password: that password.
+ * - 'password' mode with nothing: one attempt with an empty password
+ *   (`emptyAttempt`); if the server rejects it the caller reports
+ *   missingPasswordError instead of the raw access-denied message.
+ */
+export interface PasswordPlan {
+  password: string | undefined
+  emptyAttempt: boolean
+}
+
+export function planPassword(
+  config: Pick<ConnectionInput, 'authMode'>,
+  provided: string | null
+): PasswordPlan {
+  if (config.authMode === 'none') return { password: undefined, emptyAttempt: false }
+  if (provided !== null) return { password: provided, emptyAttempt: false }
+  return { password: undefined, emptyAttempt: true }
+}
+
+export function missingPasswordError(name: string): MysqlUserError {
+  return new MysqlUserError(
+    `No hay contraseña guardada para la conexión ${name}: escríbela en la conexión o marca «Sin contraseña»`,
+    'E_MYSQL_NO_PASSWORD'
+  )
+}
+
+export async function buildSsl(config: ConnectionInput): Promise<SslOptions | undefined> {
   if (!config.ssl.enabled) return undefined
   const ssl: SslOptions = { rejectUnauthorized: config.ssl.verifyServer }
   const read = async (path: string | undefined, what: string): Promise<Buffer | undefined> => {
@@ -76,16 +105,17 @@ export function castGeometryAsBuffer(
   return field.type === 'GEOMETRY' ? field.buffer() : next()
 }
 
-async function buildOptions(
+export async function buildOptions(
   config: ConnectionInput,
-  password: string,
+  password: string | undefined,
   endpoint: Endpoint
 ): Promise<PoolOptions> {
   return {
     host: endpoint.host,
     port: endpoint.port,
     user: config.username,
-    password,
+    // Omitted (not '') when there is none, so mysql2 sends an empty auth response.
+    ...(password !== undefined ? { password } : {}),
     connectionLimit: CONNECTION_LIMIT,
     waitForConnections: true,
     queueLimit: 0,
@@ -176,20 +206,29 @@ export class ConnectionManager implements SessionFactory {
     const started = performance.now()
     let resolved: Resolved | null = null
     try {
-      const mysqlPassword =
-        password ?? (input.id ? this.ctx.credentials.get('mysql', input.id) : null)
-      if (mysqlPassword === null)
-        throw new MysqlUserError(`No hay contraseña guardada para la conexión ${input.name}`)
+      const plan = planPassword(
+        input,
+        input.authMode === 'none'
+          ? null
+          : (password ?? (input.id ? this.ctx.credentials.get('mysql', input.id) : null))
+      )
       const sshSecret = sshPassword ?? (input.id ? this.ctx.credentials.get('ssh', input.id) : null)
       resolved = await this.resolveEndpoint(input, sshSecret)
-      const options = await buildOptions(input, mysqlPassword, resolved.endpoint)
-      const conn = await createConnection(options)
+      const options = await buildOptions(input, plan.password, resolved.endpoint)
+      let conn: Awaited<ReturnType<typeof createConnection>>
+      try {
+        conn = await createConnection(options)
+      } catch (err) {
+        if (plan.emptyAttempt && isAuthRejected(err)) throw missingPasswordError(input.name)
+        throw err
+      }
       try {
         const info = await fetchServerInfo(queryableOf(conn), input)
         return {
           ok: true,
           serverVersion: info.version,
-          durationMs: Math.round(performance.now() - started)
+          durationMs: Math.round(performance.now() - started),
+          ...(plan.emptyAttempt ? { connectedWithoutPassword: true } : {})
         }
       } finally {
         await conn.end().catch(() => conn.destroy())
@@ -197,7 +236,7 @@ export class ConnectionManager implements SessionFactory {
     } catch (err) {
       return {
         ok: false,
-        error: describeError(err),
+        error: err instanceof MysqlUserError ? err.message : describeError(err),
         durationMs: Math.round(performance.now() - started)
       }
     } finally {
@@ -220,15 +259,16 @@ export class ConnectionManager implements SessionFactory {
   private async doOpen(id: string): Promise<OpenEntry> {
     const config = this.ctx.connections.get(id)
     if (!config) throw new MysqlUserError(`La conexión ${id} no existe`)
-    const password = this.ctx.credentials.get('mysql', id)
-    if (password === null)
-      throw new MysqlUserError(`No hay contraseña guardada para la conexión ${config.name}`)
+    const plan = planPassword(
+      config,
+      config.authMode === 'none' ? null : this.ctx.credentials.get('mysql', id)
+    )
 
     let resolved: Resolved | null = null
     let pool: Pool | null = null
     try {
       resolved = await this.resolveEndpoint(config, this.ctx.credentials.get('ssh', id))
-      pool = createPool(await buildOptions(config, password, resolved.endpoint))
+      pool = createPool(await buildOptions(config, plan.password, resolved.endpoint))
       this.attachPoolHooks(pool, config)
       const probe = await this.checkout(pool, config)
       let serverVersion: string
@@ -247,12 +287,16 @@ export class ConnectionManager implements SessionFactory {
       }
       resolved.tunnel?.onClose((reason) => this.handleFatal(id, reason))
       this.entries.set(id, entry)
-      log.info(`connection ${config.name} opened (server ${serverVersion})`)
+      log.info(
+        `connection ${config.name} opened (server ${serverVersion})` +
+          (plan.emptyAttempt ? ' without a password: none is stored and the server accepted it' : '')
+      )
       return entry
     } catch (err) {
       await pool?.end().catch(() => undefined)
       await resolved?.tunnel?.close().catch(() => undefined)
       if (err instanceof MysqlUserError) throw err
+      if (plan.emptyAttempt && isAuthRejected(err)) throw missingPasswordError(config.name)
       throw new Error(`No se pudo conectar a ${config.name}: ${describeError(err)}`)
     }
   }
