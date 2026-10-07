@@ -25,4 +25,5 @@ export function registerBackupsHandlers(ctx: AppContext): void {
   handle('backups:restore', h.restore)
   handle('backups:delete', h.delete)
   handle('backups:cancel', h.cancel)
+  handle('backups:exportSql', h.exportSql)
 }

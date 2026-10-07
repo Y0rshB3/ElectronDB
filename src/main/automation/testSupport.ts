@@ -169,6 +169,9 @@ export function fakeBackupService(dir: string, timeline: string[] = []): FakeBac
     async replace() {
       throw new Error('not used')
     },
+    async exportSql() {
+      throw new Error('not used')
+    },
     async verify(path) {
       service.verified.push(path)
       const schema = service.files.get(path)

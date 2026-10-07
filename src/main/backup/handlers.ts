@@ -142,6 +142,7 @@ export interface BackupHandlers {
   restore(...args: IpcArgs<'backups:restore'>): Promise<IpcResult<'backups:restore'>>
   delete(...args: IpcArgs<'backups:delete'>): Promise<IpcResult<'backups:delete'>>
   cancel(...args: IpcArgs<'backups:cancel'>): Promise<IpcResult<'backups:cancel'>>
+  exportSql(...args: IpcArgs<'backups:exportSql'>): Promise<IpcResult<'backups:exportSql'>>
   /** Operation ids currently running (for tests / diagnostics). */
   running(): string[]
 }
@@ -248,6 +249,14 @@ export function createBackupHandlers(
             ? replaceRestore(service, options, progress, signal)
             : service.restore(options, progress, signal)
         }
+      ),
+    exportSql: (operationId, options) =>
+      track(
+        operationId,
+        'backup',
+        (r) => `Exportación .sql completada: ${r.objects} objetos, ${r.rows} filas`,
+        () => null,
+        (service, progress, signal) => service.exportSql(options, progress, signal)
       ),
     delete: (path) => deleteBackupFile(ctx.connections.list(), ctx.userDataPath, path),
     cancel: async (operationId) => {

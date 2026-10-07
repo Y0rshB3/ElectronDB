@@ -67,6 +67,21 @@ import type {
   AiTestResult
 } from './ai'
 import type { TourState } from './tour'
+import type {
+  ImportConnectionsPreview,
+  ImportConnectionsRequest,
+  ImportConnectionsResult,
+  ImportSourceId,
+  ImportSourceInfo,
+  SqlDumpImportOptions,
+  SqlDumpImportResult,
+  SqlDumpInspection,
+  SqlExportOptions,
+  SqlExportResult,
+  SqlFolderImportRequest,
+  SqlFolderImportResult,
+  SqlFolderPreview
+} from './importers'
 
 /**
  * Request/response channels (ipcRenderer.invoke / ipcMain.handle).
@@ -231,6 +246,11 @@ export interface IpcInvokeMap {
   'backups:restore': { args: [operationId: string, options: RestoreOptions]; result: RestoreResult }
   'backups:delete': { args: [path: string]; result: void }
   'backups:cancel': { args: [operationId: string]; result: void }
+  /** Plain .sql dump of one schema (mysqldump-compatible); cancelled with backups:cancel. */
+  'backups:exportSql': {
+    args: [operationId: string, options: SqlExportOptions]
+    result: SqlExportResult
+  }
 
   'jobs:list': { args: []; result: Job[] }
   'jobs:get': { args: [id: string]; result: Job | null }
@@ -270,6 +290,36 @@ export interface IpcInvokeMap {
    * no network, nothing cached). Only folders whose Common/conn.plist parses.
    */
   'navicat:findCandidates': { args: []; result: NavicatCandidatesResult }
+
+  /*
+   * «Importar…» wizard (src/main/importers). Files and folders are always ones the user
+   * picks; .ncx passwords are decoded only from a file picked with importers:pick.
+   */
+  /** Sources of the wizard, with the usual file location found on this computer. */
+  'importers:sources': { args: []; result: ImportSourceInfo[] }
+  /** Native file/folder dialog for a source; main remembers the picked path. */
+  'importers:pick': { args: [source: ImportSourceId]; result: string | null }
+  'importers:previewConnections': {
+    args: [source: ImportSourceId, path: string]
+    result: ImportConnectionsPreview
+  }
+  'importers:importConnections': {
+    args: [request: ImportConnectionsRequest]
+    result: ImportConnectionsResult
+  }
+  /** Quick scan of a .sql / .sql.gz file (header, databases, rough counts). */
+  'importers:inspectSqlDump': { args: [path: string]; result: SqlDumpInspection }
+  /** Runs a dump statement by statement; progress as event:progress (kind 'import'). */
+  'importers:importSqlDump': {
+    args: [operationId: string, options: SqlDumpImportOptions]
+    result: SqlDumpImportResult
+  }
+  'importers:previewSqlFolder': { args: [dir: string]; result: SqlFolderPreview }
+  'importers:importSqlFolder': {
+    args: [operationId: string, request: SqlFolderImportRequest]
+    result: SqlFolderImportResult
+  }
+  'importers:cancel': { args: [operationId: string]; result: void }
 
   /** Onboarding state; decides once per profile whether the welcome tour is due. */
   'tour:state': { args: []; result: TourState }
@@ -400,6 +450,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'backups:restore',
   'backups:delete',
   'backups:cancel',
+  'backups:exportSql',
   'jobs:list',
   'jobs:get',
   'jobs:save',
@@ -416,6 +467,15 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'navicat:previewJobs',
   'navicat:import',
   'navicat:findCandidates',
+  'importers:sources',
+  'importers:pick',
+  'importers:previewConnections',
+  'importers:importConnections',
+  'importers:inspectSqlDump',
+  'importers:importSqlDump',
+  'importers:previewSqlFolder',
+  'importers:importSqlFolder',
+  'importers:cancel',
   'tour:state',
   'tour:markWelcomeDone',
   'ai:providers',

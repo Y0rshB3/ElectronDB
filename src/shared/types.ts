@@ -4,6 +4,7 @@
  */
 import type { AiEffort } from './ai'
 import type { WhatsNewEntry } from './whatsNew'
+import type { BackupFormat } from './importers'
 
 export type Environment = 'local' | 'staging' | 'production' | 'other'
 
@@ -153,12 +154,14 @@ export interface ConnectionConfig {
   sqlite?: SqliteOptions
   mongo?: MongoOptions
   source?: {
-    app: 'navicat'
+    /** Manager the connection was imported from (src/main/importers). */
+    app: 'navicat' | 'dbeaver' | 'workbench'
+    /** Name of the connection in that manager (the import identity with `app`). */
     name: string
     importedAt: string
     /** Navicat section / ConnType ('MySQL', 'PostgreSQL', ...). Missing => 'MySQL'. */
     navicatType?: string
-    format?: 'plist' | 'ncx'
+    format?: 'plist' | 'ncx' | 'json' | 'xml'
     /** Navicat ServiceProvider ('Default', 'Redshift', 'MongoDBAtlas', ...). */
     serviceProvider?: string
   }
@@ -751,6 +754,11 @@ export interface JobTask {
   restoreSource?: RestoreTaskSource
   /** For restoreschema: back up the target schema before replacing it (default true). */
   safetyBackup?: boolean
+  /**
+   * backupschema: file format. 'sql' writes a plain .sql dump other managers can read
+   * (a restore step cannot use it). Absent = 'nb3'.
+   */
+  format?: BackupFormat
 }
 
 export interface JobSchedule {
@@ -792,6 +800,8 @@ export interface JobTaskRun {
   schema?: string
   /** backupschema: the copy includes rows (false = structure only). */
   includeData?: boolean
+  /** backupschema: file format of the copy (absent = 'nb3'). */
+  format?: BackupFormat
 }
 
 export interface JobRun {

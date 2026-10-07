@@ -20,6 +20,13 @@ import type {
   AiConversationInput,
   AiProviderInput
 } from '@shared/ai'
+import type {
+  ImportConnectionsRequest,
+  ImportSourceId,
+  SqlDumpImportOptions,
+  SqlExportOptions,
+  SqlFolderImportRequest
+} from '@shared/importers'
 import { errorMessage, useNotify } from './composables/useNotify'
 import { toPlain } from './utils/toPlain'
 
@@ -188,7 +195,9 @@ export const api = {
     restore: (operationId: string, options: RestoreOptions) =>
       invoke('backups:restore', operationId, options),
     delete: (path: string) => invoke('backups:delete', path),
-    cancel: (operationId: string) => invoke('backups:cancel', operationId)
+    cancel: (operationId: string) => invoke('backups:cancel', operationId),
+    exportSql: (operationId: string, options: SqlExportOptions) =>
+      invokeSilent('backups:exportSql', operationId, options)
   },
   jobs: {
     list: () => invoke('jobs:list'),
@@ -215,6 +224,22 @@ export const api = {
       invoke('navicat:import', request, rootPath),
     /** Silent: an automatic search must never pop an error snackbar. */
     findCandidates: () => invokeSilent('navicat:findCandidates')
+  },
+  /** «Importar…» wizard: connection files, SQL dumps and dump folders. */
+  importers: {
+    sources: () => invoke('importers:sources'),
+    pick: (source: ImportSourceId) => invoke('importers:pick', source),
+    previewConnections: (source: ImportSourceId, path: string) =>
+      invokeSilent('importers:previewConnections', source, path),
+    importConnections: (request: ImportConnectionsRequest) =>
+      invokeSilent('importers:importConnections', request),
+    inspectSqlDump: (path: string) => invokeSilent('importers:inspectSqlDump', path),
+    importSqlDump: (operationId: string, options: SqlDumpImportOptions) =>
+      invokeSilent('importers:importSqlDump', operationId, options),
+    previewSqlFolder: (dir: string) => invokeSilent('importers:previewSqlFolder', dir),
+    importSqlFolder: (operationId: string, request: SqlFolderImportRequest) =>
+      invokeSilent('importers:importSqlFolder', operationId, request),
+    cancel: (operationId: string) => invoke('importers:cancel', operationId)
   },
   /** AI assistant. Keys are only ever sent to main (setKey/test/listModels), never read back. */
   ai: {

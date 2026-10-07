@@ -9,6 +9,7 @@ import type {
   RestoreResult
 } from '@shared/types'
 import { engineOf } from '@shared/engines'
+import type { SqlExportOptions, SqlExportResult } from '@shared/importers'
 import type { AppContext } from '../context'
 import type { SessionFactory } from '../mysql/types'
 import { createBackup } from './create'
@@ -22,6 +23,7 @@ import {
 } from './replace'
 import { restoreBackup } from './restore'
 import { listBackups } from './scan'
+import { exportSchemaToSql } from './sqlExport'
 
 export type ProgressReporter = (event: Omit<ProgressEvent, 'operationId' | 'kind'>) => void
 
@@ -38,6 +40,12 @@ export interface BackupService {
     progress?: ProgressReporter,
     signal?: AbortSignal
   ): Promise<RestoreResult>
+  /** Plain .sql dump of one schema (mysqldump-compatible, for other managers). */
+  exportSql(
+    options: SqlExportOptions,
+    progress?: ProgressReporter,
+    signal?: AbortSignal
+  ): Promise<SqlExportResult>
   /** Full read of the archive: every checksum and gzip stream (throws when damaged). */
   verify(path: string, signal?: AbortSignal): Promise<Nb3VerifyResult>
   /** REPLACE restore: the database ends up equal to the backup (see replace.ts). */
@@ -83,6 +91,8 @@ export function createBackupService(ctx: AppContext, sessions: SessionFactory): 
     readMeta: (path) => readBackupMeta(ctx.userDataPath, path),
     create: (options, progress, signal) =>
       createBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+    exportSql: (options, progress, signal) =>
+      exportSchemaToSql({ connections: ctx.connections, sessions }, options, progress, signal),
     restore: (options, progress, signal) =>
       restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
     verify: (path, signal) => verifyBackupFile(path, signal),
