@@ -232,6 +232,21 @@ describe('ImportNavicatDialog', () => {
       expect(saved).toEqual([{ navicatRootPath: NAV }])
     })
 
+    it('opened from the import wizard: «Otros orígenes» goes back to the source list', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open('', { fromWizard: true })
+      await w.get('[data-test="import-back-to-wizard"]').trigger('click')
+      await settle()
+      expect(useUiStore().importDialog).toBe(false)
+      expect(useUiStore().importWizard).toBe(true)
+    })
+
+    it('opened directly (tour, Automatización): no «Otros orígenes»', async () => {
+      mock([cand(NAV, 4)])
+      const w = await open('')
+      expect(w.find('[data-test="import-back-to-wizard"]').exists()).toBe(false)
+    })
+
     it('stored path that is no longer valid: searches the usual places', async () => {
       mock([cand(STORE, 2, 'appStore')])
       const w = await open('/old/Navicat CC')

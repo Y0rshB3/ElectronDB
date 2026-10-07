@@ -64,6 +64,8 @@ const proposal = ref<Proposal>(null)
 const chosenRoot = ref<string | null>(null)
 /** «No es esta carpeta» from the welcome tour: the folder picker is what the user needs. */
 const choosingFolder = ref(false)
+/** Opened from the «Importar…» wizard: «Otros orígenes» goes back to its source list. */
+const fromWizard = ref(false)
 
 const SOURCE_LABELS: Record<NavicatCandidateSource, string> = {
   default: 'Ubicación habitual',
@@ -267,11 +269,18 @@ async function runImport(): Promise<void> {
   }
 }
 
+/** «Otros orígenes»: back to the source list of the import wizard. */
+function backToWizard(): void {
+  ui.importDialog = false
+  ui.openImportWizard()
+}
+
 /** Opening: a folder confirmed in the welcome tour, «No es esta carpeta», or the usual detection. */
 async function onOpen(): Promise<void> {
   const request = ui.importDialogRequest
   ui.importDialogRequest = null
   reset()
+  fromWizard.value = request?.fromWizard === true
   if (request?.rootPath) {
     rootPath.value = request.rootPath
     await detect()
@@ -665,6 +674,14 @@ watch(
       <v-card-actions>
         <v-btn v-if="step === 2" prepend-icon="mdi-arrow-left" :disabled="busy" @click="step = 1"
           >Atrás</v-btn
+        >
+        <v-btn
+          v-else-if="step === 1 && fromWizard"
+          prepend-icon="mdi-arrow-left"
+          :disabled="busy"
+          data-test="import-back-to-wizard"
+          @click="backToWizard"
+          >Otros orígenes</v-btn
         >
         <v-spacer />
         <v-btn :disabled="importing" @click="open = false">{{

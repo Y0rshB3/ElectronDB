@@ -50,7 +50,7 @@ export function navicatCounts(
 export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
     title: 'Te damos la bienvenida a Vortaq',
-    text: 'Un gestor de bases de datos de escritorio, independiente y de código abierto. Puede importar tus conexiones, tareas y copias .nb3 de Navicat. Te enseñamos lo principal en un minuto.',
+    text: 'Un gestor de bases de datos de escritorio, independiente y de código abierto. Importa tus conexiones y copias desde Navicat, DBeaver, MySQL Workbench o archivos .sql. Te enseñamos lo principal en un minuto.',
     testId: 'tour-welcome',
     logo: true
   },
@@ -116,6 +116,12 @@ export function importStep(
           testId: 'tour-import-other-folder',
           run: actions.chooseFolder
         },
+        {
+          label: 'Otro gestor o archivo…',
+          variant: 'text',
+          testId: 'tour-import-other',
+          run: actions.importOther
+        },
         { label: 'Ahora no', variant: 'text', testId: 'tour-import-later', run: actions.later }
       ]
     }
@@ -123,7 +129,7 @@ export function importStep(
   return {
     target: 'toolbar-connection',
     title: 'Crea tu primera conexión',
-    text: 'Añade un servidor MySQL o importa las conexiones, tareas y copias que ya tienes en Navicat.',
+    text: 'Añade un servidor MySQL o importa lo que ya tienes en otro gestor: conexiones de Navicat, DBeaver o MySQL Workbench, y copias .sql o .nb3.',
     testId: 'tour-import-none',
     actions: [
       {

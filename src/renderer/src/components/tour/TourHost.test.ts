@@ -228,6 +228,32 @@ describe('TourHost + tour store', () => {
       expect(useUiStore().importDialogRequest).toEqual({ chooseFolder: true })
     })
 
+    it('detected Navicat: «Otro gestor o archivo…» opens the import wizard', async () => {
+      const tour = setup({
+        'navicat:findCandidates': { supportedPlatform: true, candidates: [NAVICAT] }
+      })
+      await tour.startWelcome()
+      await settle()
+      tour.index = tour.steps.length - 1
+      await settle()
+      click('[data-test="tour-import-other"]')
+      await settle()
+      expect(useUiStore().importWizard).toBe(true)
+      expect(useUiStore().importDialog).toBe(false)
+    })
+
+    it('nothing detected: «Importar desde otro gestor» opens the import wizard', async () => {
+      const tour = setup()
+      await tour.startWelcome()
+      await settle()
+      tour.index = tour.steps.length - 1
+      await settle()
+      click('[data-test="tour-import-other"]')
+      await settle()
+      expect(useUiStore().importWizard).toBe(true)
+      expect(useUiStore().tourActive).toBe(false)
+    })
+
     it('«Ahora no» just closes it (recorded as done)', async () => {
       const tour = setup({
         'navicat:findCandidates': { supportedPlatform: true, candidates: [NAVICAT] }

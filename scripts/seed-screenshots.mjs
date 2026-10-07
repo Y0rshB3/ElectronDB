@@ -571,6 +571,94 @@ try {
   await conn57.end()
 }
 
+/* ---------- «Importar…» wizard (steps 30*) ---------- */
+
+// A home folder holding DBeaver's workspace file at its usual place for this OS
+// (VORTAQ_IMPORT_HOME), and a synthetic dump the wizard «picks» (VORTAQ_IMPORT_PICK).
+const SHOTS_ROOT = dirname(PROFILE)
+const IMPORT_HOME = join(SHOTS_ROOT, 'import-home')
+rmSync(IMPORT_HOME, { recursive: true, force: true })
+const dbeaverDir =
+  process.platform === 'darwin'
+    ? join(IMPORT_HOME, 'Library', 'DBeaverData', 'workspace6', 'General', '.dbeaver')
+    : process.platform === 'win32'
+      ? join(IMPORT_HOME, 'DBeaverData', 'workspace6', 'General', '.dbeaver')
+      : join(IMPORT_HOME, '.local', 'share', 'DBeaverData', 'workspace6', 'General', '.dbeaver')
+mkdirSync(dbeaverDir, { recursive: true })
+copyFileSync(
+  join(ROOT, 'tests', 'fixtures', 'importers', 'dbeaver', 'data-sources.json'),
+  join(dbeaverDir, 'data-sources.json')
+)
+
+const IMPORT_DIR = join(SHOTS_ROOT, 'import')
+const IMPORT_SCHEMA = 'vortaq_shots_import'
+rmSync(IMPORT_DIR, { recursive: true, force: true })
+mkdirSync(IMPORT_DIR, { recursive: true })
+{
+  const lines = [
+    '-- Synthetic dump for the screenshot harness (fake data only)',
+    '/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;',
+    '/*!50503 SET NAMES utf8mb4 */;',
+    '/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;',
+    '',
+    'DROP TABLE IF EXISTS `clientes`;',
+    'CREATE TABLE `clientes` (',
+    '  `id` int NOT NULL AUTO_INCREMENT,',
+    '  `nombre` varchar(80) NOT NULL,',
+    '  `ciudad` varchar(60) NOT NULL,',
+    '  PRIMARY KEY (`id`)',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
+    'DROP TABLE IF EXISTS `pedidos`;',
+    'CREATE TABLE `pedidos` (',
+    '  `id` int NOT NULL AUTO_INCREMENT,',
+    '  `cliente_id` int NOT NULL,',
+    '  `importe` decimal(10,2) NOT NULL,',
+    '  `nota` varchar(160) DEFAULT NULL,',
+    '  PRIMARY KEY (`id`),',
+    '  KEY `idx_cliente` (`cliente_id`)',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
+    'LOCK TABLES `clientes` WRITE;',
+    '/*!40000 ALTER TABLE `clientes` DISABLE KEYS */;'
+  ]
+  const cities = ['Madrid', 'Sevilla', 'Lima', 'Quito']
+  const values = []
+  for (let i = 1; i <= 2000; i++) values.push(`(${i},'Cliente ${i}','${cities[i % 4]}')`)
+  lines.push(`INSERT INTO \`clientes\` VALUES ${values.join(',')};`)
+  lines.push('/*!40000 ALTER TABLE `clientes` ENABLE KEYS */;', 'UNLOCK TABLES;')
+  // About 25 MB of orders in extended INSERTs, so the progress screen has time to show.
+  for (let batch = 0; batch < 600; batch++) {
+    const rows = []
+    for (let j = 1; j <= 400; j++) {
+      const id = batch * 400 + j
+      rows.push(`(${id},${1 + (id % 2000)},${(id % 997) + 0.5},'Pedido de prueba ${id} \\'urgente\\' con nota larga para ocupar espacio')`)
+    }
+    lines.push(`INSERT INTO \`pedidos\` VALUES ${rows.join(',')};`)
+  }
+  lines.push(
+    'DROP VIEW IF EXISTS `v_totales`;',
+    'CREATE VIEW `v_totales` AS SELECT `cliente_id`, SUM(`importe`) AS `total` FROM `pedidos` GROUP BY `cliente_id`;',
+    'DELIMITER ;;',
+    'CREATE PROCEDURE `p_resumen`()',
+    'BEGIN',
+    '  SELECT COUNT(*) FROM `pedidos`;',
+    'END ;;',
+    'DELIMITER ;',
+    '-- This statement fails on purpose: the summary lists it with its line.',
+    'INSERT INTO `tabla_que_no_existe` VALUES (1);',
+    '/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;',
+    ''
+  )
+  writeFileSync(join(IMPORT_DIR, `${IMPORT_SCHEMA}.sql`), lines.join('\n'))
+}
+{
+  const conn = await mysql.createConnection({ ...DB })
+  try {
+    await conn.query(`DROP DATABASE IF EXISTS \`${IMPORT_SCHEMA}\``)
+  } finally {
+    await conn.end()
+  }
+}
+
 console.log(`Seeded profile ${PROFILE}`)
 console.log(
   `Seeded ${DB.database} on ${DB.host}:${DB.port} (shot_customers 200, shot_orders 1500, shot_customer_totals)`
@@ -578,3 +666,4 @@ console.log(
 console.log(
   `Seeded rb_shop/rb_crm on ${DB57.host}:${DB57.port} (5.7 staging) and an older rb_shop locally`
 )
+console.log(`Import wizard: DBeaver file under ${IMPORT_HOME}, dump ${join(IMPORT_DIR, `${IMPORT_SCHEMA}.sql`)}`)

@@ -270,10 +270,14 @@ async function cancel(): Promise<void> {
                 >Esquema
                 <span class="nd-mono">{{ meta?.schema ?? backup.schema ?? '—' }}</span></span
               >
-              <span class="restore-dialog__sep">·</span>
-              <span class="nd-mono">{{ formatDate(backup.createdAt) }}</span>
-              <span class="restore-dialog__sep">·</span>
-              <span class="nd-mono">{{ formatBytes(backup.sizeBytes) }}</span>
+              <template v-if="backup.createdAt">
+                <span class="restore-dialog__sep">·</span>
+                <span class="nd-mono">{{ formatDate(backup.createdAt) }}</span>
+              </template>
+              <template v-if="backup.sizeBytes">
+                <span class="restore-dialog__sep">·</span>
+                <span class="nd-mono">{{ formatBytes(backup.sizeBytes) }}</span>
+              </template>
               <span v-if="backup.connectionId" class="restore-dialog__sep">·</span>
               <span v-if="backup.connectionId" class="nd-ellipsis"
                 >origen: {{ connections.nameOf(backup.connectionId) }}</span

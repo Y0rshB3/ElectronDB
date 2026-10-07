@@ -403,8 +403,8 @@ const title = computed(() => {
       <EmptyState
         v-if="connections.loaded && connections.items.length === 0"
         icon="mdi-database-import-outline"
-        title="Importa tus conexiones de Navicat"
-        description="Vortaq puede leer tus conexiones, tareas de automatización y copias de seguridad de Navicat for MySQL."
+        title="Importa tus conexiones"
+        description="Trae tus conexiones desde Navicat, DBeaver o MySQL Workbench, o restaura un archivo .sql o una copia .nb3."
         data-test="objects-empty-connections"
       >
         <v-btn
@@ -412,8 +412,8 @@ const title = computed(() => {
           variant="flat"
           prepend-icon="mdi-import"
           data-test="objects-import-cta"
-          @click="ui.openImportDialog()"
-          >Importar desde Navicat</v-btn
+          @click="ui.openImportWizard()"
+          >Importar…</v-btn
         >
         <v-btn variant="text" @click="ui.openConnectionDialog(null)">Nueva conexión</v-btn>
       </EmptyState>
@@ -430,8 +430,8 @@ const title = computed(() => {
           @click="ui.openConnectionDialog(null)"
           >Nueva conexión</v-btn
         >
-        <v-btn variant="text" prepend-icon="mdi-import" @click="ui.openImportDialog()"
-          >Importar desde Navicat</v-btn
+        <v-btn variant="text" prepend-icon="mdi-import" @click="ui.openImportWizard()"
+          >Importar…</v-btn
         >
       </EmptyState>
       <EmptyState

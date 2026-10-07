@@ -59,13 +59,27 @@ function objectFraction(event: ProgressEvent): number {
   return Math.min(1, (d.objectsDone ?? 0) / d.objects)
 }
 
+/** «1,2 MB» (imports report bytes of the file read). */
+function bytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = n / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value.toFixed(value >= 100 ? 0 : 1).replace('.', ',')} ${units[unit]}`
+}
+
 function fallback(event: ProgressEvent): ProgressView {
   const percent = event.total ? clamp((event.current / event.total) * 100) : null
+  const fmt = event.kind === 'import' ? bytes : formatCount
   return {
     subtitle: PHASE_LABELS[event.phase] ?? event.phase,
     message: event.error ?? event.message,
     percent: event.done ? 100 : percent,
-    counter: event.total ? `${formatCount(event.current)} / ${formatCount(event.total)}` : null
+    counter: event.total ? `${fmt(event.current)} / ${fmt(event.total)}` : null
   }
 }
 

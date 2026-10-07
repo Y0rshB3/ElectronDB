@@ -47,14 +47,15 @@ describe('ObjectsView', () => {
     })
   })
 
-  it('shows the Navicat import CTA when there are no connections', async () => {
+  it('shows the import wizard CTA when there are no connections', async () => {
     installBridge({ 'connections:list': [] })
     await useConnectionsStore().load()
     const wrapper = mountView()
     await flush()
-    expect(wrapper.text()).toContain('Importa tus conexiones de Navicat')
+    expect(wrapper.text()).toContain('Importa tus conexiones')
+    expect(wrapper.text()).toContain('DBeaver')
     await wrapper.get('[data-test="objects-import-cta"]').trigger('click')
-    expect(useUiStore().importDialog).toBe(true)
+    expect(useUiStore().importWizard).toBe(true)
     wrapper.unmount()
   })
 

@@ -106,7 +106,7 @@ export const useTourStore = defineStore('tour', () => {
       importFrom: (rootPath) => ui.openImportDialog({ rootPath }),
       chooseFolder: () => ui.openImportDialog({ chooseFolder: true }),
       newConnection: () => ui.openConnectionDialog(null),
-      importOther: () => ui.openImportDialog(),
+      importOther: () => ui.openImportWizard(),
       later: () => undefined
     })
     start(list, {

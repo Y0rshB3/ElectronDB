@@ -1633,7 +1633,10 @@ value becomes the default plus a warning.
   connection updates only its secrets (`passwordsOnly`) unless the user picks "reemplazar". This
   is how a user brings Mac passwords across: import the plist for metadata and colours, then
   import the `.ncx` for passwords.
-- **Renderer** (`ImportNavicatDialog.vue`). Source tabs "Navicat de este Mac" and "Archivo .ncx".
+- **Renderer.** *Done in v0.2.0 as the «Importar…» wizard* (`components/import/ImportWizard.vue`, sources in
+  `src/main/importers/registry.ts`): the `.ncx` is one source next to the Navicat folder (which keeps
+  `ImportNavicatDialog.vue`), DBeaver, MySQL Workbench, `.sql` dumps, dump folders and `.nb3`. The original
+  plan was: `ImportNavicatDialog.vue` with source tabs "Navicat de este Mac" and "Archivo .ncx".
   Columns: engine icon, name, host or file, environment, "contraseña incluida", status
   (importable / ya importada / no soportada + reason) and warnings. The empty text becomes "No
   hay conexiones en Navicat".

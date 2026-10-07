@@ -1121,6 +1121,62 @@ const TOUR_STEPS: Step[] = [
 ]
 STEPS.push(...TOUR_STEPS)
 
+/**
+ * «Importar…» wizard (VORTAQ_SHOTS_ONLY=30): needs the files seeded by
+ * scripts/seed-screenshots.mjs, VORTAQ_IMPORT_HOME (DBeaver's file at its usual
+ * place) and VORTAQ_IMPORT_PICK (the dump the wizard «picks»), both set by
+ * `npm run screenshots`.
+ */
+const IMPORT_STEPS: Step[] = [
+  {
+    name: '30a-import-sources',
+    script: `
+      S.ui.openImportWizard()
+      await H.waitFor('[data-test="import-source-dbeaver"]', 8000)
+      await H.sleep(600)`
+  },
+  {
+    name: '30b-import-dbeaver-preview',
+    script: `
+      await H.click('[data-test="import-source-dbeaver"]', 5000)
+      await H.click('[data-test="import-file-use"]', 8000)
+      await H.waitFor('[data-test="import-connection-row"]', 8000)
+      await H.sleep(600)`,
+    cleanup: `S.ui.importWizard = false`
+  },
+  {
+    name: '30c-import-sql-options',
+    script: `
+      S.ui.openImportWizard()
+      await H.click('[data-test="import-source-sql-dump"]', 8000)
+      await H.click('[data-test="import-file-pick"]', 5000)
+      await H.waitFor('[data-test="dump-inspection"]', 30000)
+      const box = await H.waitFor('[data-test="dump-continue"] input', 5000)
+      if (!box.checked) box.click()
+      await H.sleep(800)`
+  },
+  {
+    name: '30d-import-sql-progress',
+    script: `
+      await H.click('[data-test="dump-run"]', 5000)
+      await H.until(
+        () => H.$('[data-test="dump-progress"]') && (H.$('[data-test="import-log"]')?.children.length ?? 0) >= 3,
+        30000,
+        50
+      )
+      await H.sleep(120)`
+  },
+  {
+    name: '30e-import-sql-summary',
+    script: `
+      await H.waitFor('[data-test="dump-result"]', 180000)
+      await H.sleep(600)`,
+    cleanup: `S.ui.importWizard = false`
+  }
+]
+STEPS.push(...IMPORT_STEPS)
+
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }

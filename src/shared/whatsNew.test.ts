@@ -88,15 +88,22 @@ describe('WHATS_NEW (curated list)', () => {
     ])
   })
 
-  it('0.2.0 announces the Vortaq name and that the data moves on its own', () => {
+  it('0.2.0 announces the Vortaq name, imports, .sql export and that the data moves on its own', () => {
     const entry = whatsNewFor('0.2.0-alpha.1')
     expect(entry?.highlights).toEqual([
       'ElectronDB ahora se llama Vortaq',
+      'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y archivos .sql',
+      'Exporta copias en .sql compatibles con otros gestores',
       'Nuevo icono',
       'Barra de herramientas reorganizada'
     ])
     expect(entry?.important).toEqual(['Tus datos se trasladan automáticamente a Vortaq'])
-    expect(entry?.tour?.map((s) => s.target)).toEqual(['toolbar-objects', 'toolbar-more'])
+    expect(entry?.tour?.map((s) => s.target)).toEqual([
+      'toolbar-objects',
+      'toolbar-more',
+      'toolbar-more',
+      'toolbar-backup'
+    ])
     expect(versions(whatsNewBetween('0.1.9', '0.2.0-alpha.1'))).toEqual(['0.2.0'])
   })
 

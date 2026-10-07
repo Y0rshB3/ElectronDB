@@ -23,7 +23,10 @@ export const PROGRESS_KIND_LABELS: Record<ProgressEvent['kind'], string> = {
 
 /** Operations whose main-side implementation supports cancellation. */
 export function isCancellable(op: Pick<ProgressEvent, 'kind' | 'done'>): boolean {
-  return !op.done && (op.kind === 'backup' || op.kind === 'restore' || op.kind === 'job')
+  return (
+    !op.done &&
+    (op.kind === 'backup' || op.kind === 'restore' || op.kind === 'job' || op.kind === 'import')
+  )
 }
 
 const FINAL_STATUSES: RunStatus[] = ['success', 'failed', 'cancelled']
@@ -162,6 +165,7 @@ export const useProgressStore = defineStore('progress', () => {
     if (!op || !isCancellable(op)) return
     // Job progress events use the run id as operationId (see automation/runner.ts).
     if (op.kind === 'job') await api.jobs.cancel(operationId)
+    else if (op.kind === 'import') await api.importers.cancel(operationId)
     else await api.backups.cancel(operationId)
   }
 

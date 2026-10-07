@@ -18,6 +18,7 @@ import ConfirmHost from '@renderer/components/common/ConfirmHost.vue'
 import NotifyHost from '@renderer/components/common/NotifyHost.vue'
 import ConnectionDialog from '@renderer/components/dialogs/ConnectionDialog.vue'
 import ImportNavicatDialog from '@renderer/components/dialogs/ImportNavicatDialog.vue'
+import ImportWizard from '@renderer/components/import/ImportWizard.vue'
 import SettingsDialog from '@renderer/components/dialogs/SettingsDialog.vue'
 import AboutDialog from '@renderer/components/dialogs/AboutDialog.vue'
 import NewDatabaseDialog from '@renderer/components/dialogs/NewDatabaseDialog.vue'
@@ -126,6 +127,7 @@ onBeforeUnmount(() => {
     <NotifyHost />
 
     <ConnectionDialog />
+    <ImportWizard />
     <ImportNavicatDialog />
     <SettingsDialog />
     <AboutDialog />

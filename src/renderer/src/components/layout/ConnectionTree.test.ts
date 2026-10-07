@@ -106,13 +106,14 @@ describe('ConnectionTree', () => {
     wrapper.unmount()
   })
 
-  it('offers the Navicat import CTA when there are no connections', async () => {
+  it('offers the import wizard when there are no connections', async () => {
     installBridge({ 'connections:list': [] })
     await useConnectionsStore().load()
     const wrapper = mountTree()
     await flush()
     await wrapper.get('[data-test="import-cta"]').trigger('click')
-    expect(useUiStore().importDialog).toBe(true)
+    expect(useUiStore().importWizard).toBe(true)
+    expect(useUiStore().importDialog).toBe(false)
     wrapper.unmount()
   })
 })

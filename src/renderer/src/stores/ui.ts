@@ -44,6 +44,8 @@ export interface ImportDialogRequest {
   rootPath?: string
   /** «No es esta carpeta»: stay on step 1, skip the automatic proposal, offer the folder picker. */
   chooseFolder?: boolean
+  /** Opened from the «Importar…» wizard: the dialog offers «Otros orígenes» to go back. */
+  fromWizard?: boolean
 }
 
 export interface ConfirmState extends ConfirmRequest {
@@ -64,6 +66,9 @@ export const useUiStore = defineStore('ui', () => {
     open: false,
     editing: null
   })
+  /** «Importar…» wizard (every source); the Navicat folder flow is `importDialog`. */
+  const importWizard = ref(false)
+  /** Navicat folder import (connections, jobs and .nb3 copies). */
   const importDialog = ref(false)
   /** Options of the last openImportDialog() call, read once by the dialog when it opens. */
   const importDialogRequest = ref<ImportDialogRequest | null>(null)
@@ -121,6 +126,12 @@ export const useUiStore = defineStore('ui', () => {
     restoreDialog.value = { open: true, backup, connectionId, replace: options.replace === true }
   }
 
+  /** «Importar…»: the source list of the import wizard. */
+  function openImportWizard(): void {
+    importWizard.value = true
+  }
+
+  /** Navicat folder import (the welcome tour opens it with a confirmed folder). */
   function openImportDialog(request: ImportDialogRequest | null = null): void {
     importDialogRequest.value = request
     importDialog.value = true
@@ -164,6 +175,7 @@ export const useUiStore = defineStore('ui', () => {
     aiPanelVisible,
     aiWidth,
     connectionDialog,
+    importWizard,
     importDialog,
     importDialogRequest,
     tourActive,
@@ -176,6 +188,7 @@ export const useUiStore = defineStore('ui', () => {
     objectsViewMode,
     openConnectionDialog,
     openImportDialog,
+    openImportWizard,
     openSettingsDialog,
     openAboutDialog,
     toggleLogDrawer,

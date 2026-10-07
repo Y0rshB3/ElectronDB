@@ -130,7 +130,7 @@ const actions = computed<ToolbarAction[]>(() => {
           icon: 'mdi-database-plus-outline',
           action: () => ui.openConnectionDialog(null)
         },
-        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportDialog() }
+        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportWizard() }
       ]
     },
     {
@@ -176,7 +176,7 @@ const actions = computed<ToolbarAction[]>(() => {
       label: 'Más',
       icon: 'mdi-dots-horizontal-circle-outline',
       menu: [
-        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportDialog() },
+        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportWizard() },
         {
           label: 'Buscar actualizaciones…',
           icon: 'mdi-update',

@@ -6,8 +6,9 @@ Vortaq es un gestor de bases de datos de escritorio, independiente y de código 
 Linux. Hoy trabaja con MySQL y MariaDB: explora y edita datos, escribe consultas con autocompletado, diseña
 tablas, saca copias de seguridad y automatiza copias y restauraciones entre entornos (por ejemplo, de staging a
 local). Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. Si
-ya usabas Navicat, puede importar tus conexiones, tareas y copias `.nb3` (ver
-[Importar desde otros gestores](#importar-desde-otros-gestores-macos)).
+ya usabas otro gestor, puede importar tus conexiones (Navicat, DBeaver, MySQL Workbench) y tus copias `.sql` o
+`.nb3`, y exportar copias en `.sql` que otros programas leen (ver
+[Importar desde otros gestores](#importar-desde-otros-gestores)).
 
 Está construido con Electron, Vue 3 y TypeScript. La interfaz está en español; el código y los comentarios, en
 inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
@@ -50,9 +51,13 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
   y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
   sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
   la lista de copias de seguridad con un paquete entero (también los lotes importados de otros gestores).
-- **Importación desde otros gestores**: conexiones, colores, trabajos por lotes y copias existentes de
-  Navicat for MySQL (formato `.nb3`), leídos de los archivos de tu carpeta. Es de solo lectura: no modifica
-  nada del otro programa y no lee sus contraseñas (las escribes tú).
+- **Importación desde otros gestores** (**Más › Importar…**): conexiones de Navicat (carpeta de macOS o archivo
+  `.ncx`, con contraseñas si lo exportaste con ellas), DBeaver y MySQL Workbench; volcados `.sql`/`.sql.gz` de
+  mysqldump, phpMyAdmin, HeidiSQL y otros gestores (uno o una carpeta entera) y copias `.nb3`. Es de solo
+  lectura: no modifica nada del otro programa y nunca lee sus almacenes de contraseñas
+  ([Importar desde otros gestores](#importar-desde-otros-gestores)).
+- **Exportar a `.sql`**: copias en SQL plano compatibles con `mysql` y otros gestores, también como formato de
+  los pasos de copia de la automatización ([Exportar a .sql](#exportar-a-sql)).
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide escribir su
   nombre. En **Ajustes › Seguridad** puedes extenderlo a Staging, Local u Otro.
 - **Confirmación antes de borrar en cualquier conexión**: DROP, TRUNCATE, DELETE y eliminar filas, tablas,
@@ -313,11 +318,93 @@ contraseña»); si la rechaza verás «No hay contraseña guardada para la conex
 marca «Sin contraseña»». Las conexiones importadas de Navicat quedan en modo **Contraseña**, porque Navicat no
 guarda si hace falta.
 
-### Importar desde otros gestores (macOS)
+### Importar desde otros gestores
 
-Hoy se puede importar desde Navicat for MySQL.
+**Más › Importar…** (también **Conexión › Importar…**, el botón **Importar…** de la lista vacía y el último paso
+del tour) abre un asistente: eliges el **origen**, luego el **archivo o la carpeta**, revisas lo que contiene y
+marcas qué traer. Vortaq solo lee el archivo o la carpeta que eliges (o que confirmas en su ubicación habitual):
+nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almacenes cifrados de otros programas.
 
-1. **Conexión → Importar…** (o **Más → Importar…**). Si la carpeta guardada no existe o está vacía, Vortaq **busca
+| Origen | Qué se importa | Contraseñas |
+| --- | --- | --- |
+| **Navicat — carpeta (macOS)** | Conexiones, colores, trabajos por lotes y copias `.nb3` | No (no están en esos archivos) |
+| **Navicat — archivo .ncx** | Conexiones MySQL/MariaDB con SSH y SSL | Sí, si lo exportaste con «Export Password» |
+| **DBeaver** | Conexiones MySQL/MariaDB de `data-sources.json` (con túnel SSH) | No |
+| **MySQL Workbench** | Conexiones de `connections.xml` (con túnel SSH y SSL) | No |
+| **Archivo .sql** | Un volcado `.sql` o `.sql.gz` en una conexión | — |
+| **Carpeta de volcados .sql** | Un volcado por base de datos, como un paquete | — |
+| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar** | — |
+
+Las conexiones de otros motores (PostgreSQL, SQL Server, SQLite…) aparecen en la vista previa como **no
+soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
+el mismo programa (mismo nombre), sale como **ya importada**: al marcarla se actualizan sus datos y se
+conservan su entorno (Producción nunca se rebaja), su carpeta de copias y sus contraseñas guardadas.
+
+#### Navicat: archivo .ncx (con contraseñas)
+
+En Navicat: **Archivo › Exportar conexiones…**, marca **Export Password** si quieres las contraseñas y guarda el
+`.ncx`. En Vortaq: **Importar… › Navicat — archivo .ncx › Elegir archivo…**. La vista previa marca qué
+conexiones traen contraseña. Para las que ya importaste desde la carpeta de Navicat eliges **Actualizar solo la
+contraseña** (así juntas la carpeta del Mac, con colores y trabajos, y las contraseñas del `.ncx`) o
+**Reemplazar sus datos**. Las contraseñas (de la base de datos, del túnel SSH y de la clave SSL) se guardan solo
+en el almacén de credenciales de Vortaq y nunca se escriben en el registro.
+
+> **Borra el `.ncx` después de importar**: el formato guarda las contraseñas con una clave fija conocida, así
+> que cualquiera con el archivo puede recuperarlas. El asistente lo recuerda al terminar y abre su carpeta.
+
+Funciona en macOS, Windows y Linux (es la forma de traer conexiones de Navicat para Windows o Linux).
+
+#### DBeaver y MySQL Workbench
+
+El asistente busca el archivo en su sitio habitual y, si existe, pregunta «¿Usar este archivo?» (o **Elegir
+otro…**):
+
+| Programa | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| DBeaver | `~/Library/DBeaverData/workspace6/General/.dbeaver/data-sources.json` | `%APPDATA%\DBeaverData\workspace6\General\.dbeaver\data-sources.json` | `~/.local/share/DBeaverData/workspace6/General/.dbeaver/data-sources.json` |
+| MySQL Workbench | `~/Library/Application Support/MySQL/Workbench/connections.xml` | `%APPDATA%\MySQL\Workbench\connections.xml` | `~/.mysql/workbench/connections.xml` |
+
+- **DBeaver** guarda usuarios y contraseñas cifrados en otro archivo (`credentials-config.json`) con una clave
+  propia: Vortaq **no lo lee**. Las conexiones llegan sin contraseña (y, si DBeaver guardó el usuario ahí, sin
+  usuario): escríbelos al editar cada conexión. El tipo de conexión de DBeaver (Producción, Test, Desarrollo)
+  da el entorno.
+- **MySQL Workbench** guarda las contraseñas en el llavero del sistema: Vortaq no las lee. Se importan host,
+  puerto, usuario, esquema por defecto, túnel SSH (servidor, usuario, clave) y SSL.
+
+#### Volcados .sql
+
+**Importar… › Archivo .sql** acepta volcados de mysqldump, MySQL Workbench, phpMyAdmin, HeidiSQL, Adminer,
+DBeaver, TablePlus o cualquier script de sentencias, también comprimidos (`.sql.gz`). Antes de importar se ve
+qué programa lo generó (si lo dice su cabecera), su tamaño, sus bases de datos y cuántas tablas, vistas,
+rutinas, triggers y eventos crea. Eliges la conexión de destino (por defecto la **Local**) y:
+
+- **Respetar las bases de datos del archivo**: sus `USE` y `CREATE DATABASE` deciden dónde va cada cosa (lo
+  normal en un volcado de varias bases de datos). Puedes indicar un esquema para las sentencias que van antes
+  del primer `USE`.
+- **Importar todo en `<esquema>`**: todo va al esquema que elijas (por defecto, el del archivo o su nombre). Los
+  `CREATE DATABASE` del archivo se omiten y sus `USE` apuntan al destino; si el archivo tiene varias bases de
+  datos, el asistente lo avisa (los nombres calificados `base.tabla` no se cambian). Con **Vaciar … antes de
+  importar** el esquema se borra y se crea de nuevo, con una **copia previa** `.nb3` (etiqueta
+  `previo-importacion`) si ya existía.
+
+El archivo se lee por partes (no se carga entero en memoria, sirve para volcados de varios GB) y se ejecuta
+sentencia a sentencia en una sola sesión, respetando `DELIMITER`, comentarios, comillas y los
+`/*!40101 SET … */` del volcado. El progreso va por bytes leídos, con **Cancelar** y un registro en vivo (objetos
+creados, base de datos actual, errores). Al terminar se ve el resumen: sentencias, filas afectadas, objetos
+creados y cada error con **su número de línea**. Con **Continuar si una sentencia falla** sigue con las demás;
+si no, se detiene en el primer error. Un `DEFINER` cuya cuenta no existe en el destino se quita (el objeto
+queda a nombre de tu usuario), igual que al restaurar un `.nb3`. En **Producción** (y en los entornos de
+**Ajustes › Seguridad**) hay que escribir el nombre de la conexión.
+
+**Importar… › Carpeta de volcados .sql** importa una carpeta con un archivo por base de datos
+(`ventas.sql`, `crm.sql.gz`…) como un paquete, igual que **Restaurar paquete en Local**: cada archivo propone su
+base de datos (su nombre sin `.sql`), que puedes cambiar; **Reemplazar las bases de datos que ya existen** las
+borra y crea de nuevo, con copia previa de cada una. Los nombres repetidos y las bases de datos del sistema se
+rechazan.
+
+#### Navicat: carpeta (macOS)
+
+1. **Importar… › Navicat — carpeta (macOS)**. Si la carpeta guardada no existe o está vacía, Vortaq **busca
    Navicat solo** en los sitios habituales de macOS:
    - `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC` (la habitual);
    - la versión de la App Store: `~/Library/Containers/<carpeta con «navicat» en el nombre>/Data/Library/Application Support/PremiumSoft CyberTech/Navicat CC`;
@@ -335,7 +422,7 @@ Hoy se puede importar desde Navicat for MySQL.
 
 **En Windows o Linux**: copia la carpeta `Navicat CC` desde un Mac (por ejemplo a `C:\Datos\Navicat CC` o
 `~/navicat-cc`) y escribe esa ruta en el diálogo de importación (o en **Ajustes** para no repetirla), que fuera
-de macOS empieza vacío. Vortaq también busca una carpeta llamada `Navicat CC` copiada en tu carpeta personal
+de macOS empieza vacío (o exporta un `.ncx` desde Navicat para Windows o Linux, arriba). Vortaq también busca una carpeta llamada `Navicat CC` copiada en tu carpeta personal
 o un nivel por debajo (por ejemplo `~/Navicat CC` o `~/Documentos/Navicat CC`), sin recorrer el disco entero. Las contraseñas se escriben a mano, como en macOS.
 Las copias `.nb3` se buscan en la carpeta de cada conexión dentro de `Navicat CC`, porque las rutas de un Mac
 no existen en otro equipo.
@@ -432,6 +519,28 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
 
 Las copias nuevas se guardan en `<perfil>/backups/<conexión>/<esquema>/`, salvo que cambies la carpeta en la
 conexión o en **Ajustes** (si venías de ElectronDB o de Navidog, siguen en la carpeta `backups` de ese perfil).
+
+### Exportar a .sql
+
+Para llevar una base de datos a otro gestor (o al cliente `mysql`), en **Copias de seguridad** pulsa
+**Exportar a .sql…** (o **Nueva copia** y elige **Formato: .sql**). El archivo es SQL plano, compatible con
+`mysql < archivo.sql`, phpMyAdmin, HeidiSQL, DBeaver o MySQL Workbench:
+
+- cada tabla con `DROP TABLE IF EXISTS` + `CREATE TABLE`, sus filas en `INSERT` de varias filas (hasta 500 filas
+  o 1 MiB por sentencia, sin las columnas generadas) y sus triggers; después funciones y procedimientos, vistas
+  (en orden de dependencia) y eventos, con bloques `DELIMITER ;;`;
+- `utf8mb4`, lectura en una instantánea consistente y `TIME_ZONE='+00:00'` para que los `TIMESTAMP` vuelvan
+  igual;
+- opciones: **Incluir estructura**, **Incluir datos**, **Incluir CREATE DATABASE** (desactivado: el archivo se
+  importa en el esquema que elijas) y **Comprimir (.sql.gz)**.
+
+Se guarda en la carpeta de copias de la conexión (`<esquema>/<fecha>[-etiqueta].sql`) y al terminar puedes
+abrir su carpeta. Los archivos `.sql` no aparecen en la lista de copias (que muestra las `.nb3`) y los `DEFINER`
+se conservan tal como los da el servidor.
+
+En **Automatización**, cada paso de copia tiene **Formato: .nb3 | .sql**. Un paso de restauración no puede usar
+una copia `.sql` (las restauraciones automáticas necesitan `.nb3`): el trabajo no se guarda hasta que cambies el
+formato. Para volver a cargar un `.sql`, usa **Importar… › Archivo .sql**.
 
 ### Restaurar todo en Local (rollback de una ejecución)
 
@@ -1155,6 +1264,14 @@ VORTAQ_SHOTS_MYSQL='mysql://root:navidog@127.0.0.1:33306/navidog_test' npm run s
 VORTAQ_SHOTS_ONLY=05,06 npm run screenshots
 # Tour de bienvenida, detección de Navicat y «Mostrarme cómo» (pasos 21*):
 VORTAQ_SHOTS_ONLY=21 VORTAQ_WHATS_NEW_FROM=0.1.5 VORTAQ_WHATS_NEW_VERSION=0.1.7 npm run screenshots
+```
+
+El asistente **Importar…** (pasos `30*`) usa un archivo de DBeaver y un volcado `.sql` sintéticos que el script
+de semillas crea junto al perfil (`import-home/`, `import/`); `VORTAQ_IMPORT_HOME` y `VORTAQ_IMPORT_PICK` (solo
+con un perfil de prueba) apuntan a ellos. Si cambias `VORTAQ_SHOTS_PROFILE`, pásalas también:
+
+```bash
+VORTAQ_SHOTS_ONLY=30 npm run screenshots
 ```
 
 Por defecto escribe en `$TMPDIR/vortaq-shots`. El perfil (`.../profile`) se borra y se recrea en cada

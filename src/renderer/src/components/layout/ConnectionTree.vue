@@ -73,7 +73,7 @@ function onContextMenu(event: MouseEvent, node: TreeNode): void {
         v-if="connections.loaded && connections.items.length === 0"
         icon="mdi-database-off-outline"
         title="Sin conexiones"
-        description="Importa tus conexiones de Navicat o crea una nueva conexión MySQL."
+        description="Importa tus conexiones desde otro gestor o crea una nueva conexión MySQL."
       >
         <v-btn
           color="primary"
@@ -81,8 +81,8 @@ function onContextMenu(event: MouseEvent, node: TreeNode): void {
           size="small"
           prepend-icon="mdi-import"
           data-test="import-cta"
-          @click="ui.openImportDialog()"
-          >Importar de Navicat</v-btn
+          @click="ui.openImportWizard()"
+          >Importar…</v-btn
         >
         <v-btn variant="text" size="small" @click="ui.openConnectionDialog(null)"
           >Nueva conexión</v-btn

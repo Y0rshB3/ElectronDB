@@ -29,6 +29,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     date: '2026-10-07',
     highlights: [
       'ElectronDB ahora se llama Vortaq',
+      'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y archivos .sql',
+      'Exporta copias en .sql compatibles con otros gestores',
       'Nuevo icono',
       'Barra de herramientas reorganizada'
     ],
@@ -43,6 +45,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         target: 'toolbar-more',
         title: 'Más',
         text: 'Importar, buscar actualizaciones, el tour de bienvenida, el registro, los ajustes y «Acerca de Vortaq» (con las licencias de terceros) están en «Más».'
+      },
+      {
+        target: 'toolbar-more',
+        title: 'Importar desde otros gestores',
+        text: 'Más › Importar… trae conexiones de Navicat (carpeta o archivo .ncx), DBeaver y MySQL Workbench, y restaura volcados .sql o .sql.gz y copias .nb3.'
+      },
+      {
+        target: 'toolbar-backup',
+        title: 'Exportar a .sql',
+        text: 'En Copias de seguridad, «Nueva copia» puede guardar un .sql que lee cualquier gestor. Los pasos de copia de la automatización también tienen «Formato: .nb3 | .sql».'
       }
     ]
   },
