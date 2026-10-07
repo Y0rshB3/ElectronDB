@@ -63,3 +63,15 @@ export function formatBackupFileName(date: Date, label?: string | null): string 
 
 export const isBackupFileName = (name: string): boolean =>
   name.toLowerCase().endsWith(NB3_EXTENSION)
+
+/** Extension of plain SQL dumps written by «Exportar a .sql» (`.sql.gz` when compressed). */
+export const SQL_DUMP_EXTENSION = '.sql'
+
+/** `YYYYMMDDHHmmss[-label].sql[.gz]`: same stamp and label rules as the .nb3 names. */
+export function formatSqlDumpFileName(date: Date, label?: string | null, gzip = false): string {
+  const clean = sanitizeLabel(label)
+  return `${formatBackupStamp(date)}${clean ? `-${clean}` : ''}${SQL_DUMP_EXTENSION}${gzip ? '.gz' : ''}`
+}
+
+/** True for `.sql` and `.sql.gz` file names. */
+export const isSqlDumpFileName = (name: string): boolean => /\.sql(\.gz)?$/i.test(name)

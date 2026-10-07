@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import type { BackupFormat } from '@shared/importers'
 import type { BackupCreateResult } from '@shared/types'
 import { api, newOperationId } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -30,6 +31,11 @@ const objects = ref<string[]>([])
 const objectItems = ref<{ title: string; value: string; subtitle: string }[]>([])
 const objectsLoading = ref(false)
 const includeData = ref(true)
+/** .nb3 (restorable copy) or plain .sql for other managers. */
+const format = ref<BackupFormat>('nb3')
+const includeStructure = ref(true)
+const includeCreateDatabase = ref(false)
+const gzip = ref(false)
 const label = ref('')
 const comment = ref('')
 const targetDir = ref('')
@@ -38,7 +44,11 @@ const operationId = ref<string | null>(null)
 const running = ref(false)
 const cancelling = ref(false)
 const error = ref('')
-const result = ref<BackupCreateResult | null>(null)
+const result = ref<Pick<
+  BackupCreateResult,
+  'path' | 'sizeBytes' | 'objects' | 'rows' | 'durationMs'
+> | null>(null)
+const isSql = computed(() => format.value === 'sql')
 
 const open = computed({
   get: () => ui.backupDialog.open,
@@ -54,13 +64,23 @@ const connectionItems = computed(() =>
 const connection = computed(() =>
   connectionId.value ? connections.get(connectionId.value) : undefined
 )
-const canStart = computed(() => !!connectionId.value && !!schema.value && !running.value)
+const canStart = computed(
+  () =>
+    !!connectionId.value &&
+    !!schema.value &&
+    !running.value &&
+    (!isSql.value || includeStructure.value || includeData.value)
+)
 
 function reset(): void {
   connectionId.value = ui.backupDialog.connectionId
   schema.value = ui.backupDialog.schema
   objects.value = []
   includeData.value = true
+  format.value = ui.backupDialog.format === 'sql' ? 'sql' : 'nb3'
+  includeStructure.value = true
+  includeCreateDatabase.value = false
+  gzip.value = false
   label.value = ''
   comment.value = ''
   targetDir.value = ''
@@ -110,6 +130,25 @@ async function start(): Promise<void> {
   error.value = ''
   result.value = null
   try {
+    if (isSql.value) {
+      const exported = await api.backups.exportSql(opId, {
+        connectionId: cid,
+        schema: schema.value,
+        includeStructure: includeStructure.value,
+        includeData: includeData.value,
+        includeCreateDatabase: includeCreateDatabase.value,
+        gzip: gzip.value,
+        objects: objects.value.length ? [...objects.value] : undefined,
+        label: label.value.trim() || undefined,
+        targetDir: targetDir.value.trim() || undefined
+      })
+      result.value = exported
+      notify.success(`Exportación .sql creada en ${exported.path}`, {
+        label: 'Mostrar en Finder',
+        handler: () => revealInFinder(exported.path)
+      })
+      return
+    }
     // Silent invoke: failures are shown inline below, not also in the global snackbar.
     result.value = await api.invokeSilent('backups:create', opId, {
       connectionId: cid,
@@ -124,7 +163,7 @@ async function start(): Promise<void> {
     if (tree.hasItems(cid, schema.value, 'backups'))
       void tree.loadGroup(cid, schema.value, 'backups', true).catch(() => undefined)
     // The dialog also stays open on its result view, which offers «Mostrar en Finder».
-    const created = result.value.path
+    const created = result.value!.path
     notify.success(`Copia de seguridad creada en ${created}`, {
       label: 'Mostrar en Finder',
       handler: () => revealInFinder(created)
@@ -177,11 +216,35 @@ function onSchemaChange(value: string | null): void {
     <v-card data-test="backup-dialog">
       <DialogHeader
         icon="mdi-archive-plus-outline"
-        title="Nueva copia de seguridad"
-        subtitle="Archivo .nb3 compatible con Navicat"
+        :title="isSql ? 'Exportar a .sql' : 'Nueva copia de seguridad'"
+        :subtitle="
+          isSql
+            ? 'Archivo .sql que el cliente mysql y otros gestores pueden importar'
+            : 'Archivo .nb3 compatible con Navicat'
+        "
       />
       <v-card-text class="backup-dialog__body">
         <template v-if="!result">
+          <div class="backup-dialog__format">
+            <span class="backup-dialog__format-label">Formato</span>
+            <v-btn-toggle
+              v-model="format"
+              mandatory
+              density="compact"
+              variant="outlined"
+              divided
+              :disabled="running"
+              data-test="backup-format"
+            >
+              <v-btn value="nb3" size="small" data-test="backup-format-nb3">.nb3</v-btn>
+              <v-btn value="sql" size="small" data-test="backup-format-sql">.sql</v-btn>
+            </v-btn-toggle>
+            <span class="backup-dialog__format-hint">{{
+              isSql
+                ? 'Para llevar la copia a otros gestores; Vortaq la importa con «Importar…».'
+                : 'Copia restaurable desde Copias de seguridad y tareas.'
+            }}</span>
+          </div>
           <v-row dense>
             <v-col cols="12" sm="6">
               <v-select
@@ -244,9 +307,47 @@ function onSchemaChange(value: string | null): void {
                 hide-details
                 density="compact"
                 :disabled="running"
+                data-test="backup-include-data"
               />
             </v-col>
-            <v-col cols="12">
+            <template v-if="isSql">
+              <v-col cols="12" sm="6">
+                <v-checkbox
+                  v-model="includeStructure"
+                  label="Incluir estructura (CREATE TABLE…)"
+                  hide-details
+                  density="compact"
+                  :disabled="running"
+                  data-test="backup-include-structure"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-checkbox
+                  v-model="includeCreateDatabase"
+                  label="Incluir CREATE DATABASE"
+                  hide-details
+                  density="compact"
+                  :disabled="running"
+                  data-test="backup-create-database"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-checkbox
+                  v-model="gzip"
+                  label="Comprimir (.sql.gz)"
+                  hide-details
+                  density="compact"
+                  :disabled="running"
+                  data-test="backup-gzip"
+                />
+              </v-col>
+              <v-col v-if="!includeStructure && !includeData" cols="12">
+                <p class="backup-dialog__warn" data-test="backup-nothing">
+                  Elige incluir la estructura, los datos o ambos.
+                </p>
+              </v-col>
+            </template>
+            <v-col v-if="!isSql" cols="12">
               <v-textarea
                 v-model="comment"
                 label="Comentario"
@@ -279,7 +380,7 @@ function onSchemaChange(value: string | null): void {
             v-if="running"
             class="mt-4"
             :operation-id="operationId"
-            :label="`Creando copia de ${schema}…`"
+            :label="isSql ? `Exportando ${schema} a .sql…` : `Creando copia de ${schema}…`"
             :cancelling="cancelling"
             @cancel="cancel"
           />
@@ -291,7 +392,9 @@ function onSchemaChange(value: string | null): void {
             class="backup-dialog__result"
             data-test="backup-result"
           >
-            <div class="font-weight-medium">Copia creada correctamente</div>
+            <div class="font-weight-medium">
+              {{ isSql ? 'Exportación creada correctamente' : 'Copia creada correctamente' }}
+            </div>
             <div class="backup-dialog__path nd-mono nd-ellipsis" :title="result.path">
               {{ result.path }}
             </div>
@@ -343,7 +446,7 @@ function onSchemaChange(value: string | null): void {
           data-test="backup-start"
           @click="start"
         >
-          Iniciar copia
+          {{ isSql ? 'Exportar' : 'Iniciar copia' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -353,6 +456,26 @@ function onSchemaChange(value: string | null): void {
 <style scoped>
 .backup-dialog__body {
   padding-top: 4px !important;
+}
+.backup-dialog__format {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 12px;
+}
+.backup-dialog__format-label {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+}
+.backup-dialog__format-hint {
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+}
+.backup-dialog__warn {
+  margin: 0;
+  font-size: var(--nd-fs-xs);
+  color: rgb(var(--v-theme-error));
 }
 .backup-dialog__path {
   margin-top: 2px;

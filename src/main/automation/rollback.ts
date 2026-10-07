@@ -1,5 +1,5 @@
 import { restoreLabel } from '@shared/jobLog'
-import { isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
+import { SQL_COPY_NOT_RESTORABLE, isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
 import { environmentPhrase } from '@shared/typedConfirm'
 import { MANUAL_ROLLBACKS_JOB_ID, MANUAL_ROLLBACKS_NAME } from '@shared/backupPackages'
 import type {
@@ -129,19 +129,24 @@ async function planItem(
   let objects: number | null = null
   let rows: number | null = null
   let tables = 0
-  try {
-    const meta = await inspector.readMeta(c.path)
-    if (meta.encryption && meta.encryption !== 'None') problem = ENCRYPTED_MESSAGE
-    else if (c.expected && meta.schema !== c.expected)
-      problem = `El archivo contiene la base de datos «${meta.schema}», no «${c.expected}».`
-    schema = meta.schema || schema
-    objects = meta.objects.length
-    tables = meta.objects.filter((o) => String(o.type).toLowerCase() === 'table').length
-    rows = meta.objects.reduce((sum, o) => sum + (typeof o.rows === 'number' ? o.rows : 0), 0)
-  } catch (err) {
-    problem = describeError(err)
+  // A .sql output of a backup step («Formato: .sql»): listed, never restored.
+  if (!isBackupFileName(c.path)) {
+    problem = SQL_COPY_NOT_RESTORABLE
     schema = schema || c.fallbackSchema || ''
-  }
+  } else
+    try {
+      const meta = await inspector.readMeta(c.path)
+      if (meta.encryption && meta.encryption !== 'None') problem = ENCRYPTED_MESSAGE
+      else if (c.expected && meta.schema !== c.expected)
+        problem = `El archivo contiene la base de datos «${meta.schema}», no «${c.expected}».`
+      schema = meta.schema || schema
+      objects = meta.objects.length
+      tables = meta.objects.filter((o) => String(o.type).toLowerCase() === 'table').length
+      rows = meta.objects.reduce((sum, o) => sum + (typeof o.rows === 'number' ? o.rows : 0), 0)
+    } catch (err) {
+      problem = describeError(err)
+      schema = schema || c.fallbackSchema || ''
+    }
   if (!schema && !problem) problem = 'No se sabe qué base de datos contiene el backup.'
   if (!problem && isSystemSchema(schema)) problem = systemSchemaRefusal(schema)
   const where = target ? `«${schema}» en «${target.name}»` : `«${schema}» en el destino`

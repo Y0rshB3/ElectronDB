@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
+import type { SqlExportOptions } from '@shared/importers'
 import { describeObjectCounts } from '@shared/jobLog'
 import type {
   BackupCreateOptions,
@@ -151,6 +152,8 @@ export interface FakeBackupService extends BackupService {
   corrupt: Map<string, string>
   /** Paths passed to verify(), in order. */
   verified: string[]
+  /** exportSql() calls (backup steps with «Formato: .sql»). */
+  exports: SqlExportOptions[]
 }
 
 export function fakeBackupService(dir: string, timeline: string[] = []): FakeBackupService {
@@ -166,11 +169,32 @@ export function fakeBackupService(dir: string, timeline: string[] = []): FakeBac
     timeline,
     corrupt: new Map(),
     verified: [],
+    exports: [],
     async replace() {
       throw new Error('not used')
     },
-    async exportSql() {
-      throw new Error('not used')
+    async exportSql(options, progress) {
+      service.exports.push(options)
+      service.timeline.push(`export:${options.schema}`)
+      const failure = service.failures.get(options.schema)
+      if (failure) throw new Error(failure)
+      const objects = service.objects.get(options.schema) ?? []
+      progress?.({
+        phase: 'list',
+        current: 0,
+        total: objects.length,
+        message: describeObjectCounts(objects.map((o) => o.type)),
+        done: false,
+        detail: { objects: objects.length, objectsDone: 0 }
+      })
+      const rows = options.includeData ? objects.reduce((sum, o) => sum + (o.rows ?? 0), 0) : 0
+      return {
+        path: join(dir, `${options.schema}-${options.label ?? ''}.sql`),
+        sizeBytes: 1024,
+        objects: Math.max(1, objects.length),
+        rows,
+        durationMs: 1
+      }
     },
     async verify(path) {
       service.verified.push(path)

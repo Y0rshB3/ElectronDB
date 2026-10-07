@@ -92,3 +92,27 @@ describe('restore steps in the job form', () => {
     expect(newRestoreTask([tasks[0]], conns, blocked).connectionId).toBe('')
   })
 })
+
+describe('backup step format', () => {
+  it('stores format only for .sql backup steps (.nb3 jobs stay unchanged)', () => {
+    const nb3 = { ...newTask('backupschema', 'staging', 'auth'), id: 'b1', format: 'nb3' as const }
+    const sql = { ...newTask('backupschema', 'staging', 'crm'), id: 'b2', format: 'sql' as const }
+    const query = { ...newTask('runquery', 'staging', 'crm'), id: 'q1', sql: 'SELECT 1' }
+    const input = buildJobInput({ ...emptyDraft(), name: 'Formatos', tasks: [nb3, sql, query] })
+    expect('format' in input.tasks[0]).toBe(false)
+    expect(input.tasks[1].format).toBe('sql')
+    expect('format' in input.tasks[2]).toBe(false)
+  })
+
+  it('refuses restoring a .sql backup step, like main does', () => {
+    const [backup, restore] = stagingToLocal()
+    const draft = {
+      ...emptyDraft(),
+      name: 'Sql',
+      tasks: [{ ...backup, format: 'sql' as const }, restore]
+    }
+    expect(validateDraft(draft, lookup).join(' ')).toMatch(
+      /una copia \.sql; las restauraciones automáticas necesitan una copia \.nb3/
+    )
+  })
+})

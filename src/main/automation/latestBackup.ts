@@ -60,6 +60,8 @@ export async function findLatestJobBackup(
     const job = ctx.jobs.get(run.jobId)
     for (const task of [...run.tasks].reverse()) {
       if (task.status !== 'success' || !task.outputPath) continue
+      // Steps with «Formato: .sql» write plain dumps a restore cannot read.
+      if (task.format === 'sql' || !task.outputPath.toLowerCase().endsWith('.nb3')) continue
       const facts = backupFacts(task, job)
       if (!facts || !facts.includeData) continue
       if (facts.connectionId !== connectionId || facts.schema !== schema) continue

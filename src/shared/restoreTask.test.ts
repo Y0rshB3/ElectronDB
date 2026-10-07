@@ -156,4 +156,13 @@ describe('restore task rules', () => {
     const r = { ...restore(), includeData: false }
     expect(restoreTaskProblem(r, [struct, r], lookup, 'paso 2')).toBeNull()
   })
+
+  it('refuses restoring a backup step written as .sql (restores need .nb3)', () => {
+    const sql: JobTask = { ...backup, format: 'sql' }
+    const r = restore()
+    expect(restoreTaskProblem(r, [sql, r], lookup, 'paso 2')).toBe(
+      'El paso 2 restaura «Backup auth», una copia .sql; las restauraciones automáticas necesitan una copia .nb3. Cambia el formato del paso de copia a .nb3.'
+    )
+    expect(restoreTaskProblem(r, [{ ...backup, format: 'nb3' }, r], lookup, 'paso 2')).toBeNull()
+  })
 })

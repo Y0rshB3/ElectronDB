@@ -33,6 +33,8 @@ export function validateJobInput(
     if (task.type === 'backupschema' && !task.schema?.trim()) {
       throw new Error(`El ${label} necesita un esquema para la copia de seguridad.`)
     }
+    if (task.format !== undefined && task.format !== 'nb3' && task.format !== 'sql')
+      throw new Error(`El ${label} tiene un formato de copia desconocido (usa .nb3 o .sql).`)
     if (task.type === 'runquery' && !task.sql?.trim())
       throw new Error(`El ${label} necesita al menos una sentencia SQL.`)
     const connection = lookup(task.connectionId)

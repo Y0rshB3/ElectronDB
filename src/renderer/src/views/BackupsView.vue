@@ -238,6 +238,14 @@ function newBackup(): void {
   ui.openBackupDialog(connectionId.value, schemaFilter.value ?? selected.value?.schema ?? null)
 }
 
+/** «Exportar a .sql…»: the same dialog on the .sql format (dumps for other managers). */
+function exportSql(): void {
+  if (!connectionId.value) return
+  ui.openBackupDialog(connectionId.value, schemaFilter.value ?? selected.value?.schema ?? null, {
+    format: 'sql'
+  })
+}
+
 function restore(): void {
   if (selected.value) ui.openRestoreDialog(selected.value, connectionId.value)
 }
@@ -341,6 +349,16 @@ watch(connectionId, () => {
         data-test="backups-new"
         @click="newBackup"
         >Nueva copia</v-btn
+      >
+      <v-btn
+        size="small"
+        prepend-icon="mdi-file-export-outline"
+        variant="tonal"
+        :disabled="!connectionId"
+        title="Archivo .sql que el cliente mysql y otros gestores pueden importar"
+        data-test="backups-export-sql"
+        @click="exportSql"
+        >Exportar a .sql…</v-btn
       >
       <span class="nd-viewbar__sep" aria-hidden="true" />
       <v-btn

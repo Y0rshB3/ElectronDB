@@ -159,8 +159,11 @@ export function buildJobInput(draft: JobDraft): JobInput {
         schema: task.schema,
         referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
       }
-      if (task.type === 'backupschema') out.includeData = task.includeData !== false
-      else if (task.type === 'restoreschema') {
+      if (task.type === 'backupschema') {
+        out.includeData = task.includeData !== false
+        // Only .sql is stored: jobs with .nb3 steps stay byte-identical.
+        if (task.format === 'sql') out.format = 'sql'
+      } else if (task.type === 'restoreschema') {
         out.schema = task.schema.trim()
         if (task.restoreSource) out.restoreSource = { ...task.restoreSource }
         out.safetyBackup = task.safetyBackup !== false

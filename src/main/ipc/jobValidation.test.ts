@@ -33,6 +33,17 @@ const job = (tasks: JobTask[], enabled = true): JobInput => ({
 })
 
 describe('validateJobInput (jobs:save)', () => {
+  it('accepts a .sql backup step but refuses restoring it, and unknown formats', () => {
+    const sql: JobTask = { ...backup, format: 'sql' }
+    expect(() => validateJobInput(job([sql]), lookup)).not.toThrow()
+    expect(() => validateJobInput(job([sql, restore('local')]), lookup)).toThrow(
+      /una copia \.sql; las restauraciones automáticas necesitan una copia \.nb3/
+    )
+    expect(() => validateJobInput(job([{ ...backup, format: 'zip' as never }]), lookup)).toThrow(
+      /formato de copia desconocido/
+    )
+  })
+
   it('accepts a «Staging -> Local» job with a restore step', () => {
     expect(() => validateJobInput(job([backup, restore('local')]), lookup)).not.toThrow()
   })

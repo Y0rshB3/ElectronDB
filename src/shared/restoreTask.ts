@@ -28,6 +28,19 @@ export function systemSchemaRefusal(schema: string): string {
 
 type Lookup = (id: string) => ConnectionConfig | null | undefined
 
+/**
+ * A .sql copy (backup step with «Formato: .sql») is for other managers: restore
+ * steps and «Restaurar todo» only read .nb3 copies.
+ */
+export const SQL_COPY_NOT_RESTORABLE =
+  'Es una copia en formato .sql: las restauraciones automáticas y «Restaurar todo» solo usan copias .nb3. Para llevarla a una base de datos usa «Importar…» › Archivo .sql.'
+
+/** Why a restore step cannot use the backup step `ref` (format .sql), or null. */
+export function sqlCopyRefusal(label: string, ref: JobTask): string | null {
+  if (ref.type !== 'backupschema' || ref.format !== 'sql') return null
+  return `El ${label} restaura «${ref.referenceName || ref.schema}», una copia .sql; las restauraciones automáticas necesitan una copia .nb3. Cambia el formato del paso de copia a .nb3.`
+}
+
 export function restoreProductionRefusal(stepName: string, connectionName: string): string {
   return (
     `El paso «${stepName}» restaura sobre «${connectionName}», una conexión de producción. ` +
@@ -113,6 +126,8 @@ export function restoreTaskProblem(
       return `El ${label} restaura la copia de un paso que no existe; elige un paso de copia de seguridad anterior.`
     if (tasks[refIndex].type !== 'backupschema')
       return `El ${label} solo puede restaurar la copia de un paso de tipo «Copia de seguridad».`
+    const sqlProblem = sqlCopyRefusal(label, tasks[refIndex])
+    if (sqlProblem) return sqlProblem
     if (index >= 0 && refIndex >= index)
       return `El ${label} debe ir después del paso de copia que restaura («${tasks[refIndex].referenceName || `paso ${refIndex + 1}`}»).`
     // A structure-only copy is fine when the step itself restores only the structure.

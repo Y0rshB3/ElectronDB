@@ -76,7 +76,13 @@ export const useUiStore = defineStore('ui', () => {
     open: false,
     connectionId: null
   })
-  const backupDialog = ref<{ open: boolean; connectionId: string | null; schema: string | null }>({
+  const backupDialog = ref<{
+    open: boolean
+    connectionId: string | null
+    schema: string | null
+    /** «Exportar a .sql…» opens the dialog on the .sql format; absent = .nb3. */
+    format?: 'nb3' | 'sql'
+  }>({
     open: false,
     connectionId: null,
     schema: null
@@ -100,8 +106,12 @@ export const useUiStore = defineStore('ui', () => {
   function openNewDatabaseDialog(connectionId: string): void {
     newDatabaseDialog.value = { open: true, connectionId }
   }
-  function openBackupDialog(connectionId: string, schema: string | null = null): void {
-    backupDialog.value = { open: true, connectionId, schema }
+  function openBackupDialog(
+    connectionId: string,
+    schema: string | null = null,
+    options: { format?: 'nb3' | 'sql' } = {}
+  ): void {
+    backupDialog.value = { open: true, connectionId, schema, format: options.format ?? 'nb3' }
   }
   function openRestoreDialog(
     backup: BackupFile,

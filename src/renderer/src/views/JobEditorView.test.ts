@@ -264,6 +264,22 @@ describe('JobEditorView', () => {
     expect(input.tasks[1]).toMatchObject({ type: 'restoreschema', includeData: false })
   })
 
+  it('a backup step offers «Formato: .nb3 | .sql» and saves .sql with its hint', async () => {
+    const { w } = await mountEditor('job-1')
+    const toggle = w.get('[data-test="task-format"]')
+    expect(toggle.get('[data-test="task-format-nb3"]').classes()).toContain('v-btn--active')
+    expect(w.find('[data-test="task-format-hint"]').exists()).toBe(false)
+    await toggle.get('[data-test="task-format-sql"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="task-format-hint"]').text()).toContain(
+      'Las restauraciones automáticas necesitan .nb3'
+    )
+    await w.get('[data-test="job-save"]').trigger('click')
+    await settle()
+    const [[input]] = calls(invoke, 'jobs:save') as [[JobInput]]
+    expect(input.tasks[0]).toMatchObject({ type: 'backupschema', format: 'sql' })
+  })
+
   it('asks for confirmation before running SQL on a production connection', async () => {
     invoke = mockVortaq({
       'connections:list': () => [

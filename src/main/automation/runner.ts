@@ -18,7 +18,12 @@ import {
   type SafetyCopy,
   type StepInfo
 } from '@shared/jobLog'
-import { restoreSourceOf, restoreTargetSchema, restoreTaskProblem } from '@shared/restoreTask'
+import {
+  restoreSourceOf,
+  restoreTargetSchema,
+  restoreTaskProblem,
+  sqlCopyRefusal
+} from '@shared/restoreTask'
 import { environmentPhrase } from '@shared/typedConfirm'
 import type {
   BackupCreateResult,
@@ -474,8 +479,30 @@ class RunExecution {
       )
   }
 
-  private async runBackup(task: JobTask, index: number): Promise<BackupCreateResult> {
+  private async runBackup(
+    task: JobTask,
+    index: number
+  ): Promise<Pick<BackupCreateResult, 'path' | 'objects' | 'rows' | 'sizeBytes'>> {
     requireConnectionName(this.ctx, task)
+    const onProgress = (event: BackupProgress): void => {
+      this.logBackupEvent(event)
+      this.emitProgress(index, task, event)
+    }
+    if (task.format === 'sql') {
+      // Plain .sql for other managers (restore steps refuse it, see restoreTask.ts).
+      return this.deps.backups.exportSql(
+        {
+          connectionId: task.connectionId,
+          schema: task.schema,
+          includeStructure: true,
+          includeData: task.includeData ?? true,
+          includeCreateDatabase: false,
+          label: jobNameSlug(this.job.name)
+        },
+        onProgress,
+        this.signal
+      )
+    }
     return this.deps.backups.create(
       {
         connectionId: task.connectionId,
@@ -483,10 +510,7 @@ class RunExecution {
         includeData: task.includeData ?? true,
         label: jobNameSlug(this.job.name)
       },
-      (event) => {
-        this.logBackupEvent(event)
-        this.emitProgress(index, task, event)
-      },
+      onProgress,
       this.signal
     )
   }
@@ -503,6 +527,9 @@ class RunExecution {
       const refRun = this.run.tasks.find((t) => t.taskId === source.taskId)
       if (!ref || !refRun)
         throw new Error(`El paso de origen de "${task.referenceName}" no existe.`)
+      // Jobs saved before the rule (or edited by hand): never read a .sql as an .nb3.
+      const sqlProblem = sqlCopyRefusal(`paso «${task.referenceName}»`, ref)
+      if (sqlProblem) throw new Error(sqlProblem)
       if (refRun.status !== 'success' || !refRun.outputPath) {
         throw new Error(
           `El paso de origen «${ref.referenceName}» no generó ninguna copia en esta ejecución; no se restaura nada.`
@@ -688,7 +715,8 @@ export function startJobWith(
       type: t.type,
       connectionId: t.connectionId,
       schema: t.type === 'restoreschema' ? restoreTargetSchema(t, job.tasks) : t.schema,
-      ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {})
+      ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {}),
+      ...(t.type === 'backupschema' && t.format === 'sql' ? { format: 'sql' as const } : {})
     })),
     logPath: runLogPath(ctx, runId),
     pid: process.pid

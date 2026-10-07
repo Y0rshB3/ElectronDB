@@ -84,7 +84,7 @@ function sourceItems(index: number): { title: string; value: string }[] {
     t.type === 'backupschema'
       ? [
           {
-            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}`,
+            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}${t.format === 'sql' ? ' · .sql (no restaurable)' : ''}`,
             value: `task:${t.id}`
           }
         ]
@@ -317,15 +317,36 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
               @update:model-value="update(index, { schema: $event ?? '' })"
             />
           </div>
-          <v-checkbox
-            v-if="task.type === 'backupschema'"
-            :model-value="task.includeData !== false"
-            label="Incluir datos (no solo estructura)"
-            density="compact"
-            hide-details
-            class="task-card__check"
-            @update:model-value="update(index, { includeData: !!$event })"
-          />
+          <template v-if="task.type === 'backupschema'">
+            <v-checkbox
+              :model-value="task.includeData !== false"
+              label="Incluir datos (no solo estructura)"
+              density="compact"
+              hide-details
+              class="task-card__check"
+              @update:model-value="update(index, { includeData: !!$event })"
+            />
+            <div class="task-card__format">
+              <span class="task-card__format-label">Formato</span>
+              <v-btn-toggle
+                :model-value="task.format === 'sql' ? 'sql' : 'nb3'"
+                mandatory
+                density="compact"
+                variant="outlined"
+                divided
+                data-test="task-format"
+                @update:model-value="
+                  update(index, { format: $event === 'sql' ? 'sql' : undefined })
+                "
+              >
+                <v-btn value="nb3" size="small" data-test="task-format-nb3">.nb3</v-btn>
+                <v-btn value="sql" size="small" data-test="task-format-sql">.sql</v-btn>
+              </v-btn-toggle>
+            </div>
+            <p v-if="task.format === 'sql'" class="task-card__hint" data-test="task-format-hint">
+              Para llevar la copia a otros gestores. Las restauraciones automáticas necesitan .nb3.
+            </p>
+          </template>
           <template v-else-if="task.type === 'restoreschema'">
             <ReplaceContentToggle
               :model-value="task.includeData !== false"
@@ -490,6 +511,16 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
 .task-card__check {
   margin-top: 6px;
   margin-left: -8px;
+}
+.task-card__format {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.task-card__format-label {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
 }
 .task-card__content {
   margin-top: 10px;

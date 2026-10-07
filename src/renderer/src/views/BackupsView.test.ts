@@ -69,6 +69,18 @@ describe('BackupsView', () => {
     return row
   }
 
+  it('«Exportar a .sql…» opens the backup dialog on the .sql format', async () => {
+    const w = await mountView()
+    await w.get('[data-test="backups-export-sql"]').trigger('click')
+    expect(useUiStore().backupDialog).toMatchObject({
+      open: true,
+      connectionId: 'c1',
+      format: 'sql'
+    })
+    await w.get('[data-test="backups-new"]').trigger('click')
+    expect(useUiStore().backupDialog.format).toBe('nb3')
+  })
+
   it('disables Eliminar for Navicat backups and enables it for Vortaq ones', async () => {
     const w = await mountView()
     expect(w.findAll('tbody tr')).toHaveLength(2)
