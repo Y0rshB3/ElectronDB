@@ -49,6 +49,8 @@ import type { SessionFactory } from '../mysql/types'
 import { newId, nowIso } from '../storage/ids'
 import { findLatestJobBackup } from './latestBackup'
 import { RunLog } from './runLog'
+import { MISSING_JOB_PASSWORD, jobBackupPassword } from './backupKeys'
+import { pickBackupPassword } from '../backup/passwords'
 
 /** Collaborators the runner needs; resolved lazily by the automation service. */
 export interface RunnerDeps {
@@ -76,6 +78,11 @@ export interface RunOptions {
   allowProductionRestore?: boolean
   /** continueOnError of the objects inside each restore (defaults to the job's). */
   restoreContinueOnError?: boolean
+  /**
+   * «Restaurar todo»: password the user typed for encrypted .vqb copies the
+   * job's stored password does not open. Kept in memory only.
+   */
+  backupPassword?: string | null
 }
 
 export interface StartedJob {
@@ -485,6 +492,12 @@ class RunExecution {
     index: number
   ): Promise<Pick<BackupCreateResult, 'path' | 'objects' | 'rows' | 'sizeBytes'>> {
     requireConnectionName(this.ctx, task)
+    let password: string | null = null
+    if (task.format === 'vqb' && task.encrypt) {
+      password = jobBackupPassword(this.ctx, this.job.id)
+      if (!password) throw new Error(MISSING_JOB_PASSWORD)
+      this.say('  Copia .vqb cifrada con la contraseña de la tarea')
+    }
     const onProgress = (event: BackupProgress): void => {
       this.logBackupEvent(event)
       this.emitProgress(index, task, event)
@@ -509,20 +522,31 @@ class RunExecution {
         connectionId: task.connectionId,
         schema: task.schema,
         includeData: task.includeData ?? true,
-        label: jobNameSlug(this.job.name)
+        label: jobNameSlug(this.job.name),
+        // Absent = .nb3: jobs saved before .vqb keep writing the format they always did.
+        ...(task.format === 'vqb' ? { format: 'vqb' as const } : {}),
+        ...(password ? { password } : {})
       },
       onProgress,
       this.signal
     )
   }
 
-  /** Finds the .nb3 a restore step restores and the schema it must contain. */
-  private async restoreSource(
-    task: JobTask
-  ): Promise<{ path: string; schema: string; connectionId: string | null }> {
+  /**
+   * Finds the backup (.vqb or .nb3) a restore step restores, the schema it
+   * must contain and the passwords that may open it (encrypted .vqb).
+   */
+  private async restoreSource(task: JobTask): Promise<{
+    path: string
+    schema: string
+    connectionId: string | null
+    passwords: (string | null)[]
+  }> {
     const source = task.restoreSource
     if (!source) throw new Error(`El paso "${task.referenceName}" no indica qué copia restaurar.`)
-    if (source.kind === 'file') return source
+    const ownKey = jobBackupPassword(this.ctx, this.job.id)
+    if (source.kind === 'file')
+      return { ...source, passwords: [this.options.backupPassword ?? null, ownKey] }
     if (source.kind === 'task') {
       const ref = this.job.tasks.find((t) => t.id === source.taskId)
       const refRun = this.run.tasks.find((t) => t.taskId === source.taskId)
@@ -536,7 +560,12 @@ class RunExecution {
           `El paso de origen «${ref.referenceName}» no generó ninguna copia en esta ejecución; no se restaura nada.`
         )
       }
-      return { path: refRun.outputPath, schema: ref.schema, connectionId: ref.connectionId }
+      return {
+        path: refRun.outputPath,
+        schema: ref.schema,
+        connectionId: ref.connectionId,
+        passwords: [ownKey]
+      }
     }
     const name = connectionName(this.ctx, source.connectionId)
     // Only complete copies (all objects, with data) made by a job step of that very
@@ -547,7 +576,13 @@ class RunExecution {
         `No hay ninguna copia completa (con datos) de «${source.schema}» de ${name} hecha por una tarea de Vortaq. Ejecuta antes una tarea que la copie con «Incluir datos»; no se restaura nada.`
       )
     this.say(`  Copia más reciente con datos: tarea «${latest.jobName}», ${latest.fileName}`)
-    return { path: latest.path, schema: source.schema, connectionId: source.connectionId }
+    return {
+      path: latest.path,
+      schema: source.schema,
+      connectionId: source.connectionId,
+      // A copy of another job is opened with that job's password.
+      passwords: [jobBackupPassword(this.ctx, latest.jobId), ownKey]
+    }
   }
 
   private async runRestore(
@@ -576,6 +611,9 @@ class RunExecution {
       )
     }
     const source = await this.restoreSource(task)
+    // An encrypted .vqb: pick the password before anything is touched (never logged).
+    const password = await pickBackupPassword(source.path, source.passwords)
+    if (password) this.say('  Copia .vqb cifrada: se abre con la contraseña guardada')
     return replaceSchemaFromBackup(
       {
         connections: this.ctx.connections,
@@ -591,7 +629,8 @@ class RunExecution {
         safetyBackup: task.safetyBackup !== false,
         includeData: task.includeData !== false,
         continueOnError: this.options.restoreContinueOnError ?? this.job.continueOnError,
-        confirmProduction: this.options.allowProductionRestore === true
+        confirmProduction: this.options.allowProductionRestore === true,
+        ...(password ? { password } : {})
       },
       {
         line: (body) => this.say(body),
@@ -717,7 +756,10 @@ export function startJobWith(
       connectionId: t.connectionId,
       schema: t.type === 'restoreschema' ? restoreTargetSchema(t, job.tasks) : t.schema,
       ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {}),
-      ...(t.type === 'backupschema' && t.format === 'sql' ? { format: 'sql' as const } : {})
+      ...(t.type === 'backupschema' && (t.format === 'sql' || t.format === 'vqb')
+        ? { format: t.format }
+        : {}),
+      ...(t.type === 'backupschema' && t.format === 'vqb' && t.encrypt ? { encrypted: true } : {})
     })),
     logPath: runLogPath(ctx, runId),
     pid: process.pid

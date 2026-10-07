@@ -13,8 +13,11 @@ import {
   assertProductionWriteConfirmed,
   typedConfirmEnvironments
 } from './productionGuard'
-import { assertRestoreStepsAllowed, validateJobInput } from './jobValidation'
+import { assertJobPassword, assertRestoreStepsAllowed, validateJobInput } from './jobValidation'
 import { handle } from './typed'
+import { BACKUP_KEY, hasJobBackupPassword, setJobBackupPassword } from '../automation/backupKeys'
+import { checkBackupPassword } from '../backup/create'
+import type { Job } from '@shared/types'
 
 export { assertRestoreStepsAllowed, validateJobInput } from './jobValidation'
 
@@ -27,17 +30,36 @@ export function registerJobsHandlers(ctx: AppContext): void {
   const inspector = () =>
     createRollbackInspector(ctx, async () => (await import('../db/manager')).getSessionFactory(ctx))
 
-  handle('jobs:list', () => ctx.jobs.list())
-  handle('jobs:get', (id) => ctx.jobs.get(id))
+  // Whether a backup password is stored: the password itself never leaves main.
+  const withKeyFlag = (job: Job): Job => ({
+    ...job,
+    hasBackupPassword: hasJobBackupPassword(ctx, job.id)
+  })
+
+  handle('jobs:list', () => ctx.jobs.list().map(withKeyFlag))
+  handle('jobs:get', (id) => {
+    const job = ctx.jobs.get(id)
+    return job ? withKeyFlag(job) : null
+  })
   handle('jobs:save', async (input, options) => {
     validateJobInput(input, lookup, typedConfirmEnvironments(ctx))
     assertJobSaveAllowed(ctx, input, input.id ? ctx.jobs.get(input.id) : null, options)
-    const job = ctx.jobs.save({ ...input, name: input.name.trim() })
+    assertJobPassword(input, !!input.id && hasJobBackupPassword(ctx, input.id))
+    const password = input.backupPassword
+    if (typeof password === 'string' && password !== '') checkBackupPassword(password)
+    // Neither the password nor the flag is ever stored in jobs.json.
+    const { backupPassword: _password, ...rest } = input
+    void _password
+    delete (rest as { hasBackupPassword?: boolean }).hasBackupPassword
+    const job = ctx.jobs.save({ ...rest, name: input.name.trim() })
+    if (typeof password === 'string' && password !== '') setJobBackupPassword(ctx, job.id, password)
+    else if (password === null) ctx.credentials.set(BACKUP_KEY, job.id, null)
     await automation.resync?.(job.id)
-    return job
+    return withKeyFlag(job)
   })
   handle('jobs:delete', async (id) => {
     ctx.jobs.delete(id)
+    ctx.credentials.set(BACKUP_KEY, id, null)
     // resync of a missing job drops its timer and removes its launch agent
     await automation.resync?.(id)
   })
@@ -63,8 +85,8 @@ export function registerJobsHandlers(ctx: AppContext): void {
       return NO_LOG
     }
   })
-  handle('jobs:rollbackPlan', (source, targetConnectionId) =>
-    buildAnyRollbackPlan(ctx, source, targetConnectionId, inspector())
+  handle('jobs:rollbackPlan', (source, targetConnectionId, password) =>
+    buildAnyRollbackPlan(ctx, source, targetConnectionId, inspector(), password ?? null)
   )
   handle('jobs:rollback', async (request, options) => {
     if (!request || typeof request !== 'object') throw new Error('Restauración no válida.')
@@ -91,7 +113,8 @@ export function registerJobsHandlers(ctx: AppContext): void {
           }
         : request.runId,
       target.id,
-      inspector()
+      inspector(),
+      request.password ?? null
     )
     const prepared = prepareRollback(
       ctx,

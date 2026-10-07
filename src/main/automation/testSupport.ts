@@ -18,6 +18,7 @@ import type {
   RestoreOptions
 } from '@shared/types'
 import type { BackupService } from '../backup/index'
+import { CredentialStore, plainCodec } from '../credentials/store'
 import type { AppContext } from '../context'
 import type { Logger } from '../log'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
@@ -45,8 +46,8 @@ export function makeContext(options: { headless?: boolean } = {}): TestContext {
     jobs: new JobsRepo(dir),
     runs: new RunsRepo(dir),
     settings: new SettingsRepo(dir, dir),
-    // The automation module never touches secrets; a placeholder is enough.
-    credentials: {} as AppContext['credentials'],
+    // Only the jobs' backup passwords (encrypted .vqb steps) are read from it.
+    credentials: new CredentialStore(dir, plainCodec, 'plain'),
     headless: options.headless ?? false,
     emit: (channel, payload) => {
       events.push({ channel, payload })

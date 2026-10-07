@@ -872,7 +872,7 @@ describe('file-based rollback (packages of the backups list)', () => {
     ).rejects.toThrow(/ninguna conexión/)
     await expect(
       buildAnyRollbackPlan(t.ctx, files([join(t.dir, 'auth', 'notes.txt')]), localId, inspector)
-    ).rejects.toThrow(/no es una copia de seguridad \.nb3/)
+    ).rejects.toThrow(/no es una copia de seguridad \(\.vqb o \.nb3\)/)
     await expect(
       buildAnyRollbackPlan(t.ctx, files([join(t.dir, 'a', 'b', 'c.nb3')]), localId, inspector)
     ).rejects.toThrow(/ninguna conexión/)

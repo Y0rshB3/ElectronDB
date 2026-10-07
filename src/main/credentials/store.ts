@@ -34,8 +34,10 @@ export type ConnectionSecretKind = (typeof SECRET_KINDS)[number]
 /**
  * Every slot kind. 'ai' holds AI provider keys, stored as `ai:<providerId>`:
  * they do not belong to a connection, so deleteAll never touches them.
+ * 'backupKey' holds the password of a job's encrypted .vqb backups, stored as
+ * `backupKey:<jobId>` and removed with the job.
  */
-export type SecretKind = ConnectionSecretKind | 'ai'
+export type SecretKind = ConnectionSecretKind | 'ai' | 'backupKey'
 
 /** Generic database password slot; the 'mysql' prefix predates multi-engine (D10). */
 export const DB_PASSWORD: ConnectionSecretKind = 'mysql'

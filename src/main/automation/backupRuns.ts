@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import type { BackupRunRef, Job, JobRun, JobTaskRun, JobTaskType } from '@shared/types'
 import type { AppContext } from '../context'
+import { isBackupFileName } from '../backup/naming'
 
 /**
  * Which automation run wrote each backup file, from the run history alone
@@ -16,7 +17,7 @@ function typeOf(task: JobTaskRun, job: Job | null): JobTaskType | undefined {
   if (task.type) return task.type
   const def = job?.tasks.find((t) => t.id === task.taskId)
   if (def) return def.type
-  return task.outputPath?.toLowerCase().endsWith('.nb3') ? 'backupschema' : undefined
+  return task.outputPath && isBackupFileName(task.outputPath) ? 'backupschema' : undefined
 }
 
 /** Backup steps of a run that produced a file (what a rollback can restore). */

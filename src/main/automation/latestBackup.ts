@@ -2,6 +2,7 @@ import { stat } from 'node:fs/promises'
 import { fileNameOf } from '@shared/jobLog'
 import type { Job, JobRun, JobTaskRun } from '@shared/types'
 import type { AppContext } from '../context'
+import { isBackupFileName } from '../backup/naming'
 
 /**
  * «Última copia en disco» of a restore step: the newest COMPLETE backup of a
@@ -18,6 +19,7 @@ export interface LatestBackup {
   path: string
   fileName: string
   runId: string
+  jobId: string
   jobName: string
   startedAt: string
 }
@@ -61,7 +63,7 @@ export async function findLatestJobBackup(
     for (const task of [...run.tasks].reverse()) {
       if (task.status !== 'success' || !task.outputPath) continue
       // Steps with «Formato: .sql» write plain dumps a restore cannot read.
-      if (task.format === 'sql' || !task.outputPath.toLowerCase().endsWith('.nb3')) continue
+      if (task.format === 'sql' || !isBackupFileName(task.outputPath)) continue
       const facts = backupFacts(task, job)
       if (!facts || !facts.includeData) continue
       if (facts.connectionId !== connectionId || facts.schema !== schema) continue
@@ -70,6 +72,7 @@ export async function findLatestJobBackup(
         path: task.outputPath,
         fileName: fileNameOf(task.outputPath),
         runId: run.id,
+        jobId: run.jobId,
         jobName: run.jobName,
         startedAt: run.startedAt
       }

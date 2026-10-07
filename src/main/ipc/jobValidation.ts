@@ -33,8 +33,15 @@ export function validateJobInput(
     if (task.type === 'backupschema' && !task.schema?.trim()) {
       throw new Error(`El ${label} necesita un esquema para la copia de seguridad.`)
     }
-    if (task.format !== undefined && task.format !== 'nb3' && task.format !== 'sql')
-      throw new Error(`El ${label} tiene un formato de copia desconocido (usa .nb3 o .sql).`)
+    if (
+      task.format !== undefined &&
+      task.format !== 'vqb' &&
+      task.format !== 'nb3' &&
+      task.format !== 'sql'
+    )
+      throw new Error(`El ${label} tiene un formato de copia desconocido (usa .vqb, .nb3 o .sql).`)
+    if (task.encrypt && (task.type !== 'backupschema' || task.format !== 'vqb'))
+      throw new Error(`El ${label} solo puede cifrarse si es una copia en formato .vqb.`)
     if (task.type === 'runquery' && !task.sql?.trim())
       throw new Error(`El ${label} necesita al menos una sentencia SQL.`)
     const connection = lookup(task.connectionId)
@@ -53,6 +60,21 @@ export function validateJobInput(
     if (error) throw new Error(error)
     if (schedule.launchAgent) cronToCalendarIntervals(schedule.cron)
   }
+}
+
+export const JOB_PASSWORD_REQUIRED =
+  'La tarea cifra sus copias .vqb: escribe la contraseña de cifrado (al menos 8 caracteres).'
+
+/**
+ * A job with encrypted steps needs a backup password: the one sent with the
+ * input, or the one already stored (`hasStored`) when the input keeps it.
+ */
+export function assertJobPassword(input: JobInput, hasStored: boolean): void {
+  const encrypts = (input.tasks ?? []).some((t) => t?.type === 'backupschema' && t.encrypt)
+  if (!encrypts) return
+  const given = typeof input.backupPassword === 'string' && input.backupPassword !== ''
+  const kept = input.backupPassword === undefined && hasStored
+  if (!given && !kept) throw new Error(JOB_PASSWORD_REQUIRED)
 }
 
 /**

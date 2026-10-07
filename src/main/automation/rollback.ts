@@ -18,6 +18,12 @@ import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { readBackupMeta } from '../backup/index'
 import { isBackupFileName } from '../backup/naming'
 import { ENCRYPTED_MESSAGE } from '../backup/nb3/reader'
+import {
+  isPasswordError,
+  PASSWORD_REQUIRED_MESSAGE,
+  WRONG_PASSWORD_MESSAGE
+} from '../backup/vqb/errors'
+import { jobBackupPassword } from './backupKeys'
 import type { AppContext } from '../context'
 import { describeError } from '../mysql/errors'
 import type { SessionFactory } from '../mysql/types'
@@ -37,13 +43,19 @@ export { restorableTasks } from './backupRuns'
 
 /** What the plan needs from disk and from the target server; injectable for tests. */
 export interface RollbackInspector {
-  readMeta(path: string): Promise<BackupMeta>
+  /** Manifest; an encrypted .vqb without `password` answers its locked header meta. */
+  readMeta(path: string, password?: string | null): Promise<BackupMeta>
   fileSize(path: string): Promise<number | null>
   /** Databases of the target connection. */
   targetSchemas(connectionId: string): Promise<string[]>
 }
 
-type RollbackContext = Pick<AppContext, 'runs' | 'jobs' | 'connections' | 'settings'>
+type RollbackContext = Pick<AppContext, 'runs' | 'jobs' | 'connections' | 'settings'> &
+  Partial<Pick<AppContext, 'credentials'>>
+
+/** Stored backup password of a job, when the context has a credential store. */
+const storedKey = (ctx: RollbackContext, jobId: string | null | undefined): string | null =>
+  ctx.credentials && jobId ? jobBackupPassword({ credentials: ctx.credentials }, jobId) : null
 
 /** Real disk and server access for rollback plans (manifests through the index cache). */
 export function createRollbackInspector(
@@ -51,7 +63,7 @@ export function createRollbackInspector(
   sessions: () => Promise<SessionFactory> | SessionFactory
 ): RollbackInspector {
   return {
-    readMeta: (path) => readBackupMeta(ctx.userDataPath, path),
+    readMeta: (path, password) => readBackupMeta(ctx.userDataPath, path, password),
     fileSize: async (path) => (await stat(path)).size,
     targetSchemas: async (connectionId) => {
       const session = await (await sessions()).acquire(connectionId, null)
@@ -92,6 +104,8 @@ interface PlanCandidate {
   fallbackSchema: string | null
   sourceConnectionId: string | null
   structureOnly: boolean
+  /** Passwords that may open an encrypted .vqb (the one typed first, then stored ones). */
+  passwords: (string | null)[]
 }
 
 async function targetInfo(
@@ -129,14 +143,34 @@ async function planItem(
   let objects: number | null = null
   let rows: number | null = null
   let tables = 0
+  let encrypted = false
+  let locked = false
   // A .sql output of a backup step («Formato: .sql»): listed, never restored.
   if (!isBackupFileName(c.path)) {
     problem = SQL_COPY_NOT_RESTORABLE
     schema = schema || c.fallbackSchema || ''
   } else
     try {
-      const meta = await inspector.readMeta(c.path)
-      if (meta.encryption && meta.encryption !== 'None') problem = ENCRYPTED_MESSAGE
+      let meta = await inspector.readMeta(c.path)
+      if (meta.format === 'vqb' && meta.encrypted) {
+        encrypted = true
+        locked = true
+        const tried = c.passwords.filter((p): p is string => !!p)
+        for (const password of new Set(tried)) {
+          try {
+            meta = await inspector.readMeta(c.path, password)
+            locked = false
+            break
+          } catch (err) {
+            if (!isPasswordError(err)) throw err
+          }
+        }
+        if (locked) problem = c.passwords[0] ? WRONG_PASSWORD_MESSAGE : PASSWORD_REQUIRED_MESSAGE
+      }
+      if (locked) {
+        /* names and counts stay unknown until the password opens it */
+      } else if (meta.format !== 'vqb' && meta.encryption && meta.encryption !== 'None')
+        problem = ENCRYPTED_MESSAGE
       else if (c.expected && meta.schema !== c.expected)
         problem = `El archivo contiene la base de datos «${meta.schema}», no «${c.expected}».`
       schema = meta.schema || schema
@@ -171,7 +205,8 @@ async function planItem(
     objects,
     rows,
     structureOnly: c.structureOnly,
-    warning
+    warning,
+    ...(encrypted ? { encrypted, locked } : {})
   }
 }
 
@@ -179,7 +214,8 @@ export async function buildRollbackPlan(
   ctx: RollbackContext,
   runId: string,
   targetConnectionId: string | null,
-  inspector: RollbackInspector
+  inspector: RollbackInspector,
+  password: string | null = null
 ): Promise<RollbackPlan> {
   const run = requireSourceRun(ctx, runId)
   const job = ctx.jobs.get(run.jobId)
@@ -201,7 +237,8 @@ export async function buildRollbackPlan(
           expected: t.schema ?? def?.schema ?? null,
           fallbackSchema: null,
           sourceConnectionId: t.connectionId ?? def?.connectionId ?? null,
-          structureOnly: (t.includeData ?? def?.includeData) === false
+          structureOnly: (t.includeData ?? def?.includeData) === false,
+          passwords: [password, storedKey(ctx, run.jobId)]
         },
         target,
         existing,
@@ -261,7 +298,7 @@ export function owningConnection(
   return null
 }
 
-/** Throws unless every path is a .nb3 inside a known backup folder; returns them resolved. */
+/** Throws unless every path is a .vqb/.nb3 inside a known backup folder; returns them resolved. */
 export function validateBackupPaths(
   ctx: Pick<AppContext, 'connections'>,
   source: Pick<RollbackFilesSource, 'backupPaths' | 'sourceConnectionId'>
@@ -276,7 +313,7 @@ export function validateBackupPaths(
       throw new Error('Ruta de copia de seguridad no válida.')
     const path = resolve(raw)
     if (!isBackupFileName(path))
-      throw new Error(`${basename(path)} no es una copia de seguridad .nb3.`)
+      throw new Error(`${basename(path)} no es una copia de seguridad (.vqb o .nb3).`)
     if (seen.has(path)) throw new Error(`La copia ${basename(path)} está repetida en la selección.`)
     seen.add(path)
     const owner = owningConnection(ctx, path, source.sourceConnectionId ?? null)
@@ -305,7 +342,8 @@ export async function buildFilesRollbackPlan(
   ctx: RollbackContext,
   source: RollbackFilesSource,
   targetConnectionId: string | null,
-  inspector: RollbackInspector
+  inspector: RollbackInspector,
+  password: string | null = null
 ): Promise<RollbackPlan> {
   const files = validateBackupPaths(ctx, source)
   const runs = backupRunIndex(ctx)
@@ -326,7 +364,8 @@ export async function buildFilesRollbackPlan(
           expected: null,
           fallbackSchema: f.schemaFolder ?? (basename(dirname(f.path)) || null),
           sourceConnectionId: f.connection.id,
-          structureOnly: ref ? !ref.includeData : false
+          structureOnly: ref ? !ref.includeData : false,
+          passwords: [password, storedKey(ctx, ref?.jobId)]
         },
         target,
         existing,
@@ -383,13 +422,15 @@ export function buildAnyRollbackPlan(
   ctx: RollbackContext,
   source: string | RollbackFilesSource,
   targetConnectionId: string | null,
-  inspector: RollbackInspector
+  inspector: RollbackInspector,
+  password: string | null = null
 ): Promise<RollbackPlan> {
+  const typed = typeof password === 'string' && password !== '' ? password : null
   if (typeof source === 'string')
-    return buildRollbackPlan(ctx, source, targetConnectionId, inspector)
+    return buildRollbackPlan(ctx, source, targetConnectionId, inspector, typed)
   if (!source || typeof source !== 'object' || source.source !== 'files')
     throw new Error('Restauración no válida.')
-  return buildFilesRollbackPlan(ctx, source, targetConnectionId, inspector)
+  return buildFilesRollbackPlan(ctx, source, targetConnectionId, inspector, typed)
 }
 
 export const isFilesRequest = (
@@ -490,7 +531,8 @@ export function prepareRollback(
       ...(plan.runId ? { rollbackOf: plan.runId } : {}),
       allowProductionRestore: guarded && confirmed,
       // Objects inside each database follow the source job's «Continuar en caso de error».
-      restoreContinueOnError: sourceJob?.continueOnError ?? false
+      restoreContinueOnError: sourceJob?.continueOnError ?? false,
+      ...(request.password ? { backupPassword: request.password } : {})
     }
   }
 }
