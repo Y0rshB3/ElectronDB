@@ -49,14 +49,14 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     ],
     tour: [
       {
-        target: 'toolbar-others',
+        target: 'toolbar-more',
         title: 'Tour de bienvenida',
-        text: 'Puedes repetir el recorrido por Vortaq cuando quieras desde Otros › Ver tour de bienvenida, o desde Ajustes.'
+        text: 'Puedes repetir el recorrido por Vortaq cuando quieras desde Más › Ver tour de bienvenida, o desde Ajustes.'
       },
       {
         target: 'toolbar-connection',
         title: 'Detección automática de Navicat',
-        text: 'En Conexión › Importar desde Navicat, Vortaq busca la carpeta de Navicat por ti y te pregunta si es la correcta antes de importar.'
+        text: 'En Conexión › Importar…, Vortaq busca la carpeta de Navicat por ti y te pregunta si es la correcta antes de importar.'
       }
     ]
   },
@@ -120,7 +120,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     date: '2026-10-06',
     highlights: [
       'Selector de conexión en las pestañas de consulta',
-      'Filtros de tabla al estilo Navicat',
+      'Filtros de tabla visuales, sin escribir SQL',
       'Selector de fecha y hora en la cuadrícula',
       'Columnas redimensionables',
       'Panel Texto para ver y editar valores largos'

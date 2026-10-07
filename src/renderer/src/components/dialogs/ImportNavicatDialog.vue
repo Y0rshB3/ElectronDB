@@ -32,8 +32,8 @@ const settingsStore = useSettingsStore()
 const connections = useConnectionsStore()
 const jobs = useJobsStore()
 const notify = useNotify()
-// Navicat's macOS folder and Keychain only exist on a Mac; elsewhere the folder
-// must be copied from one and passwords are typed by hand.
+// Navicat's macOS folder only exists on a Mac; elsewhere it must be copied
+// from one. Passwords are always typed by hand.
 const mac = isMac()
 const rootPlaceholder = mac
   ? '~/Library/Application Support/PremiumSoft CyberTech/Navicat CC'

@@ -386,7 +386,7 @@ function statementText(state: EditorState, tree: Tree, pos: number): string {
 }
 
 /**
- * Navicat-like completion: databases and tables while typing a bare word,
+ * Context-aware completion: databases and tables while typing a bare word,
  * tables after `db.`, columns after `table.`, `alias.` or `db.table.`, and
  * columns of tables already used in the current statement.
  */

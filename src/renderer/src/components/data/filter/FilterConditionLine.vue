@@ -274,8 +274,9 @@ const listText = computed(() => {
     <span
       v-if="kind && arity !== 'none' && arity !== 'sql'"
       class="fcond__type"
+      :title="`Tipo de valor: ${kind}`"
       data-test="filter-type-hint"
-      >[{{ kind }}]</span
+      >{{ kind }}</span
     >
     <button
       v-if="hasNext"
@@ -312,9 +313,14 @@ const listText = computed(() => {
   color: var(--nd-text-2);
 }
 .fcond__type {
-  margin-left: 4px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--nd-border);
+  border-radius: 999px;
   font-size: var(--nd-fs-xs);
+  line-height: 16px;
   color: var(--nd-text-muted);
+  white-space: nowrap;
 }
 .fmenu__check {
   margin-inline-end: 8px !important;

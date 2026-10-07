@@ -189,7 +189,7 @@ export function useWorkspace() {
 
   /**
    * Selects a group (Tablas, Vistas...) of the current schema in the tree and
-   * shows it in the Objects tab, like Navicat's main toolbar buttons.
+   * shows it in the Objects tab (the toolbar's Objetos menu).
    */
   async function showGroup(group: GroupKind): Promise<boolean> {
     const cid = currentConnectionId()

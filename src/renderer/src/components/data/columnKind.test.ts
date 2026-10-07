@@ -32,13 +32,13 @@ describe('valueHint', () => {
 })
 
 describe('typeLabel', () => {
-  it('names the value kind like Navicat', () => {
-    expect(typeLabel('INT UNSIGNED')).toBe('Número')
-    expect(typeLabel('varchar')).toBe('Texto')
-    expect(typeLabel('DATE')).toBe('Fecha')
-    expect(typeLabel('DATETIME')).toBe('Fecha y hora')
-    expect(typeLabel('TIME')).toBe('Hora')
-    expect(typeLabel('BLOB')).toBe('Binario')
+  it('names the value kind in lowercase for the filter chip', () => {
+    expect(typeLabel('INT UNSIGNED')).toBe('número')
+    expect(typeLabel('varchar')).toBe('texto')
+    expect(typeLabel('DATE')).toBe('fecha')
+    expect(typeLabel('DATETIME')).toBe('fecha y hora')
+    expect(typeLabel('TIME')).toBe('hora')
+    expect(typeLabel('BLOB')).toBe('binario')
     expect(typeLabel('')).toBe('')
   })
 })

@@ -32,13 +32,21 @@ const schemaContext = computed(() => {
 
 /*
  * Capabilities of the connection the toolbar acts on. Without a connection the
- * descriptor is MySQL's, so the dock looks exactly as it did before
- * multi-engine; modules an engine lacks are left out (Navicat does the same).
+ * descriptor is MySQL's; modules an engine lacks are left out of the dock and
+ * of the Objetos menu.
  */
 const caps = computed(() => {
   const id = ws.currentConnectionId()
   return descriptorOf(id ? connections.get(id) : undefined)?.capabilities ?? null
 })
+
+interface ToolbarMenuItem {
+  label: string
+  icon: string
+  action: () => unknown
+  /** Draws a divider above this entry (starts a new group inside the menu). */
+  dividerBefore?: boolean
+}
 
 interface ToolbarAction {
   key: string
@@ -49,7 +57,7 @@ interface ToolbarAction {
   separatorAfter?: boolean
   /** Primary action; when absent the button itself opens the menu. */
   action?: () => unknown
-  menu?: { label: string; icon: string; action: () => unknown }[]
+  menu?: ToolbarMenuItem[]
 }
 
 function requireSchema(fn: (connectionId: string, schema: string) => void): () => void {
@@ -62,6 +70,52 @@ function requireSchema(fn: (connectionId: string, schema: string) => void): () =
     fn(ctx.connectionId, ctx.schema)
   }
 }
+
+/** Objetos ▾: browse each object group, then create objects in the selected database. */
+const objectsMenu = computed<ToolbarMenuItem[]>(() => {
+  const routines = !!caps.value?.routines
+  const items: (ToolbarMenuItem | false)[] = [
+    { label: 'Tablas', icon: 'mdi-table', action: () => ws.showGroup('tables') },
+    { label: 'Vistas', icon: 'mdi-table-eye', action: () => ws.showGroup('views') },
+    routines && {
+      label: 'Funciones y procedimientos',
+      icon: 'mdi-function-variant',
+      action: () => ws.showGroup('functions')
+    },
+    !!caps.value?.events && {
+      label: 'Eventos',
+      icon: 'mdi-calendar-clock',
+      action: () => ws.showGroup('events')
+    },
+    {
+      label: 'Consultas guardadas',
+      icon: 'mdi-database-search',
+      action: () => ws.showGroup('queries')
+    },
+    {
+      label: 'Nueva tabla',
+      icon: 'mdi-table-plus',
+      dividerBefore: true,
+      action: requireSchema((c, s) => ws.openTableDesigner(c, s, null))
+    },
+    {
+      label: 'Nueva vista',
+      icon: 'mdi-plus',
+      action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'view', null))
+    },
+    routines && {
+      label: 'Nueva función',
+      icon: 'mdi-function-variant',
+      action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'function', null))
+    },
+    routines && {
+      label: 'Nuevo procedimiento',
+      icon: 'mdi-script-text-outline',
+      action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'procedure', null))
+    }
+  ]
+  return items.filter((m): m is ToolbarMenuItem => !!m)
+})
 
 const actions = computed<ToolbarAction[]>(() => {
   const items: (ToolbarAction | false)[] = [
@@ -76,90 +130,53 @@ const actions = computed<ToolbarAction[]>(() => {
           icon: 'mdi-database-plus-outline',
           action: () => ui.openConnectionDialog(null)
         },
-        {
-          label: 'Importar desde Navicat…',
-          icon: 'mdi-import',
-          action: () => ui.openImportDialog()
-        }
+        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportDialog() }
       ]
     },
     {
       key: 'query',
-      label: 'Nueva Consulta',
+      label: 'Nueva consulta',
       icon: 'mdi-database-search-outline',
       disabled: !hasConnection.value,
       separatorAfter: true,
       action: () => ws.openQuery()
     },
     {
-      key: 'table',
-      label: 'Tabla',
-      icon: 'mdi-table',
+      key: 'objects',
+      label: 'Objetos',
+      icon: 'mdi-shape-outline',
       disabled: !hasConnection.value,
-      action: () => ws.showGroup('tables'),
-      menu: [
-        {
-          label: 'Nueva tabla',
-          icon: 'mdi-table-plus',
-          action: requireSchema((c, s) => ws.openTableDesigner(c, s, null))
-        }
-      ]
-    },
-    {
-      key: 'view',
-      label: 'Ver',
-      icon: 'mdi-table-eye',
-      disabled: !hasConnection.value,
-      action: () => ws.showGroup('views'),
-      menu: [
-        {
-          label: 'Nueva vista',
-          icon: 'mdi-plus',
-          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'view', null))
-        }
-      ]
-    },
-    !!caps.value?.routines && {
-      key: 'function',
-      label: 'Función',
-      icon: 'mdi-function-variant',
-      disabled: !hasConnection.value,
-      action: () => ws.showGroup('functions'),
-      menu: [
-        {
-          label: 'Nueva función',
-          icon: 'mdi-function-variant',
-          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'function', null))
-        },
-        {
-          label: 'Nuevo procedimiento',
-          icon: 'mdi-script-text-outline',
-          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'procedure', null))
-        }
-      ]
+      separatorAfter: !caps.value?.hasUsers,
+      menu: objectsMenu.value
     },
     !!caps.value?.hasUsers && {
       key: 'users',
-      label: 'Usuario',
+      label: 'Usuarios',
       icon: 'mdi-account-multiple-outline',
       disabled: !hasConnection.value,
+      separatorAfter: true,
       action: () => ws.openUsers()
     },
+    !!caps.value?.supportsBackupsNb3 && {
+      key: 'backup',
+      label: 'Copias de seguridad',
+      icon: 'mdi-archive-outline',
+      disabled: !hasConnection.value,
+      action: () => ws.openBackups(ws.currentConnectionId(), tree.selected?.schema ?? null)
+    },
     {
-      key: 'others',
-      label: 'Otros',
+      key: 'automation',
+      label: 'Automatización',
+      icon: 'mdi-robot-outline',
+      separatorAfter: true,
+      action: () => ws.openAutomation()
+    },
+    {
+      key: 'more',
+      label: 'Más',
       icon: 'mdi-dots-horizontal-circle-outline',
       menu: [
-        ...(caps.value?.events
-          ? [{ label: 'Eventos', icon: 'mdi-calendar-clock', action: () => ws.showGroup('events') }]
-          : []),
-        {
-          label: 'Importar desde Navicat…',
-          icon: 'mdi-import',
-          action: () => ui.openImportDialog()
-        },
-        { label: 'Ajustes…', icon: 'mdi-cog-outline', action: () => ui.openSettingsDialog() },
-        { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) },
+        { label: 'Importar…', icon: 'mdi-import', action: () => ui.openImportDialog() },
         {
           label: 'Buscar actualizaciones…',
           icon: 'mdi-update',
@@ -169,29 +186,15 @@ const actions = computed<ToolbarAction[]>(() => {
           label: 'Ver tour de bienvenida',
           icon: 'mdi-map-marker-path',
           action: () => tour.startWelcome()
+        },
+        { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) },
+        {
+          label: 'Ajustes…',
+          icon: 'mdi-cog-outline',
+          dividerBefore: true,
+          action: () => ui.openSettingsDialog()
         }
       ]
-    },
-    {
-      key: 'queries',
-      label: 'Consulta',
-      icon: 'mdi-database-search',
-      disabled: !hasConnection.value,
-      separatorAfter: true,
-      action: () => ws.showGroup('queries')
-    },
-    !!caps.value?.supportsBackupsNb3 && {
-      key: 'backup',
-      label: 'Copia de seguridad',
-      icon: 'mdi-archive-outline',
-      disabled: !hasConnection.value,
-      action: () => ws.openBackups(ws.currentConnectionId(), tree.selected?.schema ?? null)
-    },
-    {
-      key: 'automation',
-      label: 'Automatización',
-      icon: 'mdi-robot-outline',
-      action: () => ws.openAutomation()
     }
   ]
   return items.filter((a): a is ToolbarAction => !!a)
@@ -205,7 +208,8 @@ const activeKey = computed<string | null>(() => {
       return 'query'
     case 'tableData':
     case 'tableDesigner':
-      return 'table'
+    case 'ddlEditor':
+      return 'objects'
     case 'users':
       return 'users'
     case 'backups':
@@ -213,23 +217,10 @@ const activeKey = computed<string | null>(() => {
     case 'automation':
     case 'jobEditor':
       return 'automation'
-    case 'ddlEditor':
-      if (tab.objectType === 'view') return 'view'
-      if (tab.objectType === 'function' || tab.objectType === 'procedure') return 'function'
-      if (tab.objectType === 'event') return 'others'
-      return 'table'
     case 'objects': {
       const group = objectsContext.value?.group
       if (!group) return null
-      const byGroup: Record<string, string> = {
-        tables: 'table',
-        views: 'view',
-        functions: 'function',
-        events: 'others',
-        queries: 'queries',
-        backups: 'backup'
-      }
-      return byGroup[group] ?? null
+      return group === 'backups' ? 'backup' : 'objects'
     }
     default:
       return null
@@ -270,13 +261,14 @@ const activeKey = computed<string | null>(() => {
                 </v-btn>
               </template>
               <v-list density="compact" min-width="220">
-                <v-list-item
-                  v-for="m in item.menu"
-                  :key="m.label"
-                  :prepend-icon="m.icon"
-                  :title="m.label"
-                  @click="runSafely(m.action)"
-                />
+                <template v-for="m in item.menu" :key="m.label">
+                  <v-divider v-if="m.dividerBefore" class="my-1" />
+                  <v-list-item
+                    :prepend-icon="m.icon"
+                    :title="m.label"
+                    @click="runSafely(m.action)"
+                  />
+                </template>
               </v-list>
             </v-menu>
             <template v-else>
@@ -307,13 +299,14 @@ const activeKey = computed<string | null>(() => {
                   </v-btn>
                 </template>
                 <v-list density="compact" min-width="220">
-                  <v-list-item
-                    v-for="m in item.menu"
-                    :key="m.label"
-                    :prepend-icon="m.icon"
-                    :title="m.label"
-                    @click="runSafely(m.action)"
-                  />
+                  <template v-for="m in item.menu" :key="m.label">
+                    <v-divider v-if="m.dividerBefore" class="my-1" />
+                    <v-list-item
+                      :prepend-icon="m.icon"
+                      :title="m.label"
+                      @click="runSafely(m.action)"
+                    />
+                  </template>
                 </v-list>
               </v-menu>
             </template>

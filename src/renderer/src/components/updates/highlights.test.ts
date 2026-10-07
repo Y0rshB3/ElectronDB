@@ -30,7 +30,7 @@ describe('releaseHighlights', () => {
       '',
       '- **Buscar actualizaciones**: aviso al iniciar y opción en el menú.',
       '  - detalle anidado que no se muestra',
-      '- **Filtros** — al estilo Navicat',
+      '- **Filtros** — sin escribir SQL',
       '- `Copiar como INSERT` en el menú contextual',
       '',
       '## Correcciones',

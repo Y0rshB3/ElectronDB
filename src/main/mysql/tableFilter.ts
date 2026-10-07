@@ -11,7 +11,7 @@ import { MysqlUserError } from './errors'
 import { escapeId } from './introspect'
 
 /**
- * Navicat-style filter builder -> WHERE clause.
+ * Visual filter builder -> WHERE clause.
  *
  * Identifiers are checked against the table's real columns and escaped with
  * escapeId; every value is a `?` placeholder whose parameter is escaped by the
@@ -30,7 +30,7 @@ import { escapeId } from './introspect'
  *
  * Semantics (documented for the user in the README):
  * - "está vacío" is `(col = '' OR col IS NULL)` and "no está vacío" its negation,
- *   like Navicat: an empty string and NULL both count as empty.
+ *   an empty string and NULL both count as empty.
  * - "!=", "no contiene", "no está en la lista"... follow SQL: NULL never matches.
  * - LIKE patterns escape `\`, `%` and `_` with the default `\` escape character
  *   (assumes the server does not run with NO_BACKSLASH_ESCAPES, like the driver).

@@ -8,7 +8,7 @@ import type {
 } from '@shared/types'
 
 /**
- * UI model of the Navicat-style filter builder: a tree of conditions and
+ * UI model of the visual filter builder: a tree of conditions and
  * brackets, each item carrying the connector ("y"/"o") to its next sibling.
  * Pure data, labels and tree edits; the SQL is built (and escaped) by the main
  * process from the TableFilter sent over IPC.
@@ -44,7 +44,7 @@ export const FILTER_OPERATORS: readonly OperatorInfo[] = [
   { value: 'notIn', label: 'no está en la lista', arity: 'list' },
   { value: 'between', label: 'entre', arity: 'two' },
   { value: 'notBetween', label: 'no entre', arity: 'two' },
-  { value: 'custom', label: '[Personalizado]', arity: 'sql' }
+  { value: 'custom', label: 'SQL libre', arity: 'sql' }
 ]
 
 const BY_VALUE = new Map(FILTER_OPERATORS.map((o) => [o.value, o]))

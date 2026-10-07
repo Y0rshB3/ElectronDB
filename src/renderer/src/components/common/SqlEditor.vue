@@ -14,7 +14,7 @@ import { schemaCompletionSource, type SchemaProvider } from './editor/sqlComplet
 const props = defineProps<{
   /** Table names (optionally with column names) used for autocompletion. */
   schema?: Record<string, string[]>
-  /** Lazy, Navicat-like completion of databases, tables and columns. */
+  /** Lazy completion of databases, tables and columns. */
   provider?: SchemaProvider
   readonly?: boolean
   minHeight?: string

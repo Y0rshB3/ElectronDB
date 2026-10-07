@@ -6,7 +6,7 @@ import { CONNECTOR_LABEL, filterLines, type FilterLine, type FilterPanelState } 
 import type { FilterAction } from './useTableFilter'
 
 /**
- * Navicat-style filter panel (presentational): the filter reads as sentences,
+ * Filter panel (presentational): the filter reads as sentences,
  * one line per condition, brackets on their own lines, "+" / "(+" to add, a
  * right-click menu for structure edits and filter profiles, and a raw WHERE
  * text mode. State and actions live in useTableFilter.

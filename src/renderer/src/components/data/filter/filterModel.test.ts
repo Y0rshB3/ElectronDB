@@ -47,7 +47,7 @@ describe('filterModel', () => {
       'no está en la lista',
       'entre',
       'no entre',
-      '[Personalizado]'
+      'SQL libre'
     ])
   })
 

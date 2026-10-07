@@ -77,9 +77,9 @@ describe('findTourTarget', () => {
 
   it('takes the first visible element of the list', () => {
     el('table-filter', false)
-    const toolbar = el('toolbar-table', true)
-    expect(findTourTarget(['table-filter', 'toolbar-table'])).toBe(toolbar)
+    const toolbar = el('toolbar-objects', true)
+    expect(findTourTarget(['table-filter', 'toolbar-objects'])).toBe(toolbar)
     const filter = el('table-filter', true)
-    expect(findTourTarget(['table-filter', 'toolbar-table'])).toBe(filter)
+    expect(findTourTarget(['table-filter', 'toolbar-objects'])).toBe(filter)
   })
 })

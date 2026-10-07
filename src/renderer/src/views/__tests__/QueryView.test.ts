@@ -118,7 +118,7 @@ describe('QueryView', () => {
     expect(list[0]).toMatchObject({ id: saved.id, name: 'Informe', sql: 'SELECT 2' })
   })
 
-  it('beautifies the whole editor like Navicat with the Embellecer button', async () => {
+  it('formats the whole editor with the Formatear SQL button', async () => {
     const pinia = setupDom()
     mockBridge({ 'db:databases': () => [], 'db:tables': () => [] })
     const tab = openTab({
@@ -129,7 +129,7 @@ describe('QueryView', () => {
     })
     wrapper = await mountView(QueryView, tab, pinia)
     const button = wrapper.get('[data-test="format"]')
-    expect(button.text()).toContain('Embellecer')
+    expect(button.text()).toContain('Formatear SQL')
     await button.trigger('click')
     expect((wrapper.get('[data-test="sql-editor"]').element as HTMLTextAreaElement).value).toBe(
       'SELECT\n\tid,\n\tname\nFROM\n\taccounts.users\nWHERE\n\tid = 1'

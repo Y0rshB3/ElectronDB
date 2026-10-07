@@ -3,7 +3,7 @@
  * writes them to `<logDir>/jobs/<runId>.log` and streams them through
  * event:jobLog) and the renderer (which parses them back for styling).
  *
- * Layout, modelled on Navicat's batch job log:
+ * Layout:
  *
  *   [17:38:10] Inicio de «Backup diario» · 05/10/2026 · manual · 2 pasos
  *   [17:38:10] Paso 1/2 · Base de datos accounts (Local)
@@ -187,7 +187,7 @@ export function stepHeading(index: number, total: number, step: StepInfo): strin
 export type LineStatus = 'ok' | 'error'
 
 /**
- * One finished object, aligned like Navicat:
+ * One finished object, with dot leaders so every status lines up:
  * "  Tabla user ..........................        1.234 filas  OK".
  * `count` null means "no rows" (views, routines, structure-only tables).
  */

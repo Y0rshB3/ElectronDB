@@ -12,7 +12,7 @@ import {
 } from './temporal'
 
 /**
- * Compact calendar / time popover content (Navicat-style). Works on the MySQL
+ * Compact calendar / time popover content. Works on the MySQL
  * literal text only: picking a day or a time rewrites the text, never through
  * a JS Date, so there is no timezone shift.
  */

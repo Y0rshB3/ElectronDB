@@ -26,7 +26,7 @@ function lazyView(loader: () => Promise<{ default: Component }>): Component {
           icon: 'mdi-alert-circle-outline',
           title: 'No se pudo cargar la vista',
           description:
-            'Cierra la pestaña y vuelve a abrirla. Si el problema continúa, revisa el registro (Otros → Registro).'
+            'Cierra la pestaña y vuelve a abrirla. Si el problema continúa, revisa el registro (Más → Registro).'
         })
     }
   })

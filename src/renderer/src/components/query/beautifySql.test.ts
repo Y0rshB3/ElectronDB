@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { beautifySql } from './beautifySql'
 
 describe('beautifySql', () => {
-  it('puts each clause on its own line with tab-indented contents, like Navicat', () => {
+  it('puts each clause on its own line with tab-indented contents', () => {
     const { sql, structured } = beautifySql(
       "select u.id, u.email, count(s.id) as sesiones from accounts.users u left join accounts.session s on s.userID = u.id where u.email like '%select%' group by u.id order by sesiones desc limit 10"
     )

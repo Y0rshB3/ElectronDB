@@ -26,7 +26,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'update:modelValue': [value: string]; submit: [] }>()
 
-/** Navicat's placeholder for a value not typed yet. */
+/** Placeholder for a value not typed yet. */
 const EMPTY = '<?>'
 const editing = ref(false)
 const draft = ref('')

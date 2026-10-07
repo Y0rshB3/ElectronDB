@@ -316,7 +316,7 @@ describe('createBackup', () => {
     expect(existsSync(join(dir, 's'))).toBe(false)
   })
 
-  it('parses AUTO_INCREMENT from MySQL and Navicat-style DDL only from table options', () => {
+  it('parses AUTO_INCREMENT from MySQL and spaced (.nb3) DDL only from table options', () => {
     expect(parseAutoIncrement(') ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=x')).toBe('7')
     expect(
       parseAutoIncrement(') ENGINE = InnoDB AUTO_INCREMENT = 12 CHARACTER SET = utf8mb4')

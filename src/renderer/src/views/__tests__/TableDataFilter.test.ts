@@ -115,7 +115,7 @@ describe('TableDataView Navicat filter builder', () => {
     expect(first.get('[data-test="filter-column-token"]').text()).toBe('id')
     expect(first.get('[data-test="filter-operator-token"]').text()).toBe('=')
     expect(first.get('[data-test="filter-value-token"]').text()).toBe('<?>')
-    expect(first.get('[data-test="filter-type-hint"]').text()).toBe('[Número]')
+    expect(first.get('[data-test="filter-type-hint"]').text()).toBe('número')
     // Only lines with a following sibling show a connector.
     expect(first.get('[data-test="filter-connector"]').text()).toBe('y')
     expect(condLines(w)[1].find('[data-test="filter-connector"]').exists()).toBe(false)
@@ -124,7 +124,7 @@ describe('TableDataView Navicat filter builder', () => {
     await pick(w, 'filter-operator-token', 'filter-operator-option-contains')
     expect(condLines(w)[0].text()).toContain('email')
     expect(condLines(w)[0].text()).toContain('contiene')
-    expect(condLines(w)[0].get('[data-test="filter-type-hint"]').text()).toBe('[Texto]')
+    expect(condLines(w)[0].get('[data-test="filter-type-hint"]').text()).toBe('texto')
   })
 
   it('adapts the value tokens to the operator', async () => {

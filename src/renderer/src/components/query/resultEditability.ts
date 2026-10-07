@@ -4,7 +4,7 @@ import { isAutoIncrementColumn, isViewLike } from '../../utils/columnMeta'
 import { singleTableSelect } from './selectSource'
 
 /**
- * Decides whether a query result set can be edited in place, like Navicat
+ * Decides whether a query result set can be edited in place
  * does when a SELECT reads exactly one base table and returns its whole
  * primary key. Pure functions: the component fetches the table structure.
  *

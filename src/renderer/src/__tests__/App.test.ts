@@ -83,7 +83,7 @@ describe('App shell', () => {
     document.body.innerHTML = ''
   })
 
-  it('mounts the Navicat-like layout and loads startup data', async () => {
+  it('mounts the main layout and loads startup data', async () => {
     const { wrapper } = mountApp()
     await settle()
     expect(wrapper.find('.app-toolbar').exists()).toBe(true)
@@ -141,7 +141,11 @@ describe('App shell', () => {
       'jobs:runs': [],
       'tour:state': { showWelcome: true, welcomeTourDone: false, tourSeenVersion: '0.1.7' },
       'navicat:findCandidates': { supportedPlatform: true, candidates: [] },
-      'tour:markWelcomeDone': { showWelcome: false, welcomeTourDone: true, tourSeenVersion: '0.1.7' }
+      'tour:markWelcomeDone': {
+        showWelcome: false,
+        welcomeTourDone: true,
+        tourSeenVersion: '0.1.7'
+      }
     })
     const { wrapper } = mountApp()
     await settle()
@@ -276,7 +280,7 @@ describe('App shell', () => {
     wrapper.unmount()
   })
 
-  it('the Tabla toolbar button selects the tables group and shows the Objects tab', async () => {
+  it('Objetos › Tablas selects the tables group and shows the Objects tab', async () => {
     const { wrapper } = mountApp()
     await settle()
     const tabs = useTabsStore()
@@ -286,7 +290,13 @@ describe('App shell', () => {
     tree.select('s:c1:shop')
     tabs.open({ kind: 'automation', id: 'automation', title: 'Automatización' })
 
-    await wrapper.get('[data-test="toolbar-table"]').trigger('click')
+    await wrapper.get('[data-test="toolbar-objects"]').trigger('click')
+    await settle()
+    const tables = [...document.querySelectorAll('.v-overlay--active .v-list-item')].find(
+      (el) => el.textContent?.trim() === 'Tablas'
+    ) as HTMLElement | undefined
+    expect(tables).toBeTruthy()
+    tables!.click()
     await settle()
     expect(tree.selectedId).toBe('g:c1:shop:tables')
     expect(tabs.activeId).toBe('objects')

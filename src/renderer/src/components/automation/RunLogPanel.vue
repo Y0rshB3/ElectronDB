@@ -19,7 +19,7 @@ import StatusPill from './StatusPill.vue'
 import { RunLogModel, type LogChunk, type LogRow } from './runLogModel'
 
 /**
- * Navicat-style run log: a heading per step/database, one line per backed up
+ * Run log: a heading per step/database, one line per backed up
  * object, the step result and a final summary. Fills in live while the run
  * is active (event:jobLog) and reads the persisted file for past runs.
  *

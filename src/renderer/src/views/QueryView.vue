@@ -328,7 +328,7 @@ function stop(): void {
   resultTab.value = 'messages'
 }
 
-/** Navicat "Embellecer SQL": formats the selection, or the whole editor when nothing is selected. */
+/** «Formatear SQL»: formats the selection, or the whole editor when nothing is selected. */
 function format(): void {
   const selection = editor.value?.getSelection() ?? ''
   const source = selection.trim() ? selection : sql.value
@@ -338,7 +338,7 @@ function format(): void {
   else sql.value = result.sql
   if (!result.structured) {
     notify.warning(
-      'No se pudo analizar la consulta para embellecerla; solo se pasaron a mayúsculas las palabras clave.'
+      'No se pudo analizar la consulta para darle formato; solo se pasaron a mayúsculas las palabras clave.'
     )
   }
 }
@@ -387,7 +387,7 @@ function confirmSaveAs(): void {
 }
 
 /**
- * Navicat-style connection picker: points this tab at another connection,
+ * Connection picker: points this tab at another connection,
  * keeping the SQL. Refused while a query runs; unapplied result edits must be
  * discarded first (the results of the old connection are cleared, never
  * applied to the new one). Keeps the database when the new connection has one
@@ -562,13 +562,13 @@ defineExpose({ run, stop, results, schema, switchConnection })
       <v-btn
         prepend-icon="mdi-auto-fix"
         size="small"
-        title="Embellecer SQL (Cmd+B): la selección o todo el editor"
-        aria-label="Embellecer"
+        title="Formatear SQL (Cmd+B): la selección o todo el editor"
+        aria-label="Formatear SQL"
         :disabled="running"
         data-test="format"
         @click="format"
       >
-        <span class="query-view__label">Embellecer</span>
+        <span class="query-view__label">Formatear SQL</span>
       </v-btn>
       <v-btn
         prepend-icon="mdi-content-save-outline"

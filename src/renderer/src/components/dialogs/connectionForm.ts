@@ -1,7 +1,7 @@
 import { connectionFormErrors } from '@shared/connectionValidation'
 import type { ConnectionConfig, ConnectionInput } from '@shared/types'
 
-/** Navicat-like marker colours (Local green, Staging yellow, Production red, ...). */
+/** Marker colours per environment (Local green, Staging yellow, Production red, ...). */
 export const COLOR_PRESETS: { value: string | null; label: string }[] = [
   { value: null, label: 'Sin color' },
   { value: '#69f0ae', label: 'Verde' },

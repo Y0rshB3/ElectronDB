@@ -3,7 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import { cellText, sortItems, type ObjectColumn } from '@renderer/utils/objectColumns'
 
 /**
- * Dense, sortable, keyboard-navigable list (Navicat style). Presentation only:
+ * Dense, sortable, keyboard-navigable list. Presentation only:
  * selection lives in the parent so it can be shared with other panels.
  */
 const props = defineProps<{

@@ -50,7 +50,7 @@ export function navicatCounts(
 export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
     title: 'Te damos la bienvenida a Vortaq',
-    text: 'Un cliente de MySQL para escritorio, compatible con las conexiones, tareas y copias .nb3 de Navicat. Te enseñamos lo principal en un minuto.',
+    text: 'Un gestor de bases de datos de escritorio, independiente y de código abierto. Puede importar tus conexiones, tareas y copias .nb3 de Navicat. Te enseñamos lo principal en un minuto.',
     testId: 'tour-welcome',
     logo: true
   },
@@ -62,17 +62,17 @@ export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
     target: ['query-toolbar', 'toolbar-query'],
     title: 'Nueva consulta',
-    text: 'Abre un editor SQL con autocompletado, «Embellecer» para dar formato y un selector para cambiar de conexión o de base de datos.'
+    text: 'Abre un editor SQL con autocompletado, «Formatear SQL» y un selector para cambiar de conexión o de base de datos.'
   },
   {
-    target: ['table-filter', 'toolbar-table'],
+    target: ['table-filter', 'toolbar-objects'],
     title: 'Datos y filtros',
-    text: 'Abre una tabla para ver y editar sus filas. El botón «Filtro» crea condiciones al estilo Navicat sin escribir SQL.'
+    text: 'Abre una tabla para ver y editar sus filas. El botón «Filtro» crea condiciones que se leen como frases, sin escribir SQL. Las tablas, vistas y funciones están en «Objetos».'
   },
   {
     target: 'toolbar-backup',
     title: 'Copias de seguridad',
-    text: 'Crea copias .nb3 compatibles con Navicat y restáuralas. «Restaurar en Local» lleva una copia a tu conexión local sin tocar el servidor original.'
+    text: 'Crea copias .nb3 y restáuralas, también las que ya tenías. «Restaurar en Local» lleva una copia a tu conexión local sin tocar el servidor original.'
   },
   {
     target: 'toolbar-automation',

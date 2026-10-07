@@ -256,7 +256,7 @@ describe('runner log', () => {
     expect(objects[1]).toMatch(/^ {2}Tabla user \.+ +1\.234 filas {2}OK$/)
     expect(objects[2]).toMatch(/^ {2}Vista v_people \.+ +OK$/)
     expect(objects[3]).toMatch(/^ {2}Procedimiento p_cleanup \.+ +OK$/)
-    // Navicat-like alignment: every status sits in the same column.
+    // Aligned log: every status sits in the same column.
     expect(new Set(objects.map((l) => l.lastIndexOf('OK'))).size).toBe(1)
     expect(bodies[7]).toBe(`  Archivo: ${run.tasks[0].outputPath}`)
     expect(bodies[8]).toMatch(/^ {2}Resultado: OK · 4 objetos · 1\.234 filas · 2,0 KB · \d+,\d s$/)

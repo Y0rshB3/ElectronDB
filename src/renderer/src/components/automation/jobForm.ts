@@ -78,7 +78,7 @@ export function newRestoreTask(
   return task
 }
 
-/** Default reference name in Navicat style when the user leaves it empty. */
+/** Default reference name («Backup <schema>», «Restaurar <schema>») when the user leaves it empty. */
 export function defaultReferenceName(task: JobTask, tasks: JobTask[] = []): string {
   if (task.type === 'backupschema') return `Backup ${task.schema}`.trim()
   if (task.type === 'restoreschema')

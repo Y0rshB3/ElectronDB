@@ -41,17 +41,17 @@ export function valueHint(type: string | null | undefined): ValueHint {
   return { placeholder: 'Valor', inputmode: 'text' }
 }
 
-/** Short type label shown after a filter value, like Navicat's "[Número]". */
+/** Kind of value a filter condition compares, shown as a small chip after the value ("número"). */
 export function typeLabel(type: string | null | undefined): string {
   const t = (type ?? '').trim().toUpperCase()
   if (!t) return ''
-  if (/^(DATETIME|TIMESTAMP)\b/.test(t)) return 'Fecha y hora'
-  if (/^DATE\b/.test(t)) return 'Fecha'
-  if (/^TIME\b/.test(t)) return 'Hora'
-  if (/^YEAR\b/.test(t)) return 'Año'
-  if (columnKind(t) === 'number') return 'Número'
-  if (/^(BLOB|TINYBLOB|MEDIUMBLOB|LONGBLOB|BINARY|VARBINARY|GEOMETRY)\b/.test(t)) return 'Binario'
-  return 'Texto'
+  if (/^(DATETIME|TIMESTAMP)\b/.test(t)) return 'fecha y hora'
+  if (/^DATE\b/.test(t)) return 'fecha'
+  if (/^TIME\b/.test(t)) return 'hora'
+  if (/^YEAR\b/.test(t)) return 'año'
+  if (columnKind(t) === 'number') return 'número'
+  if (/^(BLOB|TINYBLOB|MEDIUMBLOB|LONGBLOB|BINARY|VARBINARY|GEOMETRY)\b/.test(t)) return 'binario'
+  return 'texto'
 }
 
 /** Same classification from the driver's `typeKind`; falls back to the MySQL type name. */

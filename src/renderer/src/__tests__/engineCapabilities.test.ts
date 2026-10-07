@@ -129,7 +129,9 @@ describe('main toolbar per engine', () => {
     document.body.innerHTML = ''
   })
 
-  async function buttonsFor(connectionId: string): Promise<string[]> {
+  async function toolbarFor(
+    connectionId: string
+  ): Promise<{ buttons: string[]; objects: string[] }> {
     const tree = useTreeStore()
     tree.select(nodeIds.connection(connectionId))
     const wrapper = mount(AppToolbar, {
@@ -137,57 +139,66 @@ describe('main toolbar per engine', () => {
       attachTo: document.body
     })
     await flush()
-    const keys = wrapper
+    const buttons = wrapper
       .findAll('[data-test^="toolbar-"]')
       .map((b) => b.attributes('data-test')!.replace('toolbar-', ''))
+    await wrapper.get('[data-test="toolbar-objects"]').trigger('click')
+    await flush()
+    await flush()
+    const objects = [...document.querySelectorAll('.v-overlay--active .v-list-item-title')].map(
+      (el) => el.textContent?.trim() ?? ''
+    )
     wrapper.unmount()
-    return keys
+    document.querySelectorAll('.v-overlay-container').forEach((el) => (el.innerHTML = ''))
+    return { buttons, objects }
   }
 
   it('MySQL shows every module', async () => {
-    expect(await buttonsFor('my')).toEqual([
-      'connection',
-      'query',
-      'table',
-      'view',
-      'function',
-      'users',
-      'others',
-      'queries',
-      'backup',
-      'automation',
-      // v0.1.6+ global buttons (not tied to the selected connection)
-      'ai',
-      'settings'
-    ])
+    expect(await toolbarFor('my')).toEqual({
+      buttons: [
+        'connection',
+        'query',
+        'objects',
+        'users',
+        'backup',
+        'automation',
+        'more',
+        // global buttons (not tied to the selected connection)
+        'ai',
+        'settings'
+      ],
+      objects: [
+        'Tablas',
+        'Vistas',
+        'Funciones y procedimientos',
+        'Eventos',
+        'Consultas guardadas',
+        'Nueva tabla',
+        'Nueva vista',
+        'Nueva función',
+        'Nuevo procedimiento'
+      ]
+    })
   })
 
   it('leaves out the modules the selected engine lacks', async () => {
-    expect(await buttonsFor('pg')).toEqual([
-      'connection',
-      'query',
-      'table',
-      'view',
-      'function',
-      'others',
-      'queries',
-      'automation',
-      // v0.1.6+ global buttons (not tied to the selected connection)
-      'ai',
-      'settings'
-    ])
-    expect(await buttonsFor('lite')).toEqual([
-      'connection',
-      'query',
-      'table',
-      'view',
-      'others',
-      'queries',
-      'automation',
-      // v0.1.6+ global buttons (not tied to the selected connection)
-      'ai',
-      'settings'
-    ])
+    expect(await toolbarFor('pg')).toEqual({
+      buttons: ['connection', 'query', 'objects', 'automation', 'more', 'ai', 'settings'],
+      objects: [
+        'Tablas',
+        'Vistas',
+        'Funciones y procedimientos',
+        'Consultas guardadas',
+        'Nueva tabla',
+        'Nueva vista',
+        'Nueva función',
+        'Nuevo procedimiento'
+      ]
+    })
+    expect(await toolbarFor('lite')).toEqual({
+      buttons: ['connection', 'query', 'objects', 'automation', 'more', 'ai', 'settings'],
+      objects: ['Tablas', 'Vistas', 'Consultas guardadas', 'Nueva tabla', 'Nueva vista']
+    })
   })
 })
 

@@ -10,7 +10,7 @@ export interface BeautifyResult {
 const DELIMITER_RE = /^\s*DELIMITER\s+(\S+)\s*$/i
 
 /**
- * Navicat-style "Embellecer SQL": one clause per line, clause contents
+ * «Formatear SQL»: one clause per line, clause contents
  * indented with a tab, upper-case keywords, a blank line between statements.
  * Blocks written under a custom DELIMITER (procedures, triggers...) keep their
  * layout and only get keywords upper-cased, because the formatter cannot parse
@@ -60,7 +60,7 @@ function formatBlock(lines: string[], delimiter: string): string {
   return formatSql(text).split(marker).join(delimiter).trim()
 }
 
-/** Fixes sql-formatter quirks so the output matches Navicat's. */
+/** Fixes sql-formatter quirks: upper-case operators and the layout described above. */
 function polish(sql: string): string {
   // Operators such as LIKE/IS/NOT/IN are not always upper-cased by sql-formatter's MySQL dialect.
   const upper = formatSql(sql)

@@ -4,7 +4,7 @@ import { JsonStore } from './jsonStore'
 import { nowIso } from './ids'
 
 /**
- * Navicat-style filter profiles: named filter trees per connection + schema +
+ * Filter profiles: named filter trees per connection + schema +
  * table, in userData/filter-profiles.json. Only the filter definition is
  * stored (columns, operators and the values typed in the filter), never rows.
  */

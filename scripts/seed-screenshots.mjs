@@ -313,7 +313,7 @@ writeJson('ai-memory.json', aiMemory)
 for (const r of runs)
   writeFileSync(r.logPath, `[${r.startedAt}] ${r.jobName}: ${r.status}\n`, { mode: 0o600 })
 
-// Backups: the demo fixture copied under several Navicat-style names.
+// Backups: the demo fixture copied under several timestamped .nb3 names.
 const fixtureDir = join(ROOT, 'tests', 'fixtures', 'navicat', 'backups', 'demo')
 const fixtures = readdirSync(fixtureDir).filter((f) => f.endsWith('.nb3'))
 const localBackups = join(connections[0].backupDir, DB.database)

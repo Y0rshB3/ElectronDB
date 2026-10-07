@@ -164,47 +164,32 @@ exports[`MySQL main toolbar (golden) > is unchanged with an open MySQL database 
     {
       "disabled": false,
       "key": "toolbar-query",
-      "label": "Nueva Consulta",
+      "label": "Nueva consulta",
     },
     {
       "disabled": false,
-      "key": "toolbar-table",
-      "label": "Tabla",
-    },
-    {
-      "disabled": false,
-      "key": "toolbar-view",
-      "label": "Ver",
-    },
-    {
-      "disabled": false,
-      "key": "toolbar-function",
-      "label": "Función",
+      "key": "toolbar-objects",
+      "label": "Objetos",
     },
     {
       "disabled": false,
       "key": "toolbar-users",
-      "label": "Usuario",
-    },
-    {
-      "disabled": false,
-      "key": "toolbar-others",
-      "label": "Otros",
-    },
-    {
-      "disabled": false,
-      "key": "toolbar-queries",
-      "label": "Consulta",
+      "label": "Usuarios",
     },
     {
       "disabled": false,
       "key": "toolbar-backup",
-      "label": "Copia de seguridad",
+      "label": "Copias de seguridad",
     },
     {
       "disabled": false,
       "key": "toolbar-automation",
       "label": "Automatización",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-more",
+      "label": "Más",
     },
     {
       "disabled": false,
@@ -220,25 +205,25 @@ exports[`MySQL main toolbar (golden) > is unchanged with an open MySQL database 
   "menus": {
     "toolbar-connection": [
       "Nueva conexión MySQL…",
-      "Importar desde Navicat…",
+      "Importar…",
     ],
-    "toolbar-function": [
-      "Nueva función",
-      "Nuevo procedimiento",
-    ],
-    "toolbar-others": [
-      "Eventos",
-      "Importar desde Navicat…",
-      "Ajustes…",
-      "Registro",
+    "toolbar-more": [
+      "Importar…",
       "Buscar actualizaciones…",
       "Ver tour de bienvenida",
+      "Registro",
+      "Ajustes…",
     ],
-    "toolbar-table": [
+    "toolbar-objects": [
+      "Tablas",
+      "Vistas",
+      "Funciones y procedimientos",
+      "Eventos",
+      "Consultas guardadas",
       "Nueva tabla",
-    ],
-    "toolbar-view": [
       "Nueva vista",
+      "Nueva función",
+      "Nuevo procedimiento",
     ],
   },
 }
@@ -255,47 +240,32 @@ exports[`MySQL main toolbar (golden) > is unchanged without a selection 1`] = `
     {
       "disabled": true,
       "key": "toolbar-query",
-      "label": "Nueva Consulta",
+      "label": "Nueva consulta",
     },
     {
       "disabled": true,
-      "key": "toolbar-table",
-      "label": "Tabla",
-    },
-    {
-      "disabled": true,
-      "key": "toolbar-view",
-      "label": "Ver",
-    },
-    {
-      "disabled": true,
-      "key": "toolbar-function",
-      "label": "Función",
+      "key": "toolbar-objects",
+      "label": "Objetos",
     },
     {
       "disabled": true,
       "key": "toolbar-users",
-      "label": "Usuario",
-    },
-    {
-      "disabled": false,
-      "key": "toolbar-others",
-      "label": "Otros",
-    },
-    {
-      "disabled": true,
-      "key": "toolbar-queries",
-      "label": "Consulta",
+      "label": "Usuarios",
     },
     {
       "disabled": true,
       "key": "toolbar-backup",
-      "label": "Copia de seguridad",
+      "label": "Copias de seguridad",
     },
     {
       "disabled": false,
       "key": "toolbar-automation",
       "label": "Automatización",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-more",
+      "label": "Más",
     },
     {
       "disabled": false,
@@ -311,15 +281,14 @@ exports[`MySQL main toolbar (golden) > is unchanged without a selection 1`] = `
   "menus": {
     "toolbar-connection": [
       "Nueva conexión MySQL…",
-      "Importar desde Navicat…",
+      "Importar…",
     ],
-    "toolbar-others": [
-      "Eventos",
-      "Importar desde Navicat…",
-      "Ajustes…",
-      "Registro",
+    "toolbar-more": [
+      "Importar…",
       "Buscar actualizaciones…",
       "Ver tour de bienvenida",
+      "Registro",
+      "Ajustes…",
     ],
   },
 }
