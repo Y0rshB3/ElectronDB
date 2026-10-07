@@ -150,6 +150,7 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
         CREATE SEQUENCE ${SCHEMA}.tickets START 100;
         CREATE FUNCTION ${SCHEMA}.add(a int, b int) RETURNS int LANGUAGE sql AS $$ SELECT a + b $$;
         CREATE FUNCTION ${SCHEMA}.add(a text, b text) RETURNS text LANGUAGE sql AS $$ SELECT a || b; $$;
+        CREATE FUNCTION ${SCHEMA}.write_nokey() RETURNS int LANGUAGE sql AS $$ INSERT INTO ${SCHEMA}.nokey VALUES (99, 'w') RETURNING a $$;
         CREATE PROCEDURE ${SCHEMA}.bump() LANGUAGE plpgsql AS $$ BEGIN RAISE NOTICE 'bumped'; END $$;
         CREATE FUNCTION ${SCHEMA}.touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.name := trim(NEW.name); RETURN NEW; END $$;
         CREATE TRIGGER items_touch BEFORE INSERT ON ${SCHEMA}.items FOR EACH ROW EXECUTE FUNCTION ${SCHEMA}.touch();
@@ -232,7 +233,8 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
       ['add', 'a integer, b integer', 'FUNCTION', 'function'],
       ['add', 'a text, b text', 'FUNCTION', 'function'],
       ['bump', '', 'PROCEDURE', 'procedure'],
-      ['touch', '', 'FUNCTION', 'trigger function']
+      ['touch', '', 'FUNCTION', 'trigger function'],
+      ['write_nokey', '', 'FUNCTION', 'function']
     ])
     const sequences = await pg.objects(id, ref, 'sequence')
     expect(sequences.map((s) => s.name)).toEqual(['ident_id_seq', 'items_id_seq', 'tickets'])
@@ -412,6 +414,26 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
     // SET search_path in SQL is reflected back for the toolbar combo.
     const [s] = ok(await exec(`SET search_path TO ${OTHER}, public`, { sessionKey: tab }))
     expect(s.effectiveSchema).toBe(OTHER)
+    await pg.closeSession(id, tab)
+  })
+
+  it('re-applies the tab schema after a rollback and refuses a database change mid-transaction', async () => {
+    const tab = 'query:tab-rb'
+    ok(await exec('BEGIN', { sessionKey: tab, schema: { database: db, schema: OTHER } }))
+    await pg.rollback(id, tab)
+    // The search_path set inside the rolled-back transaction is gone: the next run re-applies it.
+    const [r] = ok(
+      await exec('SELECT current_schema()', {
+        sessionKey: tab,
+        schema: { database: db, schema: OTHER }
+      })
+    )
+    expect(r.resultSet!.rows).toEqual([[OTHER]])
+    ok(await exec('BEGIN', { sessionKey: tab }))
+    await expect(
+      pg.execute(id, 'SELECT 1', { sessionKey: tab, schema: { database: 'postgres', schema: '' } })
+    ).rejects.toThrow(/transacción abierta/)
+    await pg.rollback(id, tab)
     await pg.closeSession(id, tab)
   })
 
@@ -633,7 +655,13 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
       })
       expect(items.indexes.map((i) => i.name)).toContain('items_name_idx')
       expect(snap.tables.find((t) => t.name === 'v_items')?.kind).toBe('view')
-      expect(snap.routines.map((r) => r.name)).toEqual(['add', 'add', 'bump', 'touch'])
+      expect(snap.routines.map((r) => r.name)).toEqual([
+        'add',
+        'add',
+        'bump',
+        'touch',
+        'write_nokey'
+      ])
       // Never a row value: the reader refuses user tables outright.
       await expect(q.query(`SELECT * FROM ${SCHEMA}.items`)).rejects.toThrow(/estructura/)
       const plan = await explainPgSelect(session, `SELECT * FROM ${SCHEMA}.items WHERE id = 1`)
@@ -655,15 +683,40 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
     })
 
     it('runs production sessions read-only: hidden side effects fail, confirmed writes pass', async () => {
-      const [r] = await prodExec(`SELECT nextval('${SCHEMA}.tickets')`)
+      // A write hidden in a user function is not on any list: the read-only session stops it.
+      const [r] = await prodExec(`SELECT write_nokey()`)
       expect(r.error).toMatch(/25006/)
-      const [w] = ok(
-        await prodExec(`SELECT nextval('${SCHEMA}.tickets')`, { confirmProduction: true })
-      )
-      expect(w.resultSet!.rows).toEqual([['100']])
+      const [w] = ok(await prodExec(`SELECT write_nokey()`, { confirmProduction: true }))
+      expect(w.resultSet!.rows).toEqual([[99]])
       // The lift is per script: the next unconfirmed run is read-only again.
-      const [again] = await prodExec(`SELECT nextval('${SCHEMA}.tickets')`)
+      const [again] = await prodExec(`SELECT write_nokey()`)
       expect(again.error).toMatch(/25006/)
+      // Known side-effect functions never even reach the server unconfirmed.
+      await expect(prodExec(`SELECT nextval('${SCHEMA}.tickets')`)).rejects.toThrow(
+        /confirmación explícita/
+      )
+    })
+
+    it('refuses unconfirmed statements that would lift read-only, also on a tab session', async () => {
+      for (const sql of [
+        'SET default_transaction_read_only = off',
+        'SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE',
+        'BEGIN READ WRITE',
+        'RESET ALL',
+        "SELECT set_config('default_transaction_read_only', 'off', false)"
+      ])
+        await expect(prodExec(sql, { sessionKey: 'query:prod-lift' })).rejects.toThrow(
+          /confirmación explícita/
+        )
+      const [w] = await prodExec("INSERT INTO nokey VALUES (5, 'x')", {
+        sessionKey: 'query:prod-lift',
+        confirmProduction: true
+      })
+      expect(w.error).toBeNull()
+      // Back to read-only right after the confirmed script.
+      const [r] = await prodExec('SELECT write_nokey()', { sessionKey: 'query:prod-lift' })
+      expect(r.error).toMatch(/25006/)
+      await pg.closeSession(prodId, 'query:prod-lift')
     })
 
     it('never commits the user transaction on a guard read, and explains read-only transactions', async () => {

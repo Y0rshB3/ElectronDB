@@ -95,6 +95,9 @@ function objectRef(type: EngineObjectType, name: NameRef): ObjectRef {
   return { ...name, type: name.type ?? type }
 }
 
+/** appliedSchema value that never matches: the next run re-applies the search_path. */
+const UNKNOWN_SCHEMA = '\u0000unknown'
+
 const READ_ONLY_TXN_MESSAGE =
   'La transacción se abrió en modo solo lectura: ejecuta ROLLBACK y repite el script con la escritura (25006)'
 
@@ -164,9 +167,9 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
       tab!.restoreReadOnly = false
     }
     const executionId = options.executionId
-    let running: ReturnType<PgDriverConnection['registerExecution']> = null
+    let results: QueryStatementResult[] = []
     try {
-      const results = await executePgScript(
+      results = await executePgScript(
         session,
         sql,
         options,
@@ -179,7 +182,7 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
               await session.query('SET SESSION default_transaction_read_only = off')
               lifted = true
             }
-            if (executionId) running = connection.registerExecution(executionId, session)
+            if (executionId) connection.registerExecution(executionId, session)
           },
           cancelled: () => connection.isCancelled(executionId),
           afterStatement: async (result) => {
@@ -192,11 +195,28 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
         },
         cache
       )
-      if (lifted) {
-        if (session.transactionStatus() === 'idle')
-          await session.query('SET SESSION default_transaction_read_only = on')
-        else tab.restoreReadOnly = true
-      } else await restoreIfIdle()
+    } finally {
+      // Before any follow-up query: a late cancel must never hit the restore below.
+      connection.unregisterExecution(executionId)
+      // Read-only comes back even when the script failed; if it cannot, the session goes.
+      try {
+        if (lifted) {
+          if (session.transactionStatus() === 'idle')
+            await session.query('SET SESSION default_transaction_read_only = on')
+          else tab.restoreReadOnly = true
+        } else await restoreIfIdle()
+      } catch {
+        await connection.closeTabSession(key)
+        // eslint-disable-next-line no-unsafe-finally
+        throw new PgUserError(
+          'No se pudo devolver la sesión a solo lectura y se ha cerrado (se deshizo la transacción abierta). Vuelve a ejecutar la consulta.',
+          'E_PG_READ_ONLY'
+        )
+      }
+    }
+    // A rollback (or an aborted transaction) undoes the search_path set inside it.
+    if (session.transactionStatus() !== 'idle') tab.appliedSchema = UNKNOWN_SCHEMA
+    {
       if (session.transactionStatus() !== 'failed') {
         try {
           const [row] = await session.query<{ s: string | null }>('SELECT current_schema() AS s')
@@ -216,9 +236,6 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
       }
       if (results.length) results[results.length - 1].transactionStatus = status
       return results
-    } finally {
-      void running
-      connection.unregisterExecution(executionId)
     }
   }
 
@@ -229,13 +246,14 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
     sql: string,
     options: QueryExecuteOptions
   ): Promise<QueryStatementResult[]> {
+    // Read before borrowing a client: baseSearchPath may need one from the same pool.
+    const base = scope.schema ? await connection.baseSearchPath(scope.database) : []
     const session = await connection.acquire({ database: scope.database, schema: null })
     const executionId = options.executionId
     try {
       return await executePgScript(session, sql, options, ctx.settings.get().defaultRowLimit, {
         before: async () => {
           if (scope.schema) {
-            const base = await connection.baseSearchPath(scope.database)
             await session.query('SELECT set_config($1, $2, false)', [
               'search_path',
               formatSearchPath(composeSearchPath(scope.schema, base))
@@ -407,6 +425,8 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
       throw new PgUserError(reason, 'E_PG_SESSION_LOST')
     }
     await tab.session.query(command)
+    // ROLLBACK also undoes a search_path set inside the transaction: re-apply on the next run.
+    if (command === 'ROLLBACK') tab.appliedSchema = UNKNOWN_SCHEMA
     if (tab.restoreReadOnly && tab.session.transactionStatus() === 'idle') {
       await tab.session.query('SET SESSION default_transaction_read_only = on')
       tab.restoreReadOnly = false

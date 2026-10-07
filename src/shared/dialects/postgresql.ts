@@ -523,6 +523,24 @@ export function isObviousWrite(statement: string): boolean {
   const w = upperOf(tokens[0])
   if (!w) return false
   if (OBVIOUS_WRITES.has(w)) return true
+  // Anything that could switch off the read-only sessions of a guarded connection, or call a
+  // function that bypasses them (set_config, pg_terminate_backend, dblink…), is refused unconfirmed.
+  if (sideEffectCalls(tokens).length) return true
+  if (w === 'DISCARD') return true
+  if (w === 'BEGIN' || w === 'START') return tokens.some((t) => isWord(t, 'WRITE'))
+  if (w === 'SET' || w === 'RESET') {
+    if (w === 'RESET' && isWord(tokens[1], 'ALL')) return true
+    if (
+      isWord(tokens[1], 'ROLE') ||
+      (isWord(tokens[1], 'SESSION') && isWord(tokens[2], 'AUTHORIZATION'))
+    )
+      return true
+    return tokens.some(
+      (t) =>
+        isWord(t, 'WRITE', 'DEFAULT_TRANSACTION_READ_ONLY', 'TRANSACTION_READ_ONLY') ||
+        (t.kind === 'ident' && /^(default_)?transaction_read_only$/i.test(t.value))
+    )
+  }
   if (w === 'SECURITY') return isWord(tokens[1], 'LABEL')
   if (w === 'IMPORT') return isWord(tokens[1], 'FOREIGN')
   if (w === 'COPY') return topLevelWord(tokens, depths(tokens), ['FROM']) >= 0

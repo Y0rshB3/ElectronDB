@@ -559,8 +559,18 @@ function stop(): void {
   if (!running.value) return
   if (isPg.value) {
     // PostgreSQL cancels the running statement (pg_cancel_backend); its error arrives as a result.
-    if (executionId) void api.db.cancel(connectionId.value, executionId).catch(() => false)
+    const id = executionId
     notice.value = 'Cancelando la consulta en curso…'
+    if (!id) return
+    void api.db
+      .cancel(connectionId.value, id)
+      .catch(() => false)
+      .then((ok) => {
+        // Not running yet (or already finished): say so instead of a silent no-op.
+        if (!ok && running.value && executionId === id)
+          notice.value =
+            'No se pudo cancelar todavía: la sentencia aún no había empezado. Pulsa Detener de nuevo.'
+      })
     return
   }
   // MySQL cannot cancel a statement mid-flight from here: drop late results instead.

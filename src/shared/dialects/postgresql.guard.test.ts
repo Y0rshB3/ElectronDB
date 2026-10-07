@@ -99,35 +99,35 @@ const CORPUS: [string, string[], boolean][] = [
   ['SELECT * FROM t FOR SHARE', ['SELECT … FOR UPDATE'], false],
   ['EXPLAIN ANALYZE DELETE FROM t', ['EXPLAIN ANALYZE de una escritura'], false],
   ['EXPLAIN (ANALYZE, COSTS off) UPDATE t SET a = 1', ['EXPLAIN ANALYZE de una escritura'], false],
-  ['SELECT pg_terminate_backend(1)', ['Función con efectos: pg_terminate_backend'], false],
+  ['SELECT pg_terminate_backend(1)', ['Función con efectos: pg_terminate_backend'], true],
   [
     'SELECT pg_cancel_backend(pid) FROM pg_stat_activity',
     ['Función con efectos: pg_cancel_backend'],
-    false
+    true
   ],
-  ["SELECT set_config('a.b', 'c', false)", ['Función con efectos: set_config'], false],
-  ["SELECT nextval('s')", ['Función con efectos: nextval'], false],
-  ["SELECT pg_catalog.setval('s', 1)", ['Función con efectos: setval'], false],
-  ['SELECT pg_advisory_lock(1)', ['Función con efectos: pg_advisory_lock'], false],
-  ['SELECT lo_unlink(1)', ['Función con efectos: lo_unlink'], false],
-  ["SELECT pg_read_file('/etc/passwd')", ['Función con efectos: pg_read_file'], false],
+  ["SELECT set_config('a.b', 'c', false)", ['Función con efectos: set_config'], true],
+  ["SELECT nextval('s')", ['Función con efectos: nextval'], true],
+  ["SELECT pg_catalog.setval('s', 1)", ['Función con efectos: setval'], true],
+  ['SELECT pg_advisory_lock(1)', ['Función con efectos: pg_advisory_lock'], true],
+  ['SELECT lo_unlink(1)', ['Función con efectos: lo_unlink'], true],
+  ["SELECT pg_read_file('/etc/passwd')", ['Función con efectos: pg_read_file'], true],
   [
     "SELECT * FROM dblink('x', 'DELETE FROM t') AS r(a int)",
     ['Función con efectos: dblink'],
-    false
+    true
   ],
-  ['SELECT pg_reload_conf()', ['Función con efectos: pg_reload_conf'], false],
-  ['SET ROLE admin', ['SET ROLE'], false],
-  ['SET SESSION AUTHORIZATION admin', ['SET SESSION AUTHORIZATION'], false],
-  ['SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE', ['SET … READ WRITE'], false],
-  ['SET TRANSACTION READ WRITE', ['SET … READ WRITE'], false],
-  ['SET default_transaction_read_only = off', ['SET default_transaction_read_only'], false],
-  ['SET transaction_read_only = off', ['SET transaction_read_only'], false],
+  ['SELECT pg_reload_conf()', ['Función con efectos: pg_reload_conf'], true],
+  ['SET ROLE admin', ['SET ROLE'], true],
+  ['SET SESSION AUTHORIZATION admin', ['SET SESSION AUTHORIZATION'], true],
+  ['SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE', ['SET … READ WRITE'], true],
+  ['SET TRANSACTION READ WRITE', ['SET … READ WRITE'], true],
+  ['SET default_transaction_read_only = off', ['SET default_transaction_read_only'], true],
+  ['SET transaction_read_only = off', ['SET transaction_read_only'], true],
   ["SET my.var = 'x'", ['SET my'], false],
-  ['BEGIN READ WRITE', ['BEGIN READ WRITE'], false],
-  ['RESET ALL', ['RESET ALL'], false],
-  ['RESET ROLE', ['RESET ROLE'], false],
-  ['DISCARD ALL', ['DISCARD'], false],
+  ['BEGIN READ WRITE', ['BEGIN READ WRITE'], true],
+  ['RESET ALL', ['RESET ALL'], true],
+  ['RESET ROLE', ['RESET ROLE'], true],
+  ['DISCARD ALL', ['DISCARD'], true],
   ['CHECKPOINT', ['CHECKPOINT'], false],
   ["LOAD 'auto_explain'", ['LOAD'], false],
   ['ANALYZE t', ['ANALYZE'], false],
@@ -163,7 +163,7 @@ describe('PostgreSQL production guard corpus', () => {
       splitStatements(script)
         .filter((s) => isObviousWrite(s.sql))
         .map((s) => s.sql)
-    ).toEqual(['UPDATE t SET a = 1'])
+    ).toEqual(['UPDATE t SET a = 1', "SELECT nextval('s')"])
   })
 
   it('a dollar-quoted function body never hides or invents a write', () => {
@@ -242,5 +242,41 @@ describe('PostgreSQL error explanations', () => {
     expect(explainPgError('XX000')).toBeNull()
     expect(isPgPrivilegeError('42501')).toBe(true)
     expect(isPgPrivilegeError('23505')).toBe(false)
+  })
+})
+
+describe('main denylist: statements that would lift the read-only safety net', () => {
+  it.each([
+    'SET default_transaction_read_only = off',
+    'SET SESSION default_transaction_read_only TO off',
+    'SET transaction_read_only = off',
+    'SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE',
+    'SET TRANSACTION READ WRITE',
+    'BEGIN READ WRITE',
+    'START TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE',
+    'RESET ALL',
+    'RESET default_transaction_read_only',
+    'DISCARD ALL',
+    'SET ROLE admin',
+    'SET SESSION AUTHORIZATION admin',
+    "SELECT set_config('default_transaction_read_only', 'off', false)",
+    'SELECT pg_terminate_backend(42)',
+    "SELECT dblink_exec('db', 'DELETE FROM t')",
+    "SELECT nextval('s')"
+  ])('%s', (sql) => {
+    expect(isObviousWrite(sql)).toBe(true)
+    expect(analyzeWrites(sql).writes).toBe(true)
+  })
+
+  it.each([
+    'BEGIN',
+    'BEGIN READ ONLY',
+    'START TRANSACTION',
+    'SET search_path TO app, public',
+    'SET statement_timeout = 5000',
+    "SELECT 'set_config(' AS x",
+    'RESET search_path'
+  ])('still lets %s through', (sql) => {
+    expect(isObviousWrite(sql)).toBe(false)
   })
 })

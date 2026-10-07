@@ -237,11 +237,21 @@ export function useObjectActions() {
     if (options.cascade) {
       const [r] = await api.db.execute(
         node.connectionId,
-        `SELECT DISTINCT n.nspname || '.' || c.relname FROM pg_catalog.pg_constraint con
-           JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+        // TRUNCATE … CASCADE is transitive and reaches partitions/children too: walk both.
+        `WITH RECURSIVE dep(oid) AS (
+           SELECT '${target.replace(/'/g, "''")}'::regclass::oid
+           UNION
+           SELECT x.oid FROM dep JOIN (
+             SELECT con.conrelid AS oid, con.confrelid AS parent FROM pg_catalog.pg_constraint con
+              WHERE con.contype = 'f'
+             UNION ALL
+             SELECT i.inhrelid, i.inhparent FROM pg_catalog.pg_inherits i
+           ) x ON x.parent = dep.oid
+         )
+         SELECT n.nspname || '.' || c.relname FROM dep
+           JOIN pg_catalog.pg_class c ON c.oid = dep.oid
            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-          WHERE con.contype = 'f' AND con.confrelid = '${target.replace(/'/g, "''")}'::regclass
-            AND con.conrelid <> con.confrelid ORDER BY 1`,
+          WHERE dep.oid <> '${target.replace(/'/g, "''")}'::regclass::oid ORDER BY 1`,
         { schema: schemaRef(node.schema, node.database) }
       )
       dependants = (r?.resultSet?.rows ?? []).map((row) => String(row[0]))

@@ -376,6 +376,11 @@ export class PgDriverConnection implements SqlDriverConnection<PgSession> {
       existing.lastUsed = Date.now()
       return existing
     }
+    if (existing && !existing.lost && existing.session.transactionStatus() !== 'idle')
+      throw new PgUserError(
+        'Hay una transacción abierta en esta pestaña: confírmala o deshazla antes de cambiar de base de datos',
+        'E_PG_TX_OPEN'
+      )
     if (existing) await this.closeTabSession(key)
     this.pool(database) // enforces the database cap and the open/closed state
     const live = await this.connectClient(database)
@@ -439,16 +444,18 @@ export class PgDriverConnection implements SqlDriverConnection<PgSession> {
     const running = this.executions.get(executionId)
     if (!running) return false
     running.cancelled = true
-    const session = await this.acquire({ database: running.database, schema: null })
+    // A dedicated short-lived client: the pool may be full of busy sessions.
+    const live = await this.connectClient(running.database)
     try {
       // Still the same execution? (it may have finished while we connected)
       if (this.executions.get(executionId) !== running) return false
-      const [row] = await session.query<{ ok: boolean }>('SELECT pg_cancel_backend($1) AS ok', [
-        running.pid
-      ])
-      return row?.ok === true
+      const { rows } = await live.client.query<{ ok: boolean }>(
+        'SELECT pg_cancel_backend($1) AS ok',
+        [running.pid]
+      )
+      return rows[0]?.ok === true
     } finally {
-      await session.release()
+      await live.client.end().catch(() => undefined)
     }
   }
 
