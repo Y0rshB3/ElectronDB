@@ -7,7 +7,7 @@
     "EmailFrom": "",
     "EmailTo": "",
     "EmailCC": "",
-    "EmailSubject": "[%F] Batch Job %J Finished %R",
+    "EmailSubject": "",
     "EmailBody": "%L",
     "EmailServerHost": "",
     "EmailServerPort": "",

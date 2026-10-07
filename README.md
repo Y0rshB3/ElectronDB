@@ -1,13 +1,16 @@
-# ElectronDB
+# Vortaq
 
-Gestor de bases de datos MySQL de escritorio, de código abierto (Electron + Vue 3 + TypeScript), inspirado en
-otros gestores de bases de datos. Explora y edita datos, escribe consultas con autocompletado, diseña tablas, saca
-copias de seguridad y automatiza backups y restauraciones entre entornos (por ejemplo, de staging a local).
-Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. También puede
-importar conexiones y copias que ya tengas en otros gestores (ver
+<img src="build/icons/256x256.png" alt="" width="96" height="96" />
+
+Vortaq es un gestor de bases de datos de escritorio, independiente y de código abierto, para macOS, Windows y
+Linux. Hoy trabaja con MySQL y MariaDB: explora y edita datos, escribe consultas con autocompletado, diseña
+tablas, saca copias de seguridad y automatiza copias y restauraciones entre entornos (por ejemplo, de staging a
+local). Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. Si
+ya usabas Navicat, puede importar tus conexiones, tareas y copias `.nb3` (ver
 [Importar desde otros gestores](#importar-desde-otros-gestores-macos)).
 
-La interfaz está en español. El código y los comentarios están en inglés.
+Está construido con Electron, Vue 3 y TypeScript. La interfaz está en español; el código y los comentarios, en
+inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 
 ## Índice
 
@@ -26,6 +29,7 @@ La interfaz está en español. El código y los comentarios están en inglés.
 - [Desarrollo](#desarrollo)
 - [Seguridad](#seguridad)
 - [Licencia](#licencia)
+- [Licencias de terceros](#licencias-de-terceros)
 - [Marcas](#marcas)
 
 ## Funciones
@@ -47,7 +51,8 @@ La interfaz está en español. El código y los comentarios están en inglés.
   sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
   la lista de copias de seguridad con un paquete entero (también los lotes importados de otros gestores).
 - **Importación desde otros gestores**: conexiones, colores, trabajos por lotes y copias existentes de
-  Navicat for MySQL (formato `.nb3`). Es de solo lectura: no modifica nada del otro programa.
+  Navicat for MySQL (formato `.nb3`), leídos de los archivos de tu carpeta. Es de solo lectura: no modifica
+  nada del otro programa y no lee sus contraseñas (las escribes tú).
 - **Protección de producción**: toda escritura sobre una conexión marcada como Producción pide escribir su
   nombre. En **Ajustes › Seguridad** puedes extenderlo a Staging, Local u Otro.
 - **Confirmación antes de borrar en cualquier conexión**: DROP, TRUNCATE, DELETE y eliminar filas, tablas,
@@ -65,21 +70,20 @@ La interfaz está en español. El código y los comentarios están en inglés.
 El desarrollo y las pruebas diarias se hacen en macOS. Windows y Linux compilan y empaquetan, pero todavía no se
 han probado a fondo en un equipo real: trátalos como **experimentales**.
 
-| Función                                  | macOS                           | Windows                                        | Linux                                            |
-| ---------------------------------------- | ------------------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| Ejecutar desde el código (`npm run dev`) | Sí                              | Sí (experimental)                              | Sí (experimental)                                |
-| Instalador                               | `.dmg` y `.zip` (sin firmar)    | Instalador NSIS y `.exe` portable (sin firma)  | AppImage y `.deb`                                |
-| Conexiones, consultas, datos, diseñador  | Sí                              | Sí                                             | Sí                                               |
-| Copias `.nb3` (crear, leer, restaurar)   | Sí                              | Sí                                             | Sí                                               |
-| Importar desde Navicat                   | Sí, detección automática        | Solo copiando la carpeta de un Mac (ver abajo) | Solo copiando la carpeta de un Mac (ver abajo)   |
-| Recuperar contraseñas de Navicat         | Sí, desde el Llavero (Keychain) | **No**: escríbelas a mano                      | **No**: escríbelas a mano                        |
-| Trabajos programados con la app abierta  | Sí                              | Sí                                             | Sí                                               |
-| Trabajos programados con la app cerrada  | Sí (launchd)                    | **No** de forma integrada (ver Automatización) | **No** de forma integrada (ver Automatización)   |
-| Cifrado de contraseñas guardadas         | Llavero de macOS                | DPAPI de Windows                               | libsecret / KWallet; **sin llavero, sin cifrar** |
+| Función                                  | macOS                        | Windows                                        | Linux                                            |
+| ---------------------------------------- | ---------------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| Ejecutar desde el código (`npm run dev`) | Sí                           | Sí (experimental)                              | Sí (experimental)                                |
+| Instalador                               | `.dmg` y `.zip` (sin firmar) | Instalador NSIS y `.exe` portable (sin firma)  | AppImage y `.deb`                                |
+| Conexiones, consultas, datos, diseñador  | Sí                           | Sí                                             | Sí                                               |
+| Copias `.nb3` (crear, leer, restaurar)   | Sí                           | Sí                                             | Sí                                               |
+| Importar desde Navicat                   | Sí, detección automática     | Solo copiando la carpeta de un Mac (ver abajo) | Solo copiando la carpeta de un Mac (ver abajo)   |
+| Trabajos programados con la app abierta  | Sí                           | Sí                                             | Sí                                               |
+| Trabajos programados con la app cerrada  | Sí (launchd)                 | **No** de forma integrada (ver Automatización) | **No** de forma integrada (ver Automatización)   |
+| Cifrado de contraseñas guardadas         | Llavero de macOS             | DPAPI de Windows                               | libsecret / KWallet; **sin llavero, sin cifrar** |
 
 Limitaciones conocidas fuera de macOS:
 
-- Navicat para Windows guarda sus conexiones en el Registro y Navicat para Linux en otra carpeta; ElectronDB
+- Navicat para Windows guarda sus conexiones en el Registro y Navicat para Linux en otra carpeta; Vortaq
   todavía no lee ninguno de los dos formatos. Solo entiende la carpeta `Navicat CC` de macOS, así que fuera de
   macOS la ruta de importación empieza vacía y el diálogo explica cómo usar una copia de esa carpeta.
 - La barra de herramientas hace de barra de título: en macOS lleva los semáforos a la izquierda y en
@@ -200,12 +204,12 @@ Para usarla a diario sin la terminal abierta, genera un instalador (siguiente se
 
 Compila **en el mismo sistema operativo** al que va destinado el instalador. Los archivos quedan en `release/`.
 
-| Sistema | Comando              | Resultado en `release/`                                                                          |
-| ------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| macOS   | `npm run dist:mac`   | `ElectronDB-<versión>-<arch>.dmg` y `ElectronDB-<versión>-<arch>-mac.zip` (arquitectura del Mac) |
-| Windows | `npm run dist:win`   | `ElectronDB-<versión>-x64-setup.exe` (instalador) y `ElectronDB-<versión>-x64-portable.exe`      |
-| Linux   | `npm run dist:linux` | `ElectronDB-<versión>-x86_64.AppImage` y `electrondb_<versión>_amd64.deb`                        |
-| Actual  | `npm run dist`       | Los formatos del sistema en el que lo ejecutas                                                   |
+| Sistema | Comando              | Resultado en `release/`                                                                  |
+| ------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| macOS   | `npm run dist:mac`   | `Vortaq-<versión>-<arch>.dmg` y `Vortaq-<versión>-<arch>-mac.zip` (arquitectura del Mac) |
+| Windows | `npm run dist:win`   | `Vortaq-<versión>-x64-setup.exe` (instalador) y `Vortaq-<versión>-x64-portable.exe`      |
+| Linux   | `npm run dist:linux` | `Vortaq-<versión>-x86_64.AppImage` y `vortaq_<versión>_amd64.deb`                        |
+| Actual  | `npm run dist`       | Los formatos del sistema en el que lo ejecutas                                           |
 
 Notas:
 
@@ -214,6 +218,8 @@ Notas:
   `electron-builder.yml` elige las herramientas NSIS y AppImage nativas (`toolsets`).
 - Los nombres de los archivos los fija `electron-builder.yml` (`artifactName`). **No los renombres**: los
   archivos `latest*.yml` que usa la actualización integrada apuntan a esos nombres.
+- Los iconos (`build/icon.icns`, `build/icon.ico`, `build/icons/`) salen de `build/vortaq-icon-source.png`
+  con `scripts/make-icons.py` (ver `build/README.md`).
 - Ningún comando `dist` publica nada (`--publish never`).
 
 ### Preparar una versión para GitHub
@@ -241,7 +247,7 @@ primera vez:
   verificar**":
 
   ```sh
-  xattr -dr com.apple.quarantine "/Applications/ElectronDB.app"
+  xattr -dr com.apple.quarantine "/Applications/Vortaq.app"
   ```
 
   Sin terminal: intenta abrirla una vez, ve a **Ajustes del Sistema → Privacidad y seguridad** y pulsa
@@ -252,19 +258,19 @@ primera vez:
   (`libfuse2t64` en 24.04):
 
   ```sh
-  chmod +x ElectronDB-*.AppImage
+  chmod +x Vortaq-*.AppImage
   sudo apt install -y libfuse2t64   # o libfuse2
-  ./ElectronDB-*.AppImage
+  ./Vortaq-*.AppImage
   ```
 
-  El `.deb` se instala con `sudo apt install ./electrondb_*_amd64.deb`.
+  El `.deb` se instala con `sudo apt install ./vortaq_*_amd64.deb`.
 
 ## Primer uso
 
 ### Tour de bienvenida
 
-La primera vez que abres ElectronDB con un perfil nuevo aparece un recorrido corto (9 pasos): qué es la app,
-**Mis conexiones**, **Nueva consulta** (autocompletado, **Embellecer**, selector de conexión), datos y filtros,
+La primera vez que abres Vortaq con un perfil nuevo aparece un recorrido corto (9 pasos): qué es la app,
+**Mis conexiones**, **Nueva consulta** (autocompletado, **Formatear SQL**, selector de conexión), datos y filtros,
 copias de seguridad y **Restaurar en Local**, automatización, el asistente de IA (**Ajustes › IA**, solo se envía
 la estructura) y **Ajustes › Seguridad** (Producción). Cada paso resalta el botón del que habla; si ese elemento
 no está en pantalla, la tarjeta sale centrada.
@@ -275,11 +281,19 @@ no está en pantalla, la tarjeta sale centrada.
   el paso **Seleccionar**; **No es esta carpeta** la abre en el primer paso para elegirla; **Ahora no** cierra.
   Si no lo encuentra ofrece **Nueva conexión** o **Importar desde otro gestor**.
 - Terminarlo o saltarlo se recuerda en `tour.json` del perfil y no vuelve a salir. Puedes repetirlo cuando quieras
-  desde **Otros → Ver tour de bienvenida** o en **Ajustes → Actualizaciones → Ver tour de bienvenida**.
+  desde **Más → Ver tour de bienvenida** o en **Ajustes → Actualizaciones → Ver tour de bienvenida**.
 - Si actualizas desde una versión anterior (0.1.6 o antes) no sale el tour de bienvenida: ya conoces la app. En
   su lugar, la ventana de novedades ofrece **Mostrarme cómo** (ver [Actualizaciones](#actualizaciones)).
-- ElectronDB ya no abre la importación de Navicat sola al arrancar sin conexiones; sigue a mano en
-  **Conexión → Importar desde Navicat…** y en el estado vacío de **Mis conexiones**.
+- Vortaq ya no abre la importación de Navicat sola al arrancar sin conexiones; sigue a mano en
+  **Conexión → Importar…** (también en **Más**) y en el estado vacío de **Mis conexiones**.
+
+### La barra de herramientas
+
+**Conexión** (nueva conexión e **Importar…**) · **Nueva consulta** · **Objetos** (tablas, vistas, funciones y
+procedimientos, eventos y consultas guardadas de la base de datos seleccionada, y **Nueva tabla/vista/función/
+procedimiento**) · **Usuarios** · **Copias de seguridad** · **Automatización** · **Más** (**Importar…**, **Buscar
+actualizaciones…**, **Ver tour de bienvenida**, **Registro**, **Ajustes…** y **Acerca de Vortaq**). A la
+derecha, el asistente de IA (✦) y los ajustes (⚙).
 
 ### Crear una conexión
 
@@ -293,7 +307,7 @@ no está en pantalla, la tarjeta sale centrada.
 como Cloud SQL Auth Proxy con IAM; un usuario MySQL con contraseña vacía; o autenticación solo con certificado
 de cliente en la pestaña SSL), elige **Autenticación › Sin contraseña (proxy, certificado o usuario sin clave)**.
 El campo de contraseña desaparece, no se guarda ninguna y la conexión, los trabajos automáticos, las copias y
-el asistente de IA conectan sin ella. Si dejas **Contraseña** pero no hay ninguna guardada, ElectronDB prueba
+el asistente de IA conectan sin ella. Si dejas **Contraseña** pero no hay ninguna guardada, Vortaq prueba
 una vez sin contraseña: si el servidor la acepta conecta (y **Probar conexión** sugiere marcar «Sin
 contraseña»); si la rechaza verás «No hay contraseña guardada para la conexión X: escríbela en la conexión o
 marca «Sin contraseña»». Las conexiones importadas de Navicat quedan en modo **Contraseña**, porque Navicat no
@@ -303,7 +317,7 @@ guarda si hace falta.
 
 Hoy se puede importar desde Navicat for MySQL.
 
-1. **Conexión → Importar desde Navicat…**. Si la carpeta guardada no existe o está vacía, ElectronDB **busca
+1. **Conexión → Importar…** (o **Más → Importar…**). Si la carpeta guardada no existe o está vacía, Vortaq **busca
    Navicat solo** en los sitios habituales de macOS:
    - `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC` (la habitual);
    - la versión de la App Store: `~/Library/Containers/<carpeta con «navicat» en el nombre>/Data/Library/Application Support/PremiumSoft CyberTech/Navicat CC`;
@@ -316,13 +330,13 @@ Hoy se puede importar desde Navicat for MySQL.
    lee: no escribe nada en esas carpetas, no usa la red y no guarda nada salvo la carpeta que confirmes.
 
 2. Marca las conexiones y los trabajos que quieras traer. Navicat no se modifica.
-3. Navicat no guarda las contraseñas en sus archivos. Puedes pulsar **recuperarlas del Llavero** (macOS pedirá
-   permiso para cada una) o escribirlas una vez en cada conexión.
+3. Navicat no guarda las contraseñas en esos archivos y Vortaq no las busca en ningún otro sitio (tampoco en el
+   Llavero): escríbelas una vez en cada conexión, o márcala **Sin contraseña** si el servidor no la pide.
 
 **En Windows o Linux**: copia la carpeta `Navicat CC` desde un Mac (por ejemplo a `C:\Datos\Navicat CC` o
 `~/navicat-cc`) y escribe esa ruta en el diálogo de importación (o en **Ajustes** para no repetirla), que fuera
-de macOS empieza vacío. ElectronDB también busca una carpeta llamada `Navicat CC` copiada en tu carpeta personal
-o un nivel por debajo (por ejemplo `~/Navicat CC` o `~/Documentos/Navicat CC`), sin recorrer el disco entero. Las contraseñas habrá que escribirlas a mano: el botón del Llavero solo aparece en macOS.
+de macOS empieza vacío. Vortaq también busca una carpeta llamada `Navicat CC` copiada en tu carpeta personal
+o un nivel por debajo (por ejemplo `~/Navicat CC` o `~/Documentos/Navicat CC`), sin recorrer el disco entero. Las contraseñas se escriben a mano, como en macOS.
 Las copias `.nb3` se buscan en la carpeta de cada conexión dentro de `Navicat CC`, porque las rutas de un Mac
 no existen en otro equipo.
 
@@ -343,7 +357,7 @@ sentencias que escriben exige escribir el nombre de la conexión para confirmar.
 comprueba y rechaza la operación si la interfaz no envió la confirmación. Desde la versión 0.1.5 **no se puede
 desactivar** para Producción (si tenías apagado el antiguo interruptor, vuelve a pedirlo).
 
-En **Otros → Ajustes… → Seguridad → «Pedir confirmación escribiendo el nombre antes de escribir en:»** eliges
+En **Más → Ajustes… → Seguridad → «Pedir confirmación escribiendo el nombre antes de escribir en:»** eliges
 qué otros entornos se comportan igual: **Staging**, **Local** u **Otro** (Producción aparece marcada y bloqueada).
 Para una conexión de un entorno marcado:
 
@@ -360,7 +374,7 @@ programarlas (como Producción). Una tarea ya programada antes de marcar su ento
 de nuevo para revisarla.
 
 En **cualquier otra conexión** (Local, Staging, Otro), con **Ajustes → Seguridad → Confirmar antes de borrar o
-eliminar en cualquier conexión** activado (lo está por defecto, también en perfiles anteriores), ElectronDB pide
+eliminar en cualquier conexión** activado (lo está por defecto, también en perfiles anteriores), Vortaq pide
 una confirmación sencilla, sin escribir el nombre, antes de:
 
 - eliminar una tabla, vista, función, procedimiento, evento o base de datos, o vaciar una tabla (árbol de
@@ -399,7 +413,7 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
 
 ## Copias de seguridad y rollback a local
 
-- **Copia de seguridad** (barra superior) abre las copias de la conexión seleccionada: las propias y, en solo
+- **Copias de seguridad** (barra superior) abre las copias de la conexión seleccionada: las propias y, en solo
   lectura, las que creó Navicat.
 - **Nueva copia** genera un `.nb3` del esquema elegido (estructura y, si quieres, datos) con barra de progreso
   y opción de cancelar.
@@ -417,7 +431,7 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
   3. Selecciona esa copia y pulsa **Restaurar en Local**.
 
 Las copias nuevas se guardan en `<perfil>/backups/<conexión>/<esquema>/`, salvo que cambies la carpeta en la
-conexión o en **Ajustes** (si venías de Navidog, siguen en la carpeta `backups` del perfil de Navidog).
+conexión o en **Ajustes** (si venías de ElectronDB o de Navidog, siguen en la carpeta `backups` de ese perfil).
 
 ### Restaurar todo en Local (rollback de una ejecución)
 
@@ -464,7 +478,7 @@ el estado ni la «Última ejecución» del trabajo de backup, y no impide ejecut
 Si un objeto falla (por ejemplo, una función de 5.7 sin `DETERMINISTIC` en un 8.4 con binlog), el paso dice qué
 objetos fallaron, el error con una pista en español (en ese caso, `SET GLOBAL log_bin_trust_function_creators
 = 1` en el destino), que la base de datos **ha quedado incompleta** y cuál es su copia previa. Lo mismo si
-cancelas o cierras ElectronDB a mitad: cancelar una restauración pide confirmación, y salir de la aplicación
+cancelas o cierras Vortaq a mitad: cancelar una restauración pide confirmación, y salir de la aplicación
 mientras restaura también.
 
 **Deshacer.** Cada base de datos reemplazada muestra en el historial su **Copia previa** y un botón
@@ -478,10 +492,10 @@ Si el destino es una conexión de **Producción**, hay que escribir su nombre pa
 
 ### Restaurar un paquete de copias en Local (desde Copias de seguridad)
 
-En **Copia de seguridad** de una conexión, las copias que se hicieron juntas se agrupan en **paquetes** (el
+En **Copias de seguridad** de una conexión, las copias que se hicieron juntas se agrupan en **paquetes** (el
 interruptor **Agrupar por paquete**, abajo a la derecha, está activado por defecto y se recuerda):
 
-- **Automatización**: las copias que escribió una misma ejecución de un trabajo de ElectronDB. Título
+- **Automatización**: las copias que escribió una misma ejecución de un trabajo de Vortaq. Título
   `<trabajo> · <fecha de la ejecución>`, por ejemplo `Backup staging · 2026-10-05 23:16`.
 - **Lote**: el resto (los lotes de Navicat, copias antiguas o hechas a mano) se agrupan por conexión y
   etiqueta (el sufijo del nombre, `…-backup-staging.nb3`) cuando cada copia se hizo menos de 10 minutos
@@ -515,7 +529,7 @@ El paso **Restaurar** reemplaza una base de datos con una copia, igual que «Res
 - **un paso de copia anterior del mismo trabajo** (restaura el archivo que ese paso acaba de generar; solo
   puede ser un paso solo de estructura si el paso Restaurar también es «Solo estructura»), o
 - **la última copia completa de una tarea** de un esquema de una conexión: la copia con datos más reciente que
-  hizo un paso de copia de una tarea de ElectronDB sobre esa misma conexión y que sigue en disco. Nunca usa
+  hizo un paso de copia de una tarea de Vortaq sobre esa misma conexión y que sigue en disco. Nunca usa
   copias manuales, parciales, solo de estructura, de Navicat, de otra conexión ni copias previas.
 
 Como en el diálogo de restaurar, el paso tiene **Contenido**: **Estructura y datos** (por defecto, también en
@@ -526,7 +540,7 @@ La base de datos de destino tiene por defecto el mismo nombre que la de origen. 
 **Staging → Local**: un paso de copia por cada base de datos de staging y, detrás, un paso Restaurar de cada
 una en la conexión Local; programado, mantiene tu local al día cada mañana. Por seguridad, **un paso Restaurar
 nunca puede escribir en una conexión de Producción** (las ejecuciones programadas o de launchd no tienen a nadie
-que confirme): ElectronDB lo rechaza al guardar el trabajo y otra vez al ejecutarlo. Tampoco permite restaurar
+que confirme): Vortaq lo rechaza al guardar el trabajo y otra vez al ejecutarlo. Tampoco permite restaurar
 una base de datos sobre sí misma (misma conexión y esquema que el origen) ni sobre una base de datos del sistema
 (`mysql`, `sys`, `performance_schema`, `information_schema`).
 
@@ -548,9 +562,9 @@ npm run build
 npx electron . --run-job=<id>
 
 # App instalada
-/Applications/ElectronDB.app/Contents/MacOS/ElectronDB --run-job=<id>     # macOS
-"%LOCALAPPDATA%\Programs\ElectronDB\ElectronDB.exe" --run-job=<id>        # Windows (ruta por defecto del instalador)
-/opt/ElectronDB/electrondb --run-job=<id>                                 # Linux (.deb)
+/Applications/Vortaq.app/Contents/MacOS/Vortaq --run-job=<id>     # macOS
+"%LOCALAPPDATA%\Programs\Vortaq\Vortaq.exe" --run-job=<id>        # Windows (ruta por defecto del instalador)
+/opt/Vortaq/vortaq --run-job=<id>                                 # Linux (.deb)
 ```
 
 Para programarlo con la app cerrada fuera de macOS:
@@ -562,10 +576,10 @@ Para programarlo con la app cerrada fuera de macOS:
   (con el llavero desbloqueado). Cambia `1000` por tu UID, que sale con `id -u`:
 
   ```sh
-  0 3 * * * DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /opt/ElectronDB/electrondb --run-job=<id> >> /tmp/electrondb-cron.log 2>&1
+  0 3 * * * DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /opt/Vortaq/vortaq --run-job=<id> >> /tmp/vortaq-cron.log 2>&1
   ```
 
-  El registro de la ejecución queda en `/tmp/electrondb-cron.log` y en el `logs/` del perfil.
+  El registro de la ejecución queda en `/tmp/vortaq-cron.log` y en el `logs/` del perfil.
 
 ### Cambiar la conexión de una consulta
 
@@ -600,7 +614,8 @@ muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee 
 
 - Haz clic en cada palabra para cambiarla: la **columna** y el **operador** abren un menú, el **valor** se edita en
   el sitio (`<?>` si está vacío; en columnas de fecha u hora con el calendario) y el **conector** alterna entre
-  `y` y `o`. Al lado del valor se indica el tipo (`[Número]`, `[Texto]`, `[Fecha]`...).
+  `y` y `o`. Al lado del valor, una etiqueta pequeña indica qué tipo de valor compara (`número`, `texto`,
+  `fecha`...).
 - `+` añade una condición y `(+` un paréntesis (en la raíz o, desde la línea `)`, dentro de ese paréntesis). Los
   paréntesis se pueden anidar.
 - Clic derecho en una línea: Insertar condición, Insertar paréntesis, Agrupar con paréntesis, Borrar condición,
@@ -608,7 +623,7 @@ muestra cuántas condiciones hay aunque el panel esté oculto. El filtro se lee 
   Clic derecho en el espacio vacío o en una línea `)`: Añadir condición, Limpiar todo y los perfiles.
 - Operadores: `=`, `!=`, `<`, `<=`, `>`, `>=`, contiene, no contiene, empieza por, no empieza por, termina en, no
   termina en, es nulo, no es nulo, está vacío, no está vacío, está en la lista, no está en la lista, entre, no
-  entre y `[Personalizado]` (un fragmento SQL tuyo para esa línea).
+  entre y **SQL libre** (un fragmento SQL tuyo para esa línea).
 - **Aplicar filtro** (o `Cmd/Ctrl+Enter`, o `Enter` al editar un valor) recarga la tabla desde la primera página;
   el total y la paginación usan el mismo filtro. **Limpiar** quita el filtro y recarga todo.
 - **Editar como texto (WHERE)** muestra el `WHERE` que se ejecutaría para retocarlo a mano. Ese texto es SQL tuyo
@@ -625,7 +640,7 @@ Cómo se interpreta, para que no haya sorpresas:
   aparecen. Usa **es nulo** si también las quieres.
 - **contiene / empieza por / termina en** buscan el texto literal: `%`, `_` y `\` no son comodines.
 - La SQL la construye el proceso principal: las columnas se comprueban contra la tabla real y los valores van
-  escapados por el controlador de MySQL. Solo `[Personalizado]` y el modo texto son SQL escrito por ti.
+  escapados por el controlador de MySQL. Solo **SQL libre** y el modo texto son SQL escrito por ti.
 
 ### Editar fechas y horas
 
@@ -736,15 +751,15 @@ entorno.
 
 El **perfil** es una carpeta por usuario que se llama como la app:
 
-| Sistema | Carpeta del perfil                                                                   |
-| ------- | ------------------------------------------------------------------------------------ |
-| macOS   | `~/Library/Application Support/ElectronDB`                                           |
-| Windows | `%APPDATA%\ElectronDB` (normalmente `C:\Users\<usuario>\AppData\Roaming\ElectronDB`) |
-| Linux   | `~/.config/ElectronDB` (o `$XDG_CONFIG_HOME/ElectronDB`)                             |
+| Sistema | Carpeta del perfil                                                           |
+| ------- | ---------------------------------------------------------------------------- |
+| macOS   | `~/Library/Application Support/Vortaq`                                       |
+| Windows | `%APPDATA%\Vortaq` (normalmente `C:\Users\<usuario>\AppData\Roaming\Vortaq`) |
+| Linux   | `~/.config/Vortaq` (o `$XDG_CONFIG_HOME/Vortaq`)                             |
 
-Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en la misma ruta pero con la carpeta
-`Navidog` (en Linux puede ser `navidog`). ElectronDB lo copia solo en el primer arranque: ver
-[Si venías de Navidog](#si-venías-de-navidog).
+Si usaste la app cuando se llamaba **ElectronDB** (o **Navidog**), tu perfil anterior está en la misma ruta con
+la carpeta `ElectronDB` (o `Navidog`). Vortaq lo copia solo en el primer arranque: ver
+[Si venías de ElectronDB o de Navidog](#si-venías-de-electrondb-o-de-navidog).
 
 | Archivo o carpeta      | Contenido                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------------- |
@@ -753,7 +768,7 @@ Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en
 | `jobs.json`            | Trabajos de automatización                                                         |
 | `job-runs.json`        | Historial de ejecuciones                                                           |
 | `settings.json`        | Preferencias (carpeta de Navicat, carpeta de copias, tema, límite de filas)        |
-| `logs/`                | Registro de la app (`electrondb.log`) y de las ejecuciones con launchd             |
+| `logs/`                | Registro de la app (`vortaq.log`) y de las ejecuciones con launchd                 |
 | `backups/`             | Copias `.nb3` creadas por la app (carpeta por defecto)                             |
 | `notices.json`         | Avisos de arranque que ya cerraste                                                 |
 | `tour.json`            | Si ya viste (o saltaste) el tour de bienvenida                                     |
@@ -773,56 +788,71 @@ Si usaste la app cuando aún se llamaba **Navidog**, tu perfil anterior está en
 
 Para probar sin tocar tu perfil, arranca con otro (ver [Variables de entorno](#variables-de-entorno)).
 
-### Si venías de Navidog
+### Si venías de ElectronDB o de Navidog
 
-La app se llamaba **Navidog**. La primera vez que arranca como ElectronDB, si la carpeta nueva todavía no tiene
-conexiones y existe la antigua, **copia** (no mueve) tu perfil:
+La app se llamaba **ElectronDB** (y antes **Navidog**). La primera vez que arranca como Vortaq, si la carpeta
+nueva todavía no tiene conexiones, **copia** (no mueve) el perfil anterior más reciente: el de ElectronDB y, si
+no existe o está vacío, el de Navidog. Al terminar avisa una vez de que tus datos se trasladaron y de dónde.
 
-- Los `*.json` (conexiones, trabajos, historial, preferencias y contraseñas cifradas), `logs/` (el registro
-  antiguo, `navidog.log`, se conserva ahí) y las consultas guardadas (`Local Storage`). En Windows también
-  `Local State`, donde está la clave de cifrado de las contraseñas.
-- **Las copias `.nb3` no se copian** (pueden ocupar muchos GB): ElectronDB sigue usando `Navidog/backups` donde
-  está, como carpeta de copias en **Ajustes** y en cada conexión que la usaba.
+- Se copian los `*.json` (conexiones, trabajos, historial, preferencias, contraseñas y claves de IA cifradas,
+  perfiles de filtro, proveedores y memoria del asistente, `tour.json`, `updates.json`, `notices.json`), las
+  conversaciones del asistente (`ai/`), `logs/` (el registro antiguo se conserva ahí) y las consultas guardadas
+  (`Local Storage`). En Windows también `Local State`, donde está la clave de cifrado de las contraseñas.
+- **Las copias `.nb3` no se copian** (pueden ocupar muchos GB): Vortaq sigue usando la carpeta `backups` del
+  perfil anterior donde está, como carpeta de copias en **Ajustes** y en cada conexión que la usaba.
 - Las demás rutas que apuntaban dentro de la carpeta antigua (por ejemplo, certificados guardados ahí) pasan a
   apuntar a la nueva.
-- Nunca sobrescribe lo que ya exista en la carpeta nueva. Deja un `migrated-from-navidog.json` con lo copiado
-  (y lo que no se pudo copiar, en `failed`) y lo apunta en el registro. La carpeta antigua no se toca.
-- Con un perfil alternativo (`ELECTRONDB_USER_DATA`) no se copia nada.
+- Nunca sobrescribe lo que ya exista en la carpeta nueva y nunca borra la antigua. Deja un
+  `migrated-from-electrondb.json` (o `migrated-from-navidog.json`) con lo copiado (y lo que no se pudo copiar, en
+  `failed`) y lo apunta en el registro.
+- Con un perfil alternativo (`VORTAQ_USER_DATA`) no se copia nada.
 
-**No borres la carpeta antigua** mientras ElectronDB use su `backups/` ni mientras haya contraseñas pendientes
-(ver abajo). Para dejar de depender de ella: cierra la app, mueve `Navidog/backups` a otra carpeta, ponla en
-**Ajustes** y en la carpeta de copias de cada conexión, y después borra `Navidog`.
+**No borres la carpeta antigua** mientras Vortaq use su `backups/` ni mientras haya contraseñas pendientes
+(ver abajo). Para dejar de depender de ella: cierra la app, mueve la carpeta `backups` a otro sitio, ponla en
+**Ajustes** y en la carpeta de copias de cada conexión, y después borra la carpeta antigua.
 
-**Contraseñas.** El cifrado del sistema va ligado al nombre de la app, así que hay que volver a cifrarlas:
+**Contraseñas y claves de IA.** El cifrado del sistema va ligado al nombre de la app, así que hay que volver a
+cifrarlas:
 
-- **macOS**: la clave antigua está en el llavero, en el elemento «Navidog Safe Storage». ElectronDB la lee una
-  sola vez y macOS pregunta si `security` puede acceder a ella: elige **Permitir**. Las contraseñas se vuelven a
-  cifrar con la clave nueva («ElectronDB Safe Storage»). Si deniegas el acceso, no respondes al aviso o el
-  llavero está bloqueado, esas contraseñas quedan pendientes y se vuelve a intentar en los siguientes arranques
-  (3 intentos en total). Si el elemento no existe, no se reintenta.
-- **Windows**: se siguen leyendo con la clave copiada en `Local State` (DPAPI, ligada a tu usuario de Windows).
-- **Linux**: las que guardó el llavero de la sesión (GNOME Keyring/KWallet) van ligadas al nombre antiguo y no
-  se pueden recuperar.
+- **macOS**: la clave antigua está en el llavero, en el elemento «ElectronDB Safe Storage» (o «Navidog Safe
+  Storage»). Vortaq la lee una sola vez y macOS pregunta si `security` puede acceder a ella: elige
+  **Permitir**. Los valores se vuelven a cifrar con la clave nueva («Vortaq Safe Storage»). Si algún valor
+  viene todavía de Navidog, se pide también esa clave, solo para ese valor. Si deniegas el acceso, no respondes
+  al aviso o el llavero está bloqueado, esos valores quedan pendientes y se vuelve a intentar en los siguientes
+  arranques (3 intentos en total). Si el elemento no existe, no se reintenta.
+- **Windows**: se siguen leyendo con la clave copiada en `Local State` (DPAPI, ligada a tu usuario de Windows,
+  no al nombre de la app).
+- **Linux**: con GNOME Keyring o KWallet la clave va ligada al nombre de la app, así que las que no se puedan
+  leer con la clave nueva se piden de nuevo. Sin llavero (solo base64) se conservan tal cual.
 
-Si alguna no se puede recuperar, la app avisa una vez al arrancar: «Vuelve a escribir la contraseña de: …».
-Edita esas conexiones y guarda la contraseña de nuevo.
+Si alguna no se puede recuperar, la app avisa una vez al arrancar: «Vuelve a escribir la contraseña de: …»
+(una clave de IA aparece como «clave de IA «nombre del proveedor»»). Edita esas conexiones o el proveedor en
+**Ajustes › IA** y guárdala de nuevo.
 
 Para **volver a intentarlo más tarde** (por ejemplo, si denegaste el acceso las tres veces): cierra la app, abre
-`migrated-from-navidog.json` en la carpeta del perfil y cambia `"secrets": "done"` por `"secrets": "pending"`. En
-el siguiente arranque ElectronDB vuelve a leer las contraseñas que le falten de `Navidog/credentials.json` (la
-carpeta antigua tiene que seguir existiendo) y conserva las que ya hayas escrito de nuevo.
+`migrated-from-electrondb.json` (o `migrated-from-navidog.json`) en la carpeta del perfil y cambia
+`"secrets": "done"` por `"secrets": "pending"`. En el siguiente arranque Vortaq vuelve a leer los valores que le
+falten del `credentials.json` de la carpeta antigua (tiene que seguir existiendo) y conserva los que ya hayas
+escrito de nuevo.
 
 **Trabajos con "Ejecutar aunque la app esté cerrada"** (macOS): al arrancar, los LaunchAgents antiguos
-(`dev.y0rshb3.navidog.job.*`) de los trabajos que ya están en ElectronDB se eliminan y se crean otra vez para
-ElectronDB (`dev.y0rshb3.electrondb.job.*`). Los de trabajos que ElectronDB no tiene (por ejemplo, si no se copió
-el perfil porque la carpeta nueva ya tenía conexiones) **no se tocan**: siguen lanzando Navidog, dejan de
-funcionar si lo desinstalas, y la app avisa una vez con sus nombres. Crea esos trabajos en **Automatización** y
-borra después los archivos antiguos de `~/Library/LaunchAgents`. No vuelvas a abrir Navidog: volvería a crear
-sus agentes y esos trabajos se ejecutarían dos veces.
+(`dev.y0rshb3.electrondb.job.*` y `dev.y0rshb3.navidog.job.*`) de los trabajos que ya están en Vortaq se
+eliminan y se crean otra vez para Vortaq (`dev.y0rshb3.vortaq.job.*`). Los de trabajos que Vortaq no tiene (por
+ejemplo, si no se copió el perfil porque la carpeta nueva ya tenía conexiones) **no se tocan**: siguen lanzando
+la versión anterior, dejan de funcionar si la desinstalas, y la app avisa una vez con sus nombres. Crea esos
+trabajos en **Automatización** y borra después los archivos antiguos de `~/Library/LaunchAgents`. No vuelvas a
+abrir la versión anterior: volvería a crear sus agentes y esos trabajos se ejecutarían dos veces.
+
+**La app anterior.** En macOS, `Vortaq.app` se instala junto a `ElectronDB.app` (otro nombre): cuando
+compruebes que todo está en Vortaq, borra `ElectronDB.app` de **Aplicaciones**. En Windows el instalador de
+Vortaq sustituye la instalación de ElectronDB (también desde la actualización integrada): cambia los accesos
+directos por los de Vortaq y conserva la carpeta de instalación que ya tenía (`%LOCALAPPDATA%\Programs\ElectronDB`
+en un equipo actualizado; `...\Programs\Vortaq` en uno nuevo). En Linux, el `.deb` de Vortaq sustituye al
+paquete `electrondb`, y la AppImage actualizada aparece con el nombre nuevo en la misma carpeta.
 
 ## Actualizaciones
 
-ElectronDB comprueba si hay una versión nueva en las
+Vortaq comprueba si hay una versión nueva en las
 [versiones publicadas en GitHub](https://github.com/Y0rshB3/ElectronDB/releases). Solo hace una consulta
 anónima a la API pública de GitHub (sin cuenta ni datos tuyos). **No descarga nada hasta que pulsas
 Descargar y actualizar** (salvo que actives **Descargar actualizaciones automáticamente**) y nunca instala sin
@@ -837,11 +867,11 @@ que lo pidas o cierres la app. Cómo se instala depende del sistema: ver
   como mucho una vez por arranque y espera a que se cierre cualquier otra ventana. **Más tarde** la oculta hasta
   un arranque pasadas 6 horas. Se consulta GitHub como mucho una vez cada 6 horas; si no hay conexión, no avisa
   de nada. Se desactiva en **Ajustes → Actualizaciones → Buscar actualizaciones al iniciar**.
-- **A mano**: **Otros → Buscar actualizaciones…** (o el menú de la app en macOS) siempre consulta GitHub y muestra
+- **A mano**: **Más → Buscar actualizaciones…** (o el menú de la app en macOS) siempre consulta GitHub y muestra
   la versión instalada, la última publicada, sus notas y cómo actualizar. La versión instalada también aparece en
   **Ajustes**.
 - **Omitir esta versión** deja de avisar de esa versión al iniciar; la siguiente sí se avisa.
-- **Después de actualizar**: el primer arranque de una versión nueva muestra una vez **ElectronDB se actualizó a
+- **Después de actualizar**: el primer arranque de una versión nueva muestra una vez **Vortaq se actualizó a
   x.y.z** con lo importante de cada versión desde la que tenías (por ejemplo, de 0.1.2 a 0.1.4 verás la 0.1.3 y
   la 0.1.4). La lista viene con la app (`src/shared/whatsNew.ts`), así que funciona sin Internet. **Ver todas las
   novedades en GitHub** abre la página de la versión. En un perfil nuevo o al volver a una versión anterior no
@@ -854,7 +884,13 @@ que lo pidas o cierres la app. Cómo se instala depende del sistema: ver
 
 Tus conexiones, trabajos y ajustes están en el perfil y no se tocan al actualizar ni al reinstalar.
 
-**Windows (instalador `-setup.exe`) y Linux (AppImage)**: actualización integrada, como en Navicat.
+**Desde ElectronDB.** Una instalación de ElectronDB 0.1.9 (Windows o AppImage) encuentra Vortaq con su
+actualización integrada, porque las versiones se siguen publicando en el mismo repositorio, y al instalarla queda
+Vortaq en su lugar; en el primer arranque Vortaq copia tu perfil (ver
+[Si venías de ElectronDB o de Navidog](#si-venías-de-electrondb-o-de-navidog)). En Mac descarga el `.dmg` de
+Vortaq: arrastra Vortaq a Aplicaciones y, cuando lo compruebes, borra ElectronDB.
+
+**Windows (instalador `-setup.exe`) y Linux (AppImage)**: actualización integrada.
 
 1. **Descargar y actualizar** descarga la versión nueva dentro de la app. La ventana muestra el progreso
    (descargado / total y velocidad) y un botón **Cancelar**.
@@ -862,7 +898,7 @@ Tus conexiones, trabajos y ajustes están en el perfil y no se tocan al actualiz
    (`latest.yml` / `latest-linux.yml`). Solo se descarga de las versiones de este repositorio; nunca se pasa a
    una versión anterior ni a una preliminar.
 3. Cuando termina: **Reiniciar y actualizar** cierra la app, instala sin preguntas y abre la versión nueva. Con
-   **Más tarde** se instala sola la próxima vez que cierres ElectronDB. Si hay una restauración en curso, la app
+   **Más tarde** se instala sola la próxima vez que cierres Vortaq. Si hay una restauración en curso, la app
    no se reinicia hasta que termine.
 4. Si algo falla verás el motivo en español, **Reintentar** y **Descargar manualmente** (abre el instalador en
    el navegador).
@@ -874,61 +910,65 @@ hayas omitido ni pospuesto; instalarla sigue siendo decisión tuya.
 
 **macOS**: **Descargar instalador** guarda en **Descargas** el `.dmg` de tu Mac (Apple Silicon o Intel),
 comprueba su suma **SHA-256** con `SHA256SUMS.txt` de la versión (si la versión no la publica, no lo abre y te
-ofrece **Descargar manualmente**) y lo abre. Después cierra ElectronDB y **arrastra ElectronDB a Aplicaciones y
+ofrece **Descargar manualmente**) y lo abre. Después cierra Vortaq y **arrastra Vortaq a Aplicaciones y
 reemplaza** la anterior. En Mac la app no puede reemplazarse sola: macOS solo permite la actualización
-automática (Squirrel.Mac) en apps firmadas con un certificado _Developer ID_ de Apple, y ElectronDB todavía no
+automática (Squirrel.Mac) en apps firmadas con un certificado _Developer ID_ de Apple, y Vortaq todavía no
 lo tiene.
 
-**`.exe` portable y `.deb`**: **Descargar** abre el archivo en el navegador; cierra ElectronDB e instálalo como
-la primera vez (`sudo apt install ./electrondb_*_amd64.deb`). Ver
+**`.exe` portable y `.deb`**: **Descargar** abre el archivo en el navegador; cierra Vortaq e instálalo como
+la primera vez (`sudo apt install ./vortaq_*_amd64.deb`). Ver
 [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque).
 
 ### Windows: reparar una instalación rota
 
 Si al actualizar el instalador dijo **"Failed to uninstall old application files"** (o se cerró a medias) y
-ahora no puedes desinstalar ElectronDB desde **Configuración → Aplicaciones**, la instalación anterior quedó
+ahora no puedes desinstalar Vortaq desde **Configuración → Aplicaciones**, la instalación anterior quedó
 a medio borrar: la entrada de "Aplicaciones" sigue en el Registro pero su desinstalador ya no funciona.
 
-**Primero prueba lo sencillo**: cierra ElectronDB y ejecuta el instalador de la 0.1.9 o posterior. Desde esa
+**Primero prueba lo sencillo**: cierra Vortaq y ejecuta el instalador de la 0.1.9 o posterior. Desde esa
 versión el instalador cierra la app si está abierta, ignora un desinstalador antiguo roto e instala encima,
 reparando la entrada de "Aplicaciones".
 
-Si aun así falla, límpialo a mano. **Tus datos no se tocan**: están en `%APPDATA%\ElectronDB`, una carpeta
-distinta que no debes borrar. En PowerShell (sin administrador):
+Si aun así falla, límpialo a mano. **Tus datos no se tocan**: están en `%APPDATA%\Vortaq` (y la copia
+anterior en `%APPDATA%\ElectronDB`), carpetas distintas que no debes borrar. En PowerShell (sin administrador):
 
 ```powershell
 # 0. (Opcional) copia de seguridad de tus datos
-Copy-Item -Recurse "$env:APPDATA\ElectronDB" "$env:USERPROFILE\ElectronDB-copia-perfil"
+Copy-Item -Recurse "$env:APPDATA\Vortaq" "$env:USERPROFILE\Vortaq-copia-perfil"
 
-# 1. Cierra ElectronDB y cualquier proceso suyo que haya quedado
-Get-Process ElectronDB -ErrorAction SilentlyContinue | Stop-Process -Force
+# 1. Cierra Vortaq (o ElectronDB) y cualquier proceso suyo que haya quedado
+Get-Process Vortaq, ElectronDB -ErrorAction SilentlyContinue | Stop-Process -Force
 
-# 2. Mira dónde estaba instalada (normalmente %LOCALAPPDATA%\Programs\ElectronDB)
+# 2. Mira dónde estaba instalada (%LOCALAPPDATA%\Programs\Vortaq, o ...\Programs\ElectronDB si
+#    actualizaste desde ElectronDB)
 Get-ItemProperty 'HKCU:\Software\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue |
   Select-Object InstallLocation
 
 # 3. Borra la carpeta del PROGRAMA (usa la ruta del paso 2 si es otra)
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\ElectronDB" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\Vortaq", "$env:LOCALAPPDATA\Programs\ElectronDB" -ErrorAction SilentlyContinue
 
 # 4. Borra la entrada de "Aplicaciones" y la del instalador
 Remove-Item -Recurse 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue
 Remove-Item -Recurse 'HKCU:\Software\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue
 
 # 5. Accesos directos antiguos y caché de descargas de la actualización
-Remove-Item "$([Environment]::GetFolderPath('Desktop'))\ElectronDB.lnk",
-  "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\ElectronDB.lnk" -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electrondb-updater" -ErrorAction SilentlyContinue
+foreach ($name in 'Vortaq', 'ElectronDB') {
+  Remove-Item "$([Environment]::GetFolderPath('Desktop'))\$name.lnk",
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$name.lnk" -ErrorAction SilentlyContinue
+}
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\vortaq-updater", "$env:LOCALAPPDATA\electrondb-updater" -ErrorAction SilentlyContinue
 ```
 
-Después ejecuta el instalador nuevo (`ElectronDB-<versión>-x64-setup.exe`): al abrir la app verás tus
+Después ejecuta el instalador nuevo (`Vortaq-<versión>-x64-setup.exe`): al abrir la app verás tus
 conexiones, trabajos y ajustes.
 
-- `ed60cf51-f5c8-5d88-9777-022dc431ddb4` es el identificador fijo de ElectronDB en Windows (electron-builder lo
-  calcula a partir del `appId` `dev.y0rshb3.electrondb`); es el mismo en todas las versiones.
+- `ed60cf51-f5c8-5d88-9777-022dc431ddb4` es el identificador fijo de la app en Windows (electron-builder lo
+  calcula a partir del `appId` `dev.y0rshb3.electrondb`, que se conserva desde ElectronDB a propósito); es el
+  mismo en todas las versiones, también en Vortaq.
 - Si la habías instalado **"para todos los usuarios"** (los instaladores hasta la 0.1.8 lo permitían), la
   carpeta es `C:\Program Files\ElectronDB` y las dos claves están en `HKLM:` en vez de `HKCU:`: repite los
   pasos 3 y 4 con esas rutas en un PowerShell **como administrador**. Desde la 0.1.9 el instalador es solo para
-  tu usuario (sin permisos de administrador, en `%LOCALAPPDATA%\Programs\ElectronDB`) y avisa si encuentra
+  tu usuario (sin permisos de administrador, en `%LOCALAPPDATA%\Programs\Vortaq`) y avisa si encuentra
   una copia "para todos los usuarios".
 
 ### Si la usas desde la carpeta del código (`npm run dev`)
@@ -937,7 +977,7 @@ El aviso muestra **Cómo actualizar** con los comandos exactos para tu carpeta y
 Cierra la app y ejecuta:
 
 ```sh
-cd ElectronDB      # tu carpeta
+cd ElectronDB      # tu carpeta (el repositorio aún se llama así)
 git pull
 npm install        # solo hace algo si cambiaron las dependencias
 npm run dev        # o vuelve a generar el instalador: npm run dist
@@ -948,27 +988,27 @@ perfil no se toca al actualizar.
 
 ## Solución de problemas
 
-| Síntoma                                                                                                 | Solución                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm ci` o la primera ejecución (`Downloading Electron binary...`) falla o se queda colgada             | Normalmente es un proxy o un firewall. Ver [Descargas detrás de un proxy](#descargas-detrás-de-un-proxy).                                                                                                                                                                      |
-| `Electron failed to install correctly`                                                                  | La descarga de Electron se cortó. Borra la carpeta `node_modules/electron`, ejecuta `npm ci` y vuelve a lanzar `npm run dev`.                                                                                                                                                  |
-| Errores de `node-gyp` / `cpu-features` durante `npm ci`                                                 | Se pueden ignorar si `npm ci` termina. Es una dependencia opcional.                                                                                                                                                                                                            |
-| `Failed to fetch dynamically imported module` o pantalla en blanco en `npm run dev`                     | Cierra `npm run dev` con `Ctrl+C` y vuelve a lanzarlo. Pasa tras cambiar de rama o actualizar dependencias con el servidor de desarrollo abierto.                                                                                                                              |
-| El puerto 5173 ya está en uso                                                                           | Hay otro `npm run dev` abierto (o cualquier proyecto Vite). Ciérralo; si no, Vite usará el siguiente puerto libre.                                                                                                                                                             |
-| `No hay contraseña guardada para la conexión …`                                                         | Edita la conexión, escribe la contraseña y marca **Guardar contraseña**. Ocurre también tras importar desde Navicat o mover el perfil.                                                                                                                                         |
-| Error al descifrar contraseñas tras copiar el perfil                                                    | Cierra la app, borra `credentials.json` del perfil y vuelve a escribir las contraseñas.                                                                                                                                                                                        |
-| Tras pasar de Navidog a ElectronDB pide contraseñas                                                     | No se pudo leer la clave antigua (acceso al llavero denegado o Linux). En macOS se reintenta en los dos arranques siguientes (elige **Permitir**). Si no, escribe de nuevo las contraseñas del aviso o fuerza otro intento: ver [Si venías de Navidog](#si-venías-de-navidog). |
-| `Access denied for user …` (`ER_ACCESS_DENIED_ERROR`)                                                   | Usuario o contraseña incorrectos, o el usuario no tiene permiso desde tu IP (`'usuario'@'%'` frente a `'usuario'@'localhost'`).                                                                                                                                                |
-| Error con `caching_sha2_password` o `RSA public key`                                                    | MySQL 8 usa `caching_sha2_password`. Activa SSL en la conexión o conéctate una vez con otro cliente para que el servidor cachee la contraseña. Como último recurso, el administrador puede cambiar el usuario a `mysql_native_password` (eliminado en MySQL 9).                |
-| `ECONNREFUSED` / `ETIMEDOUT`                                                                            | Comprueba host, puerto y firewall. Si el servidor solo es accesible por SSH, activa el túnel SSH.                                                                                                                                                                              |
-| `No se pudo leer la clave privada SSH …`                                                                | Revisa la ruta. En macOS/Linux la clave debe pertenecer a tu usuario y tener permisos `600`: `chmod 600 ~/.ssh/id_ed25519`. En Windows usa una ruta completa (`C:\Users\<usuario>\.ssh\id_ed25519`).                                                                           |
-| `La clave privada SSH … está cifrada y no hay frase de contraseña guardada`                             | Escribe la frase de contraseña de la clave en el campo **Contraseña SSH** y guárdala.                                                                                                                                                                                          |
-| Linux: `The SUID sandbox helper binary was found, but is not configured correctly`                      | En Ubuntu 23.10+ ocurre por AppArmor. Desde el código: `sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`. Con la AppImage: `./ElectronDB-*.AppImage --no-sandbox`.                                 |
-| macOS: "está dañada y no se puede abrir", "no se ha podido verificar" o "desarrollador no identificado" | Ejecuta `xattr -dr com.apple.quarantine "/Applications/ElectronDB.app"`. Ver [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque).                                                                                                                                  |
-| macOS: "no se puede usar con esta versión de macOS"                                                     | La app necesita macOS 13 (Ventura) o posterior.                                                                                                                                                                                                                                |
-| `npm warn EBADENGINE` durante `npm ci`                                                                  | Tu Node es demasiado antiguo. Instala Node 24 (mínimo 22.12) como en [Requisitos](#requisitos) y repite `npm ci`.                                                                                                                                                              |
-| Un trabajo programado no se ejecuta en Windows/Linux                                                    | El programador interno solo funciona con la app abierta: déjala abierta o usa el Programador de tareas / cron con `--run-job=<id>` (ver [Automatización](#automatización)).                                                                                                    |
-| Windows: "Failed to uninstall old application files" o no se puede desinstalar ElectronDB               | Ver [Windows: reparar una instalación rota](#windows-reparar-una-instalación-rota). Tus datos (`%APPDATA%\ElectronDB`) no se tocan.                                                                                                                                            |
+| Síntoma                                                                                                 | Solución                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm ci` o la primera ejecución (`Downloading Electron binary...`) falla o se queda colgada             | Normalmente es un proxy o un firewall. Ver [Descargas detrás de un proxy](#descargas-detrás-de-un-proxy).                                                                                                                                                                                                      |
+| `Electron failed to install correctly`                                                                  | La descarga de Electron se cortó. Borra la carpeta `node_modules/electron`, ejecuta `npm ci` y vuelve a lanzar `npm run dev`.                                                                                                                                                                                  |
+| Errores de `node-gyp` / `cpu-features` durante `npm ci`                                                 | Se pueden ignorar si `npm ci` termina. Es una dependencia opcional.                                                                                                                                                                                                                                            |
+| `Failed to fetch dynamically imported module` o pantalla en blanco en `npm run dev`                     | Cierra `npm run dev` con `Ctrl+C` y vuelve a lanzarlo. Pasa tras cambiar de rama o actualizar dependencias con el servidor de desarrollo abierto.                                                                                                                                                              |
+| El puerto 5173 ya está en uso                                                                           | Hay otro `npm run dev` abierto (o cualquier proyecto Vite). Ciérralo; si no, Vite usará el siguiente puerto libre.                                                                                                                                                                                             |
+| `No hay contraseña guardada para la conexión …`                                                         | Edita la conexión, escribe la contraseña y marca **Guardar contraseña**. Ocurre también tras importar desde Navicat o mover el perfil.                                                                                                                                                                         |
+| Error al descifrar contraseñas tras copiar el perfil                                                    | Cierra la app, borra `credentials.json` del perfil y vuelve a escribir las contraseñas.                                                                                                                                                                                                                        |
+| Tras pasar de ElectronDB (o Navidog) a Vortaq pide contraseñas                                          | No se pudo leer la clave antigua (acceso al llavero denegado o Linux). En macOS se reintenta en los dos arranques siguientes (elige **Permitir**). Si no, escribe de nuevo las contraseñas del aviso o fuerza otro intento: ver [Si venías de ElectronDB o de Navidog](#si-venías-de-electrondb-o-de-navidog). |
+| `Access denied for user …` (`ER_ACCESS_DENIED_ERROR`)                                                   | Usuario o contraseña incorrectos, o el usuario no tiene permiso desde tu IP (`'usuario'@'%'` frente a `'usuario'@'localhost'`).                                                                                                                                                                                |
+| Error con `caching_sha2_password` o `RSA public key`                                                    | MySQL 8 usa `caching_sha2_password`. Activa SSL en la conexión o conéctate una vez con otro cliente para que el servidor cachee la contraseña. Como último recurso, el administrador puede cambiar el usuario a `mysql_native_password` (eliminado en MySQL 9).                                                |
+| `ECONNREFUSED` / `ETIMEDOUT`                                                                            | Comprueba host, puerto y firewall. Si el servidor solo es accesible por SSH, activa el túnel SSH.                                                                                                                                                                                                              |
+| `No se pudo leer la clave privada SSH …`                                                                | Revisa la ruta. En macOS/Linux la clave debe pertenecer a tu usuario y tener permisos `600`: `chmod 600 ~/.ssh/id_ed25519`. En Windows usa una ruta completa (`C:\Users\<usuario>\.ssh\id_ed25519`).                                                                                                           |
+| `La clave privada SSH … está cifrada y no hay frase de contraseña guardada`                             | Escribe la frase de contraseña de la clave en el campo **Contraseña SSH** y guárdala.                                                                                                                                                                                                                          |
+| Linux: `The SUID sandbox helper binary was found, but is not configured correctly`                      | En Ubuntu 23.10+ ocurre por AppArmor. Desde el código: `sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`. Con la AppImage: `./Vortaq-*.AppImage --no-sandbox`.                                                                     |
+| macOS: "está dañada y no se puede abrir", "no se ha podido verificar" o "desarrollador no identificado" | Ejecuta `xattr -dr com.apple.quarantine "/Applications/Vortaq.app"`. Ver [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque).                                                                                                                                                                      |
+| macOS: "no se puede usar con esta versión de macOS"                                                     | La app necesita macOS 13 (Ventura) o posterior.                                                                                                                                                                                                                                                                |
+| `npm warn EBADENGINE` durante `npm ci`                                                                  | Tu Node es demasiado antiguo. Instala Node 24 (mínimo 22.12) como en [Requisitos](#requisitos) y repite `npm ci`.                                                                                                                                                                                              |
+| Un trabajo programado no se ejecuta en Windows/Linux                                                    | El programador interno solo funciona con la app abierta: déjala abierta o usa el Programador de tareas / cron con `--run-job=<id>` (ver [Automatización](#automatización)).                                                                                                                                    |
+| Windows: "Failed to uninstall old application files" o no se puede desinstalar Vortaq                   | Ver [Windows: reparar una instalación rota](#windows-reparar-una-instalación-rota). Tus datos (`%APPDATA%\Vortaq`) no se tocan.                                                                                                                                                                                |
 
 ### Descargas detrás de un proxy
 
@@ -1000,7 +1040,7 @@ herramientas de `electron-builder`.
 
 ### Registro
 
-Para más detalle, abre **Otros → Registro** o el archivo `logs/electrondb.log` del perfil. Con `ELECTRONDB_DEBUG=1`
+Para más detalle, abre **Más → Registro** o el archivo `logs/vortaq.log` del perfil. Con `VORTAQ_DEBUG=1`
 el registro es más detallado y se copia también en la terminal.
 
 ## Desarrollo
@@ -1011,7 +1051,7 @@ el registro es más detallado y se copia también en la terminal.
 | `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio) |
 | `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
 | `npm run test:watch`                | Tests en modo observación                                                   |
-| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `ELECTRONDB_TEST_MYSQL_URL`)      |
+| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)          |
 | `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, y falla si falta alguna URL              |
 | `npm run lint`                      | ESLint                                                                      |
 | `npm run format`                    | Prettier                                                                    |
@@ -1037,28 +1077,28 @@ docker compose -f tests/docker-compose.yml down -v
 Sin Compose, el equivalente es:
 
 ```sh
-docker run -d --name electrondb-test-mysql -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33306:3306 mysql:8.4.7
-docker run -d --name electrondb-test-mysql57 --platform linux/amd64 -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33357:3306 mysql:5.7
+docker run -d --name vortaq-test-mysql -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33306:3306 mysql:8.4.7
+docker run -d --name vortaq-test-mysql57 --platform linux/amd64 -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33357:3306 mysql:5.7
 # Espera a que cada uno termine de arrancar hasta ver "mysqld is alive":
-docker exec electrondb-test-mysql mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=30
-docker exec electrondb-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=60
+docker exec vortaq-test-mysql mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=30
+docker exec vortaq-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=60
 ```
 
 `npm run test:integration:required` es la puerta de calidad: ejecuta las suites de MySQL y de backups contra
-los dos servidores y **falla** (en vez de omitirlas) si falta `ELECTRONDB_TEST_MYSQL_URL` o
-`ELECTRONDB_TEST_MYSQL57_URL`. `npm run test:integration` omite en silencio el servidor que no tenga URL.
+los dos servidores y **falla** (en vez de omitirlas) si falta `VORTAQ_TEST_MYSQL_URL` o
+`VORTAQ_TEST_MYSQL57_URL`. `npm run test:integration` omite en silencio el servidor que no tenga URL.
 
 ```sh
 # macOS / Linux
-ELECTRONDB_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
-ELECTRONDB_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
+VORTAQ_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
+VORTAQ_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
 npm run test:integration:required
 ```
 
 ```powershell
 # Windows (PowerShell)
-$env:ELECTRONDB_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
-$env:ELECTRONDB_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
+$env:VORTAQ_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
+$env:VORTAQ_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
 npm run test:integration:required
 ```
 
@@ -1086,7 +1126,7 @@ En macOS, el test de la migración de contraseñas contra un llavero real se act
 desechable en la carpeta que indiques (nunca usa el llavero de inicio de sesión) y lo borra al terminar.
 
 ```sh
-ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
+VORTAQ_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 ```
 
 ### Capturas de pantalla
@@ -1095,13 +1135,13 @@ ELECTRONDB_TEST_KEYCHAIN_DIR="$(mktemp -d)" npm run test:integration
 compila y abre la app en una ventana de 1600×1000 que recorre las pantallas principales. Guarda `01-home.png` …
 `19f-tree-typed-lock.png` e imprime un resumen `[screenshots] {...}`. Los pasos `16*` y `17*`
 («Restaurar todo en Local» y «Restaurar paquete en Local») usan también el MySQL 5.7 desechable como staging
-(`ELECTRONDB_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (ventanas de actualización)
+(`VORTAQ_SHOTS_MYSQL57`, por defecto el puerto 33357). Los pasos `18*` (ventanas de actualización)
 responden con una versión ficticia de `tests/fixtures/updates/latest-release.json` en vez de consultar GitHub, y
 `18f-whats-new` simula una actualización de 0.1.2 a 0.1.4. Los pasos `19*` muestran las confirmaciones de borrado
 en Local (se cancelan: no se borra nada) y la sección Seguridad de Ajustes; `19d`-`19f`, con Staging marcado en
 Seguridad solo en memoria (no se guarda), los entornos que piden escribir el nombre, esa confirmación sobre
 «Staging Demo» (se cancela) y el candado del árbol. Los pasos `20*` muestran el asistente de IA con el
-proveedor falso `ELECTRONDB_AI_FIXTURE=1` (sin red ni claves reales): el panel con una conversación, la sección
+proveedor falso `VORTAQ_AI_FIXTURE=1` (sin red ni claves reales): el panel con una conversación, la sección
 IA de Ajustes, «Ver contexto enviado» y «Generar SQL con IA». Nunca usa tu perfil real y se niega a
 sembrar un MySQL en los puertos locales habituales (3306-3309). **Solo macOS y Linux**: el script usa sintaxis de
 shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances desde Git Bash o PowerShell.
@@ -1109,52 +1149,52 @@ shell POSIX y en Windows npm ejecuta los scripts con `cmd.exe`, aunque lo lances
 ```sh
 npm run screenshots
 # Rutas y MySQL configurables:
-ELECTRONDB_SHOTS_DIR=/tmp/shots ELECTRONDB_SHOTS_PROFILE=/tmp/shots/profile \
-ELECTRONDB_SHOTS_MYSQL='mysql://root:navidog@127.0.0.1:33306/navidog_test' npm run screenshots
+VORTAQ_SHOTS_DIR=/tmp/shots VORTAQ_SHOTS_PROFILE=/tmp/shots/profile \
+VORTAQ_SHOTS_MYSQL='mysql://root:navidog@127.0.0.1:33306/navidog_test' npm run screenshots
 # Solo algunos pasos (prefijos del nombre del PNG):
-ELECTRONDB_SHOTS_ONLY=05,06 npm run screenshots
+VORTAQ_SHOTS_ONLY=05,06 npm run screenshots
 # Tour de bienvenida, detección de Navicat y «Mostrarme cómo» (pasos 21*):
-ELECTRONDB_SHOTS_ONLY=21 ELECTRONDB_WHATS_NEW_FROM=0.1.5 ELECTRONDB_WHATS_NEW_VERSION=0.1.7 npm run screenshots
+VORTAQ_SHOTS_ONLY=21 VORTAQ_WHATS_NEW_FROM=0.1.5 VORTAQ_WHATS_NEW_VERSION=0.1.7 npm run screenshots
 ```
 
-Por defecto escribe en `$TMPDIR/electrondb-shots`. El perfil (`.../profile`) se borra y se recrea en cada
+Por defecto escribe en `$TMPDIR/vortaq-shots`. El perfil (`.../profile`) se borra y se recrea en cada
 ejecución, y su carpeta debe llamarse `profile`.
 
 ### Variables de entorno
 
-| Variable                            | Efecto                                                                                                                                                                                                        |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ELECTRONDB_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                                                |
-| `ELECTRONDB_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                                              |
-| `ELECTRONDB_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                                                           |
-| `ELECTRONDB_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                      |
-| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                              |
-| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                          |
-| `ELECTRONDB_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                           |
-| `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                                              |
-| `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |
-| `ELECTRONDB_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                                              |
-| `ELECTRONDB_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).                                          |
-| `ELECTRONDB_AI_FIXTURE=1`           | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: el asistente de IA responde con textos fijos de un proveedor falso, sin red.                                                                      |
-| `ELECTRONDB_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `ELECTRONDB_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                                                 |
-| `ELECTRONDB_NAVICAT_CANDIDATES`     | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: carpetas (separadas por `:`, o `;` en Windows) donde buscar Navicat en vez de las habituales; `npm run screenshots` usa `tests/fixtures/navicat`. |
+| Variable                        | Efecto                                                                                                                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VORTAQ_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                                            |
+| `VORTAQ_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                                          |
+| `VORTAQ_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                                                       |
+| `VORTAQ_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                  |
+| `VORTAQ_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                          |
+| `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
+| `VORTAQ_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                       |
+| `VORTAQ_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `VORTAQ_USER_DATA`.                                                                                                                                                              |
+| `VORTAQ_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |
+| `VORTAQ_UPDATES_RUN_MODE`       | Solo pruebas, y solo con `VORTAQ_USER_DATA`: `packaged` o `source` fuerza el modo de actualización mostrado.                                                                                              |
+| `VORTAQ_WHATS_NEW_FROM`         | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: simula que la versión vista antes era esa (las novedades no salen en modo humo ni en capturas sin ella).                                          |
+| `VORTAQ_AI_FIXTURE=1`           | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: el asistente de IA responde con textos fijos de un proveedor falso, sin red.                                                                      |
+| `VORTAQ_WHATS_NEW_VERSION`      | Solo pruebas, y solo con `VORTAQ_USER_DATA`: simula la versión en ejecución para la ventana de novedades.                                                                                                 |
+| `VORTAQ_NAVICAT_CANDIDATES`     | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: carpetas (separadas por `:`, o `;` en Windows) donde buscar Navicat en vez de las habituales; `npm run screenshots` usa `tests/fixtures/navicat`. |
 
 Prueba de humo del binario compilado sin tocar tus datos:
 
 ```sh
 # macOS / Linux
 npm run build
-ELECTRONDB_USER_DATA="$(mktemp -d)" ELECTRONDB_SMOKE=1 ELECTRONDB_PLAIN_SECRETS=1 npx electron .
+VORTAQ_USER_DATA="$(mktemp -d)" VORTAQ_SMOKE=1 VORTAQ_PLAIN_SECRETS=1 npx electron .
 ```
 
 ```powershell
 # Windows (PowerShell)
 npm run build
-$env:ELECTRONDB_USER_DATA = "$env:TEMP\electrondb-smoke"; $env:ELECTRONDB_SMOKE = '1'; $env:ELECTRONDB_PLAIN_SECRETS = '1'
+$env:VORTAQ_USER_DATA = "$env:TEMP\vortaq-smoke"; $env:VORTAQ_SMOKE = '1'; $env:VORTAQ_PLAIN_SECRETS = '1'
 npx electron .
 # Limpia las variables al terminar (o cierra la terminal): si no, el siguiente `npm run dev` de esta terminal
 # arrancaría en modo humo, con el perfil de prueba y las contraseñas sin cifrar.
-Remove-Item Env:ELECTRONDB_SMOKE, Env:ELECTRONDB_PLAIN_SECRETS, Env:ELECTRONDB_USER_DATA
+Remove-Item Env:VORTAQ_SMOKE, Env:VORTAQ_PLAIN_SECRETS, Env:VORTAQ_USER_DATA
 ```
 
 ### Estructura del proyecto
@@ -1165,7 +1205,7 @@ Remove-Item Env:ELECTRONDB_SMOKE, Env:ELECTRONDB_PLAIN_SECRETS, Env:ELECTRONDB_U
 | `src/main/`       | Proceso principal de Electron: MySQL, copias `.nb3`, automatización, importación de Navicat, credenciales, asistente de IA (`ai/`) |
 | `src/preload/`    | Puente `contextBridge`, sin lógica                                                                                                 |
 | `src/renderer/`   | Interfaz Vue 3 + Vuetify 3 + Pinia                                                                                                 |
-| `tests/fixtures/` | Archivos de Navicat anonimizados y un `.nb3` sintético                                                                             |
+| `tests/fixtures/` | Archivos sintéticos con el formato de Navicat y un `.nb3` sintético                                                                |
 
 Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos de Navicat verificados en
 [`docs/navicat-storage.md`](docs/navicat-storage.md). Léelos antes de tocar la importación o las copias.
@@ -1174,12 +1214,12 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 
 - **Búsqueda de actualizaciones**: lo único que la app envía a Internet por su cuenta es una petición anónima
   (`GET`) a `api.github.com` para leer la última versión publicada; no lleva identificadores ni datos tuyos. Solo
-  abre en el navegador enlaces de las versiones de ElectronDB en GitHub. Se desactiva en **Ajustes**.
+  abre en el navegador enlaces de las versiones de Vortaq en GitHub. Se desactiva en **Ajustes**.
 - **Actualización integrada**: solo descarga cuando la pides (o con **Descargar actualizaciones
   automáticamente**), solo de las versiones de este repositorio en GitHub, y comprueba cada archivo antes de
   usarlo (sha512 de `latest.yml` en Windows/Linux, SHA-256 de `SHA256SUMS.txt` en Mac). No acepta versiones
   anteriores ni preliminares. Las copias desde el código y las ejecuciones con un perfil de prueba
-  (`ELECTRONDB_USER_DATA`) nunca descargan ni instalan nada. El registro anota versiones, nombres de archivo y
+  (`VORTAQ_USER_DATA`) nunca descargan ni instalan nada. El registro anota versiones, nombres de archivo y
   errores, nunca datos tuyos.
 - **Las copias `.nb3` no van cifradas.** Se escriben con permisos `0600` en tu
   carpeta de usuario, pero cualquiera que copie el archivo puede leer los datos. Trátalas como datos sensibles y
@@ -1199,10 +1239,31 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 
 ## Licencia
 
-ElectronDB es software libre con licencia [MIT](LICENSE): puedes usarlo, copiarlo, modificarlo y distribuirlo,
-también con fines comerciales, siempre que conserves el aviso de copyright y la licencia.
+Vortaq es software libre con licencia [MIT](LICENSE): puedes usarlo, copiarlo, modificarlo y distribuirlo,
+también con fines comerciales, siempre que conserves el aviso de copyright y la licencia. El icono de la app
+(`build/vortaq-icon-source.png` y los archivos generados a partir de él) es obra original del proyecto y se
+distribuye con la misma licencia.
+
+## Licencias de terceros
+
+Vortaq incluye componentes de código abierto (Electron y Chromium, Vue, Vuetify, CodeMirror, mysql2, ssh2,
+los SDK de Anthropic y OpenAI, entre otros), las fuentes Inter y JetBrains Mono (SIL Open Font License 1.1) y
+los iconos Material Design Icons (licencia de Pictogrammers). Cada uno conserva su licencia:
+
+- `npm run build` genera `out/THIRD_PARTY_LICENSES.txt` con todas las dependencias de producción, su licencia y
+  el texto de licencia que publica cada paquete (`scripts/third-party-licenses.mjs`; se puede generar aparte
+  con `npm run licenses`). Los instaladores lo incluyen junto a `LICENSE` en la carpeta de recursos de la app.
+- En la app: **Más › Acerca de Vortaq › Licencias de terceros** (con buscador y **Abrir archivo**).
+- Los avisos de Chromium y Node.js vienen con Electron en `LICENSES.chromium.html`, dentro de la instalación.
+
+`package.json` mantiene `"private": true` para que nunca se publique por error en npm; no afecta a la licencia.
 
 ## Marcas
 
-ElectronDB es un proyecto independiente. No está afiliado, patrocinado ni respaldado por PremiumSoft CyberTech Ltd.
-Navicat es una marca de su propietario y se nombra solo para indicar con qué archivos es compatible la importación.
+Vortaq es un proyecto independiente y no está afiliado, patrocinado ni respaldado por PremiumSoft CyberTech Ltd.
+ni por ningún otro fabricante. Navicat® es marca de PremiumSoft CyberTech Ltd.; MySQL® es marca de Oracle;
+Electron® es marca de la OpenJS Foundation; las demás marcas pertenecen a sus propietarios y se citan solo para
+indicar compatibilidad. La importación de datos de Navicat y el formato .nb3 se han implementado de forma
+independiente, a partir de archivos del propio usuario y documentación pública, sin usar código, bibliotecas,
+binarios ni recursos gráficos de Navicat. La interfaz, los textos y los iconos son propios o de bibliotecas de
+código abierto.

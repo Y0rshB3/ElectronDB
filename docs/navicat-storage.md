@@ -14,7 +14,6 @@ relative to `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC/`.
 | `Navicat for MySQL/Profiles/*.nbatmysql`          | JSON       | Batch jobs ("Automatización")                                                                                                             |
 | `Navicat for MySQL/schedule.plist`                | XML plist  | Schedules (an empty `<dict/>` on the installation inspected)                                                                             |
 | `Navicat for MySQL/Logs/QueryExec.log`            | text       | Query log                                                                                                                                 |
-| Keychain service `com.navicat.NavicatForMySQL`    | genp items | Two items created at install time, `acct` = 32 hex chars (not MD5 of the connection name). **Connection passwords are NOT in any plist.** |
 
 ## conn.plist connection keys (subset that matters)
 
@@ -32,7 +31,9 @@ created_time / modified_time / access_time (unix seconds)
 compatibility_param { sql_mode, lower_case_table_names, ... }
 ```
 
-No `password` key exists. There is `pemclientkeypassword` inside `ssl_param` (empty).
+No `password` key exists: connection passwords are not stored in any of these files, so an
+import always asks the user to type them (Vortaq reads nothing else of Navicat's, such as the
+system keychain). There is `pemclientkeypassword` inside `ssl_param` (empty).
 
 ## Colour blob (`markercolor`)
 
@@ -57,7 +58,7 @@ yellow = (1, 0.76, 0.03).
     "EmailFrom": "",
     "EmailTo": "",
     "EmailCC": "",
-    "EmailSubject": "[%F] Batch Job %J Finished %R",
+    "EmailSubject": "",
     "EmailBody": "%L",
     "EmailServerHost": "",
     "EmailServerPort": "",
