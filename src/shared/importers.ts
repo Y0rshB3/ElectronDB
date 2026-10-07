@@ -276,4 +276,4 @@ export interface SqlExportResult {
 }
 
 /** Format of a job backup step and of «Nueva copia». Absent = 'nb3'. */
-export type BackupFormat = 'nb3' | 'sql'
+export type BackupFormat = 'vqb' | 'nb3' | 'sql'

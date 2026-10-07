@@ -714,27 +714,74 @@ export interface ApplyRowChangesResult {
   insertIds?: (number | string | null)[]
 }
 
-/* ---------- Backups (.nb3) ---------- */
+/* ---------- Backups (.vqb and .nb3) ---------- */
 
+/**
+ * Object types of a backup. .nb3: Table, View, Function, Procedure, Event.
+ * .vqb adds PostgreSQL's Type, Sequence, MaterializedView and Extension.
+ */
 export type BackupObjectType =
-  'Table' | 'View' | 'Function' | 'Procedure' | 'Event' | 'Trigger' | string
+  | 'Table'
+  | 'View'
+  | 'Function'
+  | 'Procedure'
+  | 'Event'
+  | 'Trigger'
+  | 'Type'
+  | 'Sequence'
+  | 'MaterializedView'
+  | 'Extension'
+  | string
 
 export interface BackupObjectSummary {
+  /** .nb3: the object's UUID. .vqb: its folder number ("000003"). */
   uuid: string
   type: BackupObjectType
   name: string
+  /** PostgreSQL (.vqb): schema of the object. */
+  schema?: string
   rows: number | null
 }
+
+/** File format of a restorable backup. */
+export type BackupFileFormat = 'nb3' | 'vqb'
 
 export interface BackupMeta {
   metaVersion: string
   databaseType: string
+  /** MySQL: the schema. PostgreSQL (.vqb): the database. '' while locked. */
   schema: string
   startTime: string | null
   endTime: string | null
+  /** 'None' when not encrypted; .vqb: 'AES-256-GCM'. */
   encryption: string
   comment: string
   objects: BackupObjectSummary[]
+  /** Absent in metadata cached before .vqb existed: 'nb3'. */
+  format?: BackupFileFormat
+  /** .vqb protected with a password. */
+  encrypted?: boolean
+  /**
+   * Encrypted and read without its password: only the header is known
+   * (no schema, no objects). Pass the password to read the rest.
+   */
+  locked?: boolean
+  /** .vqb: engine of the source ('mysql' | 'postgresql'), its flavour and server version. */
+  engine?: EngineId
+  engineFlavor?: string
+  serverVersion?: string
+  /** .vqb: app that wrote it, e.g. «Vortaq 0.2.0». */
+  writtenBy?: string
+  /** .vqb: source connection name, absent when the user left it out. */
+  connectionName?: string | null
+  /** .vqb PostgreSQL: schemas included. */
+  schemas?: string[]
+  /** .vqb: false = structure only. */
+  includeData?: boolean
+  /** .vqb: only some objects were selected. */
+  partial?: boolean
+  /** .vqb: what the backup left out (MariaDB system-versioned tables…). */
+  warnings?: string[]
 }
 
 export interface BackupFile {
@@ -752,6 +799,10 @@ export interface BackupFile {
   source: 'navicat' | 'electrondb' | 'unknown'
   /** Free-text suffix parsed from Navicat names like 20260317145120-staging.nb3 */
   label: string | null
+  /** From the extension (absent in older answers: 'nb3'). */
+  format?: BackupFileFormat
+  /** .vqb protected with a password (read from its header). */
+  encrypted?: boolean
   /**
    * The automation run whose backup step wrote this file (matched by path in
    * the run history; no archive is opened). Absent/null: not written by a job.
@@ -773,6 +824,7 @@ export interface BackupRunRef {
 
 export interface BackupCreateOptions {
   connectionId: string
+  /** MySQL: the schema. PostgreSQL: the database (every non-system schema is included). */
   schema: string
   /** Optional override; defaults to the connection backupDir/<schema>. */
   targetDir?: string
@@ -781,6 +833,16 @@ export interface BackupCreateOptions {
   /** Table names to include; empty = all objects. */
   objects?: string[]
   includeData: boolean
+  /**
+   * 'vqb' (Vortaq's open format, the default of the UI and new jobs) or 'nb3'
+   * (Navicat-compatible). Absent = 'nb3' for callers written before .vqb.
+   * PostgreSQL only writes .vqb.
+   */
+  format?: BackupFileFormat
+  /** .vqb only: encrypt with this password (8 characters or more). Never stored by the backup. */
+  password?: string | null
+  /** .vqb: do not record the connection name in the manifest. */
+  omitConnectionName?: boolean
 }
 
 export interface BackupCreateResult {
@@ -818,6 +880,8 @@ export interface RestoreOptions {
    * AUTO_INCREMENT value so counters start fresh. Object restores keep it.
    */
   skipAutoIncrement?: boolean
+  /** Password of an encrypted .vqb. */
+  password?: string | null
 }
 
 export interface RestoreResult {
@@ -869,10 +933,16 @@ export interface JobTask {
   /** For restoreschema: back up the target schema before replacing it (default true). */
   safetyBackup?: boolean
   /**
-   * backupschema: file format. 'sql' writes a plain .sql dump other managers can read
-   * (a restore step cannot use it). Absent = 'nb3'.
+   * backupschema: file format. 'vqb' (the default of new steps) and 'nb3' are
+   * restorable; 'sql' writes a plain .sql dump other managers can read (a
+   * restore step cannot use it). Absent = 'nb3' (jobs saved before .vqb).
    */
   format?: BackupFormat
+  /**
+   * backupschema with format 'vqb': encrypt the copy with the job's backup
+   * password (stored encrypted in the credential store, never in jobs.json).
+   */
+  encrypt?: boolean
 }
 
 export interface JobSchedule {
@@ -893,9 +963,24 @@ export interface Job {
   updatedAt: string
   lastRunAt: string | null
   source?: { app: 'navicat'; fileName: string; importedAt: string }
+  /**
+   * The job has a backup password stored (filled by jobs:list/get from the
+   * credential store; never saved in jobs.json, the password never leaves main).
+   */
+  hasBackupPassword?: boolean
 }
 
-export type JobInput = Omit<Job, 'id' | 'createdAt' | 'updatedAt' | 'lastRunAt'> & { id?: string }
+export type JobInput = Omit<
+  Job,
+  'id' | 'createdAt' | 'updatedAt' | 'lastRunAt' | 'hasBackupPassword'
+> & {
+  id?: string
+  /**
+   * jobs:save only: a new backup password for the encrypted steps (stored in
+   * the credential store), null to delete the stored one, absent to keep it.
+   */
+  backupPassword?: string | null
+}
 
 export type RunStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled'
 
@@ -916,6 +1001,8 @@ export interface JobTaskRun {
   includeData?: boolean
   /** backupschema: file format of the copy (absent = 'nb3'). */
   format?: BackupFormat
+  /** backupschema: the .vqb was encrypted with the job's password. */
+  encrypted?: boolean
 }
 
 export interface JobRun {
@@ -961,6 +1048,10 @@ export interface RollbackPlanItem {
   structureOnly: boolean
   /** Something the user must know before restoring it (no rows...); null = nothing. */
   warning: string | null
+  /** An encrypted .vqb. */
+  encrypted?: boolean
+  /** Encrypted and neither the job's stored password nor the one given opens it. */
+  locked?: boolean
 }
 
 export interface RollbackPlan {
@@ -990,6 +1081,8 @@ export interface RollbackRunRequest {
   safetyBackup: boolean
   /** False = «Solo estructura»: every object, empty tables. Absent = true. */
   includeData?: boolean
+  /** Password for encrypted .vqb copies the job's stored password does not open. */
+  password?: string | null
 }
 
 /**
@@ -1011,6 +1104,8 @@ export interface RollbackFilesRequest extends RollbackFilesSource {
   safetyBackup: boolean
   /** False = «Solo estructura»: every object, empty tables. Absent = true. */
   includeData?: boolean
+  /** One password for the encrypted .vqb copies of the package. */
+  password?: string | null
 }
 
 export type RollbackRequest = RollbackRunRequest | RollbackFilesRequest

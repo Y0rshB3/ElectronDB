@@ -13,19 +13,24 @@ import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { BackupService, ProgressReporter } from './index'
+import { metaNeedsPassword, vqbCharset } from './archive'
+import { backupFormatOfPath } from './naming'
 import { ENCRYPTED_MESSAGE, Nb3Reader } from './nb3/reader'
-import { NB3_ENCRYPTION_NONE } from './nb3/format'
+import { PASSWORD_REQUIRED_MESSAGE } from './vqb/errors'
 
 /**
  * REPLACE restore ("rollback"): the target database ends up equal to the
  * backup. Per database, strictly in this order:
  *
- *   1. verify the .nb3 (exists, readable, not encrypted, manifest schema is
- *      the expected one, and every entry's checksum and gzip stream: a full
- *      read of the file) — nothing is touched when it fails;
+ *   1. verify the backup (.nb3 or .vqb: exists, readable, unlocked when it
+ *      is an encrypted .vqb, manifest schema is the expected one, and every
+ *      entry's checksum, GCM tag and gzip stream: a full read of the file) —
+ *      nothing is touched when it fails;
  *   2. if the target database exists and the safety backup is on, back it up
  *      into the target connection's backupDir/<schema>/ labelled
- *      'previo-rollback' — when this fails the database is NOT touched;
+ *      'previo-rollback', in the format of the backup being restored (and
+ *      with its password when it is an encrypted .vqb) — when this fails the
+ *      database is NOT touched;
  *   3. DROP DATABASE + CREATE DATABASE with the backup's charset/collation
  *      when the target server knows them (server default otherwise);
  *   4. restore every object with its data, or with empty tables when
@@ -53,7 +58,7 @@ export interface ReplaceDeps {
   sessions: SessionFactory
   backups: Pick<BackupService, 'create' | 'restore' | 'readMeta' | 'verify'>
   /** Default charset/collation of the backed up schema; injectable for tests. */
-  backupCharset?: (path: string) => Promise<SchemaCharset | null>
+  backupCharset?: (path: string, password?: string | null) => Promise<SchemaCharset | null>
 }
 
 export interface ReplaceRequest {
@@ -71,6 +76,8 @@ export interface ReplaceRequest {
   confirmProduction?: boolean
   /** Restore the rows too (default true); false = «Solo estructura». */
   includeData?: boolean
+  /** Password of an encrypted .vqb (also encrypts the safety copy). */
+  password?: string | null
 }
 
 export interface ReplaceHooks {
@@ -139,22 +146,26 @@ const sentence = (text: string): string =>
   /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`
 
 /**
- * Step 1: the backup exists, is a readable unencrypted .nb3 and holds
- * `expectedSchema`. Throws an actionable message otherwise.
+ * Step 1: the backup exists, is readable (an encrypted .vqb with its
+ * password; an encrypted .nb3 never) and holds `expectedSchema`. Throws an
+ * actionable message otherwise.
  */
 export async function verifyBackupSource(
   backups: Pick<BackupService, 'readMeta'>,
   path: string,
-  expectedSchema: string
+  expectedSchema: string,
+  password?: string | null
 ): Promise<BackupMeta> {
   let meta: BackupMeta
   try {
-    meta = await backups.readMeta(path)
+    meta = await backups.readMeta(path, password)
   } catch (err) {
     throw new Error(`No se puede usar el backup ${path}: ${describeError(err)}`)
   }
-  if (meta.encryption && meta.encryption !== NB3_ENCRYPTION_NONE)
-    throw new Error(`No se puede usar el backup ${path}: ${ENCRYPTED_MESSAGE}`)
+  if (metaNeedsPassword(meta))
+    throw new Error(
+      `No se puede usar el backup ${path}: ${meta.format === 'vqb' ? PASSWORD_REQUIRED_MESSAGE : ENCRYPTED_MESSAGE}`
+    )
   if (meta.schema !== expectedSchema) {
     throw new Error(
       `El backup ${path} contiene la base de datos «${meta.schema || '?'}», no «${expectedSchema}».`
@@ -173,7 +184,12 @@ const MAX_TABLES_SAMPLED = 50
  * table default in the backup's CREATE TABLE statements (Navicat's format
  * does not store the schema default itself). Null when there are no tables.
  */
-export async function readBackupCharset(path: string): Promise<SchemaCharset | null> {
+export async function readBackupCharset(
+  path: string,
+  password?: string | null
+): Promise<SchemaCharset | null> {
+  // .vqb records the schema default itself.
+  if (backupFormatOfPath(path) === 'vqb') return vqbCharset(path, password)
   const reader = await Nb3Reader.open(path)
   const manifest = await reader.manifest()
   const counts = new Map<string, { value: SchemaCharset; n: number }>()
@@ -272,7 +288,12 @@ export async function replaceSchemaFromBackup(
   // 1. Source integrity, before touching the server.
   let meta: BackupMeta
   try {
-    meta = await verifyBackupSource(deps.backups, request.backupPath, request.expectedSchema)
+    meta = await verifyBackupSource(
+      deps.backups,
+      request.backupPath,
+      request.expectedSchema,
+      request.password
+    )
   } catch (err) {
     throw new Error(`${sentence(describeError(err))} ${keep}`)
   }
@@ -287,7 +308,7 @@ export async function replaceSchemaFromBackup(
   // while dropping is still avoidable (a damaged chunk would fail after the DROP).
   const integrityLabel = 'Comprobar integridad del backup'
   try {
-    const checked = await deps.backups.verify(request.backupPath, signal)
+    const checked = await deps.backups.verify(request.backupPath, signal, request.password)
     say(
       labelLine({
         label: integrityLabel,
@@ -304,9 +325,10 @@ export async function replaceSchemaFromBackup(
     )
   }
   if (cancelled()) throw new Error(REPLACE_CANCELLED)
-  const wanted = await (deps.backupCharset ?? readBackupCharset)(request.backupPath).catch(
-    () => null
-  )
+  const wanted = await (deps.backupCharset ?? readBackupCharset)(
+    request.backupPath,
+    request.password
+  ).catch(() => null)
   if (cancelled()) throw new Error(REPLACE_CANCELLED)
 
   // 2-3. Safety backup, then DROP + CREATE on one session.
@@ -342,7 +364,10 @@ export async function replaceSchemaFromBackup(
             schema: target,
             includeData: true,
             label: SAFETY_LABEL,
-            comment: `Copia automática antes de restaurar ${request.backupPath}`
+            comment: `Copia automática antes de restaurar ${request.backupPath}`,
+            // Same format as the backup being restored; an encrypted .vqb keeps its password.
+            format: backupFormatOfPath(request.backupPath) === 'vqb' ? 'vqb' : 'nb3',
+            ...(request.password && meta.encrypted ? { password: request.password } : {})
           },
           (event) => hooks.progress?.('safety', event),
           signal
@@ -426,7 +451,8 @@ export async function replaceSchemaFromBackup(
         includeData,
         ...(includeData ? {} : { skipAutoIncrement: true }),
         continueOnError: request.continueOnError,
-        ...(request.confirmProduction ? { confirmProduction: true } : {})
+        ...(request.confirmProduction ? { confirmProduction: true } : {}),
+        ...(request.password ? { password: request.password } : {})
       },
       (event) => hooks.progress?.('restore', event),
       signal

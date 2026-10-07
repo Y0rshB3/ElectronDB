@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { describeObjectCounts } from '@shared/jobLog'
 import type { BackupCreateOptions, BackupCreateResult, ConnectionConfig } from '@shared/types'
+import { APP_VERSION } from '../appVersion'
+import { APP_NAME } from '../brand'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import {
@@ -15,12 +17,20 @@ import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
 import { literalKindOf, renderTuple, type LiteralKind } from './mysqlLiterals'
 import { formatBackupFileName } from './naming'
+import { NB3_EXTENSION } from './nb3/format'
 import { Nb3Writer, type ObjectDefinition } from './nb3/writer'
+import { detectMysqlFlavor } from '@shared/serverFlavor'
+import type { ScryptParams } from './vqb/crypto'
+import { VQB_EXTENSION, type VqbObjectType } from './vqb/format'
+import { mysqlCodecOf } from './vqb/mysqlValues'
+import { VqbWriter } from './vqb/writer'
 
 /**
- * Creates a Navicat-compatible .nb3 backup of one schema: tables (DDL,
- * fields, AUTO_INCREMENT, triggers, rows), then views, functions, procedures
- * and events with their SHOW CREATE DDL.
+ * Creates a backup of one MySQL schema, as a .vqb (Vortaq's own open format,
+ * docs/vqb-format.md) or a Navicat-compatible .nb3: tables (DDL, fields,
+ * AUTO_INCREMENT, triggers, rows), then views, functions, procedures and
+ * events with their SHOW CREATE DDL. Both formats share the listing, the
+ * snapshot and the progress; only the archive sink differs.
  */
 
 export const BACKUP_CANCELLED = 'Backup cancelado'
@@ -32,6 +42,133 @@ export interface CreateDeps {
   now?: () => Date
   /** Uncompressed bytes per data chunk (tests use small values). */
   chunkLimit?: number
+  /** scrypt cost of encrypted .vqb backups (tests use a cheap one). */
+  scrypt?: ScryptParams
+}
+
+/** Smallest password accepted for an encrypted backup. */
+export const MIN_BACKUP_PASSWORD = 8
+export const SHORT_PASSWORD_MESSAGE = `La contraseña de la copia debe tener al menos ${MIN_BACKUP_PASSWORD} caracteres.`
+
+/** Format of a new backup: absent = .nb3 (the API predates .vqb; the UI always sends one). */
+export const backupFormatOf = (options: Pick<BackupCreateOptions, 'format'>): 'nb3' | 'vqb' =>
+  options.format === 'vqb' ? 'vqb' : 'nb3'
+
+/** Where the rows and DDL of one backup go (.nb3 or .vqb). */
+interface ArchiveSink {
+  beginTable(name: string, columns: ColumnRow[]): TableSink
+  ddlObject(type: Exclude<ObjectKind, 'Table'>, name: string, ddl: string): Promise<void>
+  warn(message: string): void
+  finish(): Promise<{ path: string; sizeBytes: number; objects: number; rows: number }>
+  abort(): Promise<void>
+}
+
+interface TableSink {
+  readonly rowCount: number
+  addRow(values: unknown[]): Promise<void>
+  finish(definition: {
+    ddl: string
+    triggerDdl: string[]
+    autoIncrement: string
+  }): Promise<{ rows: number }>
+}
+
+function nb3Sink(writer: Nb3Writer): ArchiveSink {
+  return {
+    beginTable(name, columns) {
+      const kinds: LiteralKind[] = columns.map((c) => literalKindOf(c.columnType))
+      const object = writer.beginObject('Table', name)
+      return {
+        get rowCount() {
+          return object.rowCount
+        },
+        addRow: (values) => object.addRow(renderTuple(values, kinds)),
+        finish: async (d) => {
+          const definition: ObjectDefinition = {
+            ddl: d.ddl,
+            fields: columns.map((c) => c.name),
+            autoIncrement: d.autoIncrement,
+            triggerDdl: d.triggerDdl,
+            indexDdl: [],
+            subDdl: []
+          }
+          return object.finish(definition)
+        }
+      }
+    },
+    ddlObject: async (type, name, ddl) => {
+      await writer.beginObject(type, name).finish({ ddl })
+    },
+    // .nb3 has no slot for notes; the job log and the dialog show the warning.
+    warn: () => undefined,
+    finish: () => writer.finish(),
+    abort: () => writer.abort()
+  }
+}
+
+const VQB_TYPE: Record<Exclude<ObjectKind, 'Table'>, VqbObjectType> = {
+  View: 'view',
+  Function: 'function',
+  Procedure: 'procedure',
+  Event: 'event'
+}
+
+function vqbSink(writer: VqbWriter): ArchiveSink {
+  return {
+    beginTable(name, columns) {
+      const object = writer.beginObject('table', name)
+      object.setColumns(
+        columns.map((c) => ({ name: c.name, type: c.columnType })),
+        columns.map((c) => mysqlCodecOf(c.columnType))
+      )
+      return {
+        get rowCount() {
+          return object.rowCount
+        },
+        addRow: (values) => object.addRow(values),
+        finish: (d) =>
+          object.finish({
+            ddl: d.ddl,
+            meta: {
+              autoIncrement: d.autoIncrement || null,
+              triggers: d.triggerDdl,
+              indexes: [],
+              foreignKeys: []
+            }
+          })
+      }
+    },
+    ddlObject: async (type, name, ddl) => {
+      await writer.beginObject(VQB_TYPE[type], name).finish({ ddl })
+    },
+    warn: (message) => writer.warn(message),
+    finish: () => writer.finish(),
+    abort: () => writer.abort()
+  }
+}
+
+/** Default character set and collation of a schema (recorded in .vqb manifests). */
+async function schemaDefaults(
+  session: MysqlSession,
+  schema: string
+): Promise<{ charset: string | null; collation: string | null }> {
+  try {
+    const rows = await session.query<{ cs: unknown; co: unknown }>(
+      'SELECT DEFAULT_CHARACTER_SET_NAME AS cs, DEFAULT_COLLATION_NAME AS co FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?',
+      [schema]
+    )
+    return { charset: text(rows[0]?.cs) || null, collation: text(rows[0]?.co) || null }
+  } catch {
+    return { charset: null, collation: null }
+  }
+}
+
+/** Throws unless the password of an encrypted backup is acceptable. */
+export function checkBackupPassword(password: string | null | undefined): string | null {
+  if (password === null || password === undefined || password === '') return null
+  if (typeof password !== 'string') throw new Error('Contraseña de la copia no válida.')
+  if (password.length < MIN_BACKUP_PASSWORD) throw new Error(SHORT_PASSWORD_MESSAGE)
+  return password
 }
 
 type ObjectKind = 'Table' | 'View' | 'Function' | 'Procedure' | 'Event'
@@ -221,11 +358,16 @@ async function tableColumns(
   }))
 }
 
-/** Picks `<dir>/<stamp>[-label].nb3`, adding a numeric suffix if a file with that name already exists. */
-async function uniqueTarget(dir: string, date: Date, label: string | undefined): Promise<string> {
+/** Picks `<dir>/<stamp>[-label].<ext>`, adding a numeric suffix if a file with that name already exists. */
+export async function uniqueTarget(
+  dir: string,
+  date: Date,
+  label: string | undefined,
+  extension: string = NB3_EXTENSION
+): Promise<string> {
   for (let i = 1; i < 1000; i++) {
     const suffix = i === 1 ? label : `${label ? `${label}-` : ''}${i}`
-    const candidate = join(dir, formatBackupFileName(date, suffix))
+    const candidate = join(dir, formatBackupFileName(date, suffix, extension))
     const exists = await stat(candidate).then(
       () => true,
       () => false
@@ -244,6 +386,11 @@ function validate(options: BackupCreateOptions): void {
   if (!options.connectionId) throw new Error('Selecciona una conexión para el backup.')
   if (!options.schema || !options.schema.trim())
     throw new Error('Selecciona la base de datos a respaldar.')
+  if (options.format !== undefined && options.format !== 'nb3' && options.format !== 'vqb')
+    throw new Error('Formato de copia no válido: elige .vqb o .nb3.')
+  if (options.password && backupFormatOf(options) !== 'vqb')
+    throw new Error('Solo las copias .vqb se pueden cifrar con contraseña.')
+  checkBackupPassword(options.password)
 }
 
 export async function createBackup(
@@ -266,10 +413,22 @@ export async function createBackup(
   const cancelled = (): boolean => signal?.aborted === true
   if (cancelled()) throw new Error(BACKUP_CANCELLED)
 
+  const format = backupFormatOf(options)
+  const password = checkBackupPassword(options.password)
   const session = await deps.sessions.acquire(options.connectionId, schema)
-  let writer: Nb3Writer | null = null
+  let writer: ArchiveSink | null = null
   let inTransaction = false
+  let timeZone: string | null = null
   try {
+    if (format === 'vqb') {
+      // TIMESTAMP values are read as text in UTC and the manifest says so: no shift on restore.
+      try {
+        await session.execute("SET SESSION time_zone = '+00:00'")
+        timeZone = '+00:00'
+      } catch {
+        timeZone = null
+      }
+    }
     // Consistent view of every InnoDB table, like mysqldump --single-transaction.
     try {
       await session.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT')
@@ -297,15 +456,58 @@ export async function createBackup(
       ? await listTriggers(session, schema)
       : new Map()
 
-    const target = await uniqueTarget(targetDir, (deps.now ?? (() => new Date()))(), options.label)
-    writer = await Nb3Writer.create(target, {
-      schema,
-      comment: options.comment,
-      chunkLimit: deps.chunkLimit
-    })
+    const date = (deps.now ?? (() => new Date()))()
+    const target = await uniqueTarget(
+      targetDir,
+      date,
+      options.label,
+      format === 'vqb' ? VQB_EXTENSION : NB3_EXTENSION
+    )
+    if (format === 'vqb') {
+      const defaults = await schemaDefaults(session, schema)
+      writer = vqbSink(
+        await VqbWriter.create(target, {
+          manifest: {
+            app: { name: APP_NAME, version: APP_VERSION },
+            engine: {
+              id: 'mysql',
+              flavor: detectMysqlFlavor(session.serverVersion),
+              serverVersion: session.serverVersion
+            },
+            source: {
+              ...(options.omitConnectionName ? {} : { connectionName: connection.name }),
+              database: schema,
+              charset: defaults.charset,
+              collation: defaults.collation,
+              timeZone
+            },
+            comment: options.comment,
+            options: {
+              includeData: options.includeData,
+              structureOnly: !options.includeData,
+              partial: wanted.size > 0
+            }
+          },
+          password,
+          scrypt: deps.scrypt,
+          chunkBytes: deps.chunkLimit,
+          now: () => date
+        })
+      )
+    } else {
+      writer = nb3Sink(
+        await Nb3Writer.create(target, {
+          schema,
+          comment: options.comment,
+          chunkLimit: deps.chunkLimit
+        })
+      )
+    }
     const total = objects.length
-    if (skippedWarning)
+    if (skippedWarning) {
+      writer.warn(skippedWarning)
       progress({ phase: 'warning', current: 0, total, message: skippedWarning, done: false })
+    }
     const weights = objects.map((o) => objectWeight(o.rowsEstimate, options.includeData))
     const workTotal = weights.reduce((sum, w) => sum + w, 0)
     let workDone = 0
@@ -376,7 +578,7 @@ export async function createBackup(
         } else {
           const spec = SHOW_CREATE[obj.type]
           const ddl = await showCreate(session, spec.stmt, obj.name, spec.column)
-          await writer.beginObject(obj.type, obj.name).finish({ ddl })
+          await writer.ddlObject(obj.type, obj.name, ddl)
         }
       } catch (err) {
         if (cancelled()) throw new Error(BACKUP_CANCELLED)
@@ -423,13 +625,14 @@ export async function createBackup(
     throw err
   } finally {
     if (inTransaction) await session.execute('COMMIT').catch(() => undefined)
+    if (timeZone) await session.execute('SET SESSION time_zone = DEFAULT').catch(() => undefined)
     await session.release().catch(() => undefined)
   }
 }
 
 async function backupTable(
   session: MysqlSession,
-  writer: Nb3Writer,
+  writer: ArchiveSink,
   schema: string,
   table: string,
   triggerNames: string[],
@@ -446,15 +649,14 @@ async function backupTable(
       await showCreate(session, 'SHOW CREATE TRIGGER', name, 'SQL Original Statement')
     )
   }
-  const object = writer.beginObject('Table', table)
+  const object = writer.beginTable(table, columns)
   if (includeData && columns.length > 0) {
-    const kinds: LiteralKind[] = columns.map((c) => literalKindOf(c.columnType))
     const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}`
     const { rows } = await session.streamRows(select)
     try {
       for await (const row of rows as AsyncIterable<unknown[]>) {
         if (hooks.cancelled()) break
-        await object.addRow(renderTuple(row, kinds))
+        await object.addRow(row)
         if (object.rowCount % ROW_PROGRESS_EVERY === 0) hooks.onRows(object.rowCount)
       }
     } finally {
@@ -462,15 +664,11 @@ async function backupTable(
     }
     if (hooks.cancelled()) throw new Error(BACKUP_CANCELLED)
   }
-  const definition: ObjectDefinition = {
+  const { rows } = await object.finish({
     ddl,
-    fields: columns.map((c) => c.name),
-    autoIncrement: parseAutoIncrement(ddl),
     triggerDdl,
-    indexDdl: [],
-    subDdl: []
-  }
-  const { rows } = await object.finish(definition)
+    autoIncrement: parseAutoIncrement(ddl)
+  })
   return rows
 }
 

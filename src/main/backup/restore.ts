@@ -4,11 +4,13 @@ import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
-import { ENCRYPTED_MESSAGE, Nb3Reader, isCancelled } from './nb3/reader'
-import { isEncrypted, type Nb3ManifestObject, type Nb3ObjectMeta } from './nb3/format'
+import { openMysqlRestoreArchive, type RestoreArchive } from './archive'
+import { isCancelled } from './nb3/reader'
+import type { Nb3ManifestObject, Nb3ObjectMeta } from './nb3/format'
 
 /**
- * Restores a .nb3 backup into a target schema. Order: tables (DDL, rows,
+ * Restores a .nb3 or MySQL .vqb backup into a target schema (both are read
+ * through RestoreArchive, see archive.ts). Order: tables (DDL, rows,
  * IndexDDL, TriggerDDL, AUTO_INCREMENT), functions/procedures, views (retried
  * in passes so views depending on views resolve), events, anything else.
  */
@@ -230,9 +232,14 @@ export class InsertBatcher {
 /** Session state we change for the restore and put back before the pooled connection is reused. */
 interface SavedSessionState {
   sqlMode: string | null
+  /** The time zone was changed for the archive's TIMESTAMP text. */
+  timeZone: boolean
 }
 
-async function prepareSession(session: MysqlSession): Promise<SavedSessionState> {
+async function prepareSession(
+  session: MysqlSession,
+  timeZone: string | null = null
+): Promise<SavedSessionState> {
   let sqlMode: string | null = null
   try {
     const rows = await session.query<{ mode: unknown }>('SELECT @@SESSION.sql_mode AS mode')
@@ -244,7 +251,8 @@ async function prepareSession(session: MysqlSession): Promise<SavedSessionState>
   await session.execute('SET FOREIGN_KEY_CHECKS = 0')
   await session.execute('SET UNIQUE_CHECKS = 0')
   await session.execute("SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO'")
-  return { sqlMode }
+  if (timeZone) await session.execute('SET time_zone = ?', [timeZone])
+  return { sqlMode, timeZone: !!timeZone }
 }
 
 async function resetSession(session: MysqlSession, saved: SavedSessionState): Promise<void> {
@@ -253,6 +261,7 @@ async function resetSession(session: MysqlSession, saved: SavedSessionState): Pr
   await quiet('SET FOREIGN_KEY_CHECKS = 1')
   await quiet('SET UNIQUE_CHECKS = 1')
   if (saved.sqlMode !== null) await quiet('SET SQL_MODE = ?', [saved.sqlMode])
+  if (saved.timeZone) await quiet('SET time_zone = DEFAULT')
 }
 
 export async function restoreBackup(
@@ -272,9 +281,25 @@ export async function restoreBackup(
   const cancelled = (): boolean => signal?.aborted === true
   if (cancelled()) throw new Error(RESTORE_CANCELLED)
 
-  const reader = await Nb3Reader.open(options.backupPath)
+  // Opening checks the format, the engine and (encrypted .vqb) the password before the server.
+  const reader = await openMysqlRestoreArchive(options.backupPath, options.password)
+  try {
+    return await restoreFrom(deps, reader, options, progress, signal, started)
+  } finally {
+    await reader.close()
+  }
+}
+
+async function restoreFrom(
+  deps: RestoreDeps,
+  reader: RestoreArchive,
+  options: RestoreOptions,
+  progress: ProgressReporter,
+  signal: AbortSignal | undefined,
+  started: number
+): Promise<RestoreResult> {
+  const cancelled = (): boolean => signal?.aborted === true
   const manifest = await reader.manifest()
-  if (isEncrypted(manifest)) throw new Error(ENCRYPTED_MESSAGE)
 
   const wanted = new Set((options.objects ?? []).filter(Boolean))
   const selected = manifest.Objects.filter((o) => wanted.size === 0 || wanted.has(o.Name))
@@ -300,7 +325,7 @@ export async function restoreBackup(
     } catch (err) {
       throw new Error(`No se pudo seleccionar la base de datos ${schema}: ${describeError(err)}`)
     }
-    saved = await prepareSession(session)
+    saved = await prepareSession(session, reader.timeZone)
     const definers = new DefinerAccounts(session)
 
     const total = plan.length
@@ -482,7 +507,7 @@ async function restoreDdlObject(
 
 async function restoreTable(
   session: MysqlSession,
-  reader: Nb3Reader,
+  reader: RestoreArchive,
   meta: Nb3ObjectMeta,
   name: string,
   options: RestoreOptions,

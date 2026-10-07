@@ -3,13 +3,44 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { BackupFile, ConnectionConfig } from '@shared/types'
 import type { AppContext } from '../context'
 import { backupPathKey, backupRunIndex } from '../automation/backupRuns'
-import { isBackupFileName, parseBackupFileName } from './naming'
+import { vqbIsEncrypted } from './archive'
+import { getIndexCache } from './indexCache'
+import { backupFormatOfPath, isBackupFileName, parseBackupFileName } from './naming'
 
 /**
- * Lists .nb3 files without opening them: only `stat` and the file name are
- * used, so scanning hundreds of multi-GB backups stays instant.
- * Layout: `<dir>/<schema>/<file>.nb3` (files directly in `<dir>` are accepted with schema = null).
+ * Lists .nb3 and .vqb files without reading their content: `stat` and the
+ * file name, plus, for a .vqb, its small header (is it encrypted?), served
+ * from the index cache when the file is unchanged. Scanning hundreds of
+ * multi-GB backups stays instant.
+ * Layout: `<dir>/<schema>/<file>` (files directly in `<dir>` are accepted with schema = null).
  */
+
+/** Header peeks of this session, by path|size|mtime (the persistent cache holds full metas only). */
+const encryptedMemo = new Map<string, boolean>()
+
+async function vqbEncrypted(
+  userDataPath: string | undefined,
+  path: string,
+  size: number,
+  mtimeMs: number
+): Promise<boolean | undefined> {
+  const key = `${path}|${size}|${Math.floor(mtimeMs)}`
+  const memo = encryptedMemo.get(key)
+  if (memo !== undefined) return memo
+  if (userDataPath) {
+    const cached = getIndexCache(userDataPath).get(path, { size, mtimeMs })
+    if (cached) return cached.encrypted === true
+  }
+  try {
+    const encrypted = await vqbIsEncrypted(path)
+    if (encryptedMemo.size > 5000) encryptedMemo.clear()
+    encryptedMemo.set(key, encrypted)
+    return encrypted
+  } catch {
+    // Damaged or still being written: the details panel reports why.
+    return undefined
+  }
+}
 
 export interface ScanTarget {
   dir: string
@@ -67,7 +98,8 @@ async function describeFile(
   path: string,
   schema: string | null,
   connectionId: string,
-  source: BackupFile['source']
+  source: BackupFile['source'],
+  userDataPath?: string
 ): Promise<BackupFile | null> {
   let s
   try {
@@ -77,7 +109,12 @@ async function describeFile(
   }
   const fileName = basename(path)
   const parsed = parseBackupFileName(fileName)
+  const format = backupFormatOfPath(fileName) ?? 'nb3'
+  const encrypted =
+    format === 'vqb' ? await vqbEncrypted(userDataPath, path, s.size, s.mtimeMs) : undefined
   return {
+    format,
+    ...(encrypted !== undefined ? { encrypted } : {}),
     path,
     fileName,
     connectionId,
@@ -94,14 +131,15 @@ async function describeFile(
 export async function scanBackupDir(
   target: ScanTarget,
   connectionId: string,
-  schema?: string | null
+  schema?: string | null,
+  userDataPath?: string
 ): Promise<BackupFile[]> {
   const files: BackupFile[] = []
   const root = resolve(target.dir)
   for (const entry of await listDir(root)) {
     if (entry.isFile && isBackupFileName(entry.name)) {
       if (schema) continue
-      const f = await describeFile(entry.path, null, connectionId, target.source)
+      const f = await describeFile(entry.path, null, connectionId, target.source, userDataPath)
       if (f) files.push(f)
       continue
     }
@@ -109,7 +147,13 @@ export async function scanBackupDir(
     if (schema && entry.name !== schema) continue
     for (const child of await listDir(entry.path)) {
       if (!child.isFile || !isBackupFileName(child.name)) continue
-      const f = await describeFile(child.path, entry.name, connectionId, target.source)
+      const f = await describeFile(
+        child.path,
+        entry.name,
+        connectionId,
+        target.source,
+        userDataPath
+      )
       if (f) files.push(f)
     }
   }
@@ -141,7 +185,7 @@ export async function listBackups(
   const connection = ctx.connections.get(connectionId)
   if (!connection) throw new Error('Conexión no encontrada')
   const results = await Promise.all(
-    scanTargetsFor(connection).map((t) => scanBackupDir(t, connectionId, schema))
+    scanTargetsFor(connection).map((t) => scanBackupDir(t, connectionId, schema, ctx.userDataPath))
   )
   const extraDirs = (connection.extraBackupDirs ?? []).filter(Boolean).map((d) => resolve(d))
   const underExtra = (path: string): boolean =>

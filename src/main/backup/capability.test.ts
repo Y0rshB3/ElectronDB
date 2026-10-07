@@ -9,7 +9,7 @@ import { createBackupService } from './index'
 import { restoreBackup } from './restore'
 import { FakeSessionFactory, connectionFixture, connectionsOf } from './testing/fakeSession'
 
-// .nb3 backups stay MySQL-only (docs/multi-engine-design.md, section 11).
+// .nb3 backups stay MySQL-only (docs/multi-engine-design.md, section 11); PostgreSQL has .vqb only.
 describe('backup capability gates', () => {
   let dir: string
   beforeEach(() => {
@@ -53,18 +53,22 @@ describe('backup capability gates', () => {
     expect(sessions.sessions).toHaveLength(0)
   })
 
-  it('lists no backups for a PostgreSQL connection, even with .nb3 files in its folder', async () => {
+  it("lists only .vqb backups for a PostgreSQL connection, never its folder's .nb3 files", async () => {
     mkdirSync(join(dir, 'public'))
     writeFileSync(join(dir, 'public', '20240101000000.nb3'), 'x')
+    writeFileSync(join(dir, 'public', '20240102000000.vqb'), 'x')
     const mysql = connectionFixture({ id: 'my-1', backupDir: dir })
     const ctx = {
       userDataPath: dir,
       connections: connectionsOf(pg(), mysql)
     } as unknown as AppContext
     const service = createBackupService(ctx, new FakeSessionFactory())
-    expect(await service.list('pg-1', null)).toEqual([])
-    // MySQL keeps listing exactly as before
+    expect((await service.list('pg-1', null)).map((f) => f.fileName)).toEqual([
+      '20240102000000.vqb'
+    ])
+    // MySQL lists both formats
     expect((await service.list('my-1', null)).map((f) => f.fileName)).toEqual([
+      '20240102000000.vqb',
       '20240101000000.nb3'
     ])
   })

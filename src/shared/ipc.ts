@@ -293,8 +293,12 @@ export interface IpcInvokeMap {
   }
 
   'backups:list': { args: [connectionId: string, schema?: string | null]; result: BackupFile[] }
-  'backups:meta': { args: [path: string]; result: BackupMeta }
-  'backups:objectDdl': { args: [path: string, uuid: string]; result: string }
+  /** An encrypted .vqb without `password` answers its locked header meta; a wrong password throws. */
+  'backups:meta': { args: [path: string, password?: string | null]; result: BackupMeta }
+  'backups:objectDdl': {
+    args: [path: string, uuid: string, password?: string | null]
+    result: string
+  }
   'backups:create': {
     args: [operationId: string, options: BackupCreateOptions]
     result: BackupCreateResult
@@ -330,7 +334,12 @@ export interface IpcInvokeMap {
    * finished run (its id) or the given backup files (a package of the backups list).
    */
   'jobs:rollbackPlan': {
-    args: [source: string | RollbackFilesSource, targetConnectionId: string | null]
+    args: [
+      source: string | RollbackFilesSource,
+      targetConnectionId: string | null,
+      /** Opens encrypted .vqb copies the job's stored password does not open. */
+      password?: string | null
+    ]
     result: RollbackPlan
   }
   /** Starts the restore of a run's backups (REPLACE semantics); resolves with the new run. */

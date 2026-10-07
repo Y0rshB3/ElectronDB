@@ -46,8 +46,13 @@ export interface EngineCapabilities {
   hasSchemas: boolean
   /** Users view + db:users. */
   hasUsers: boolean
-  /** backups:* and the backup UI. */
+  /** .nb3 backups (Navicat-compatible, MySQL only). */
   supportsBackupsNb3: boolean
+  /**
+   * .vqb backups (docs/vqb-format.md). With either backup flag the backups:*
+   * channels and the backup UI are available (see hasBackups).
+   */
+  supportsBackupsVqb: boolean
   /** jobs:* tasks may target this connection. */
   supportsAutomation: boolean
   supportsSsh: boolean
@@ -151,6 +156,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     capabilities: {
       ...MYSQL_FAMILY,
       supportsBackupsNb3: true,
+      supportsBackupsVqb: true,
       supportsAutomation: true,
       preview: false,
       sequences: false,
@@ -169,6 +175,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     capabilities: {
       ...MYSQL_FAMILY,
       supportsBackupsNb3: false,
+      supportsBackupsVqb: false,
       supportsAutomation: false,
       preview: true,
       sequences: true,
@@ -190,6 +197,8 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       hasSchemas: true,
       hasUsers: false,
       supportsBackupsNb3: false,
+      // PostgreSQL backups exist only as .vqb.
+      supportsBackupsVqb: true,
       supportsAutomation: false,
       supportsSsh: true,
       supportsSsl: true,
@@ -234,6 +243,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       hasSchemas: false,
       hasUsers: false,
       supportsBackupsNb3: false,
+      supportsBackupsVqb: false,
       supportsAutomation: false,
       supportsSsh: false,
       supportsSsl: false,
@@ -278,6 +288,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       hasSchemas: false,
       hasUsers: false,
       supportsBackupsNb3: false,
+      supportsBackupsVqb: false,
       supportsAutomation: false,
       supportsSsh: true,
       supportsSsl: true,
@@ -325,6 +336,12 @@ export function engineOf(c: { engine?: EngineId | null }): EngineDescriptor {
   const descriptor = isEngineId(id) ? ENGINES[id] : undefined
   if (!descriptor) throw new Error(`Motor de base de datos desconocido: "${String(id)}".`)
   return descriptor
+}
+
+/** Any backup format (.vqb or .nb3): backups:* and the backup UI. */
+export function hasBackups(c: { engine?: EngineId | null }): boolean {
+  const caps = engineOf(c).capabilities
+  return caps.supportsBackupsNb3 || caps.supportsBackupsVqb
 }
 
 /** Capabilities that are plain on/off flags. */

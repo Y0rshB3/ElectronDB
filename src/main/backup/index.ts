@@ -8,13 +8,13 @@ import type {
   RestoreOptions,
   RestoreResult
 } from '@shared/types'
-import { engineOf } from '@shared/engines'
+import { engineOf, hasBackups } from '@shared/engines'
 import type { SqlExportOptions, SqlExportResult } from '@shared/importers'
 import type { AppContext } from '../context'
 import type { SessionFactory } from '../mysql/types'
 import { createBackup } from './create'
 import { getIndexCache } from './indexCache'
-import { readManifest, verifyBackupFile, type Nb3VerifyResult } from './nb3/reader'
+import { readArchiveMeta, verifyArchive, type ArchiveVerifyResult } from './archive'
 import {
   replaceSchemaFromBackup,
   type ReplaceHooks,
@@ -24,12 +24,18 @@ import {
 import { restoreBackup } from './restore'
 import { listBackups } from './scan'
 import { exportSchemaToSql } from './sqlExport'
+import { needsTypedConfirm } from '../ipc/productionGuard'
+import { createPgBackup, type PgSessionProvider } from './vqb/pgBackup'
+import type { ScryptParams } from './vqb/crypto'
+import { replacePgDatabase } from './vqb/pgReplace'
+import { restorePgBackup } from './vqb/pgRestore'
 
 export type ProgressReporter = (event: Omit<ProgressEvent, 'operationId' | 'kind'>) => void
 
 export interface BackupService {
   list(connectionId: string, schema?: string | null): Promise<BackupFile[]>
-  readMeta(path: string): Promise<BackupMeta>
+  /** Manifest of a .nb3/.vqb; an encrypted .vqb without `password` gives the locked header meta. */
+  readMeta(path: string, password?: string | null): Promise<BackupMeta>
   create(
     options: BackupCreateOptions,
     progress?: ProgressReporter,
@@ -46,8 +52,8 @@ export interface BackupService {
     progress?: ProgressReporter,
     signal?: AbortSignal
   ): Promise<SqlExportResult>
-  /** Full read of the archive: every checksum and gzip stream (throws when damaged). */
-  verify(path: string, signal?: AbortSignal): Promise<Nb3VerifyResult>
+  /** Full read of the archive: every checksum, GCM tag and gzip stream (throws when damaged). */
+  verify(path: string, signal?: AbortSignal, password?: string | null): Promise<ArchiveVerifyResult>
   /** REPLACE restore: the database ends up equal to the backup (see replace.ts). */
   replace(
     request: ReplaceRequest,
@@ -56,8 +62,17 @@ export interface BackupService {
   ): Promise<ReplaceResult>
 }
 
-/** Reads a backup manifest, served from the persistent index cache while size and mtime are unchanged. */
-export async function readBackupMeta(userDataPath: string, path: string): Promise<BackupMeta> {
+/**
+ * Reads a backup manifest, served from the persistent index cache while size
+ * and mtime are unchanged. The manifest of an encrypted .vqb read with its
+ * password is never cached (object names would end up in plain text on
+ * disk): only its locked header-only meta is.
+ */
+export async function readBackupMeta(
+  userDataPath: string,
+  path: string,
+  password?: string | null
+): Promise<BackupMeta> {
   let identity: { size: number; mtimeMs: number }
   try {
     const s = await stat(path)
@@ -70,8 +85,9 @@ export async function readBackupMeta(userDataPath: string, path: string): Promis
   }
   const cache = getIndexCache(userDataPath)
   const cached = cache.get(path, identity)
-  if (cached) return cached
-  const meta = await readManifest(path)
+  if (cached && !(password && cached.locked)) return cached
+  const meta = await readArchiveMeta(path, password)
+  if (meta.encrypted && !meta.locked) return meta
   try {
     cache.set(path, identity, meta)
   } catch {
@@ -80,29 +96,85 @@ export async function readBackupMeta(userDataPath: string, path: string): Promis
   return meta
 }
 
-export function createBackupService(ctx: AppContext, sessions: SessionFactory): BackupService {
+/** Pooled PostgreSQL sessions through the connection manager (loaded on first use). */
+export function pgSessionProvider(ctx: AppContext): PgSessionProvider {
+  return {
+    async acquire(connectionId, database) {
+      const [{ getConnectionManager }, { isPgConnection }] = await Promise.all([
+        import('../db/manager'),
+        import('../postgres/connection')
+      ])
+      const connection = await getConnectionManager(ctx).connection(connectionId)
+      if (!isPgConnection(connection)) throw new Error('La conexión no es PostgreSQL.')
+      return connection.acquire(database ? { database, schema: null } : null)
+    }
+  }
+}
+
+export interface BackupServiceOptions {
+  /** PostgreSQL sessions (tests); the connection manager otherwise. */
+  pg?: PgSessionProvider
+  /** scrypt cost of new encrypted .vqb backups (tests use a cheap one). */
+  scrypt?: ScryptParams
+}
+
+export function createBackupService(
+  ctx: AppContext,
+  sessions: SessionFactory,
+  serviceOptions: BackupServiceOptions = {}
+): BackupService {
+  const pg = serviceOptions.pg ?? pgSessionProvider(ctx)
+  const isPg = (connectionId: string | undefined): boolean =>
+    !!connectionId && ctx.connections.get(connectionId)?.engine === 'postgresql'
+  const guarded = (connectionId: string): boolean =>
+    !!ctx.settings && needsTypedConfirm(ctx, ctx.connections.get(connectionId))
   const service: BackupService = {
     list: async (connectionId, schema) => {
       // Engines without .nb3 backups have none to list (section 11); MySQL is unchanged.
       const connection = ctx.connections.get(connectionId)
-      if (connection && !engineOf(connection).capabilities.supportsBackupsNb3) return []
-      return listBackups(ctx, connectionId, schema)
+      if (connection && !hasBackups(connection)) return []
+      const files = await listBackups(ctx, connectionId, schema)
+      // A .nb3 can only be restored into MySQL: engines without .nb3 list their .vqb files.
+      return connection && !engineOf(connection).capabilities.supportsBackupsNb3
+        ? files.filter((f) => f.format === 'vqb')
+        : files
     },
-    readMeta: (path) => readBackupMeta(ctx.userDataPath, path),
+    readMeta: (path, password) => readBackupMeta(ctx.userDataPath, path, password),
     create: (options, progress, signal) =>
-      createBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+      isPg(options?.connectionId)
+        ? createPgBackup(
+            { connections: ctx.connections, pg, scrypt: serviceOptions.scrypt },
+            options,
+            progress,
+            signal
+          )
+        : createBackup(
+            { connections: ctx.connections, sessions, scrypt: serviceOptions.scrypt },
+            options,
+            progress,
+            signal
+          ),
     exportSql: (options, progress, signal) =>
       exportSchemaToSql({ connections: ctx.connections, sessions }, options, progress, signal),
     restore: (options, progress, signal) =>
-      restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
-    verify: (path, signal) => verifyBackupFile(path, signal),
+      isPg(options?.connectionId)
+        ? restorePgBackup({ connections: ctx.connections, pg, guarded }, options, progress, signal)
+        : restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+    verify: (path, signal, password) => verifyArchive(path, signal, password),
     replace: (request, hooks, signal) =>
-      replaceSchemaFromBackup(
-        { connections: ctx.connections, sessions, backups: service },
-        request,
-        hooks,
-        signal
-      )
+      isPg(request?.connectionId)
+        ? replacePgDatabase(
+            { connections: ctx.connections, pg, guarded, backups: service },
+            request,
+            hooks,
+            signal
+          )
+        : replaceSchemaFromBackup(
+            { connections: ctx.connections, sessions, backups: service },
+            request,
+            hooks,
+            signal
+          )
   }
   return service
 }

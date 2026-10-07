@@ -9,7 +9,7 @@ import type { BackupService, ProgressReporter } from './index'
 import { readBackupMeta } from './index'
 import { getIndexCache } from './indexCache'
 import { isBackupFileName } from './naming'
-import { readObjectMeta } from './nb3/reader'
+import { NOT_A_BACKUP_MESSAGE, archiveObjectDdl } from './archive'
 
 /**
  * Transport-agnostic implementation of the backups:* IPC channels. Kept free
@@ -37,12 +37,15 @@ const isInside = (child: string, parent: string): boolean => {
 function requireBackupPath(path: unknown): string {
   if (typeof path !== 'string' || !path.trim()) throw new Error('Ruta de backup no válida.')
   if (!isAbsolute(path)) throw new Error('La ruta del backup debe ser absoluta.')
-  if (!isBackupFileName(path)) throw new Error('El archivo indicado no es un backup .nb3.')
+  if (!isBackupFileName(path)) throw new Error(NOT_A_BACKUP_MESSAGE)
   return path
 }
 
+const optionalPassword = (password: unknown): string | null =>
+  typeof password === 'string' && password !== '' ? password : null
+
 /**
- * Deletes a .nb3 file only when it lives inside some connection's backupDir
+ * Deletes a .nb3/.vqb file only when it lives inside some connection's backupDir
  * and never when it is inside an extraBackupDirs entry (Navicat's own files).
  */
 export async function deleteBackupFile(
@@ -84,12 +87,15 @@ export async function deleteBackupFile(
   if (target !== path) getIndexCache(userDataPath).forget(target)
 }
 
-/** DDL shown in the backup browser: object DDL, then index and trigger DDL. */
-export async function objectDdl(path: string, uuid: string): Promise<string> {
+/** DDL shown in the backup browser: object DDL, then index, constraint and trigger DDL. */
+export async function objectDdl(
+  path: string,
+  uuid: string,
+  password?: string | null
+): Promise<string> {
   requireBackupPath(path)
   if (typeof uuid !== 'string' || !uuid) throw new Error('Objeto de backup no válido.')
-  const meta = await readObjectMeta(path, uuid)
-  return [meta.DDL, ...meta.IndexDDL, ...meta.TriggerDDL].filter((s) => s.trim() !== '').join(';\n')
+  return archiveObjectDdl(path, uuid, optionalPassword(password))
 }
 
 type Kind = ProgressEvent['kind']
@@ -109,7 +115,9 @@ export async function replaceRestore(
   const path = requireBackupPath(options.backupPath)
   if (!options.connectionId) throw new Error('Selecciona la conexión de destino.')
   if (!options.targetSchema?.trim()) throw new Error('Indica la base de datos de destino.')
-  const meta = await service.readMeta(path)
+  const password = optionalPassword(options.password)
+  const meta = await service.readMeta(path, password)
+  if (meta.locked) throw new Error(`No se puede usar el backup ${path}: escribe su contraseña.`)
   if (!meta.schema) throw new Error(`El backup ${path} no indica qué base de datos contiene.`)
   const result = await service.replace(
     {
@@ -121,7 +129,8 @@ export async function replaceRestore(
       continueOnError: options.continueOnError === true,
       // «Solo estructura» only when asked explicitly; absent = structure and data.
       includeData: options.includeData !== false,
-      ...(options.confirmProduction ? { confirmProduction: true } : {})
+      ...(options.confirmProduction ? { confirmProduction: true } : {}),
+      ...(password ? { password } : {})
     },
     {
       progress: (stage, event) =>
@@ -211,8 +220,9 @@ export function createBackupHandlers(
 
   return {
     list: async (connectionId, schema) => (await getService()).list(connectionId, schema ?? null),
-    meta: async (path) => readBackupMeta(ctx.userDataPath, requireBackupPath(path)),
-    objectDdl: (path, uuid) => objectDdl(path, uuid),
+    meta: async (path, password) =>
+      readBackupMeta(ctx.userDataPath, requireBackupPath(path), optionalPassword(password)),
+    objectDdl: (path, uuid, password) => objectDdl(path, uuid, password),
     create: (operationId, options) =>
       track(
         operationId,

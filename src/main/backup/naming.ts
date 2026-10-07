@@ -1,10 +1,12 @@
 import { NB3_EXTENSION } from './nb3/format'
+import { VQB_EXTENSION } from './vqb/format'
 
 /**
- * Navicat backup file names: `YYYYMMDDHHmmss[-label| label].nb3`, timestamp in local time.
+ * Backup file names: `YYYYMMDDHHmmss[-label| label].nb3` (Navicat's rule,
+ * timestamp in local time), and the same stamp and label for `.vqb`.
  */
 
-const NAME_RE = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:[- ](.*))?\.nb3$/i
+const NAME_RE = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:[- ](.*))?\.(?:nb3|vqb)$/i
 
 export interface ParsedBackupName {
   createdAt: string | null
@@ -56,13 +58,27 @@ export function sanitizeLabel(label: string | undefined | null): string {
     .slice(0, 80)
 }
 
-export function formatBackupFileName(date: Date, label?: string | null): string {
+export function formatBackupFileName(
+  date: Date,
+  label?: string | null,
+  extension: string = NB3_EXTENSION
+): string {
   const clean = sanitizeLabel(label)
-  return `${formatBackupStamp(date)}${clean ? `-${clean}` : ''}${NB3_EXTENSION}`
+  return `${formatBackupStamp(date)}${clean ? `-${clean}` : ''}${extension}`
 }
 
-export const isBackupFileName = (name: string): boolean =>
-  name.toLowerCase().endsWith(NB3_EXTENSION)
+/** Restorable backup files: Navicat .nb3 and Vortaq .vqb. */
+export const isBackupFileName = (name: string): boolean => backupFormatOfPath(name) !== null
+
+/** Format of a backup file from its extension; null for anything else. */
+export function backupFormatOfPath(name: string): 'nb3' | 'vqb' | null {
+  const lower = name.toLowerCase()
+  if (lower.endsWith(NB3_EXTENSION)) return 'nb3'
+  if (lower.endsWith(VQB_EXTENSION)) return 'vqb'
+  return null
+}
+
+export const isVqbFileName = (name: string): boolean => backupFormatOfPath(name) === 'vqb'
 
 /** Extension of plain SQL dumps written by «Exportar a .sql» (`.sql.gz` when compressed). */
 export const SQL_DUMP_EXTENSION = '.sql'

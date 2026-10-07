@@ -93,7 +93,9 @@ describe('backup handlers', () => {
       await expect(h.delete(join(own, '..', 'elsewhere.nb3'))).rejects.toThrow(
         OUTSIDE_DELETE_MESSAGE
       )
-      await expect(h.delete(join(own, 'demo', 'x.sql'))).rejects.toThrow(/no es un backup/)
+      await expect(h.delete(join(own, 'demo', 'x.sql'))).rejects.toThrow(
+        /no es una copia de seguridad/
+      )
       await expect(h.delete('relative/x.nb3')).rejects.toThrow(/absoluta/)
       expect(existsSync(outside)).toBe(true)
     })
