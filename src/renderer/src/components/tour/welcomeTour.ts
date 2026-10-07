@@ -18,6 +18,8 @@ export interface ActiveTourStep extends TourStep {
   /** Buttons that end the tour instead of «Siguiente». */
   actions?: TourAction[]
   testId?: string
+  /** Shows the app icon above the title (welcome step). */
+  logo?: boolean
 }
 
 /** What the last step's buttons do (the tour store wires them to the dialogs). */
@@ -49,7 +51,8 @@ export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
     title: 'Te damos la bienvenida a ElectronDB',
     text: 'Un cliente de MySQL para escritorio, compatible con las conexiones, tareas y copias .nb3 de Navicat. Te enseñamos lo principal en un minuto.',
-    testId: 'tour-welcome'
+    testId: 'tour-welcome',
+    logo: true
   },
   {
     target: 'connection-tree',

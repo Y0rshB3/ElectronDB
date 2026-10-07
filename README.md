@@ -215,7 +215,6 @@ Notas:
 - Los nombres de los archivos los fija `electron-builder.yml` (`artifactName`). **No los renombres**: los
   archivos `latest*.yml` que usa la actualización integrada apuntan a esos nombres.
 - Ningún comando `dist` publica nada (`--publish never`).
-- La app usa el icono genérico de Electron hasta que se añada uno en `build/`.
 
 ### Preparar una versión para GitHub
 

@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import type { BrowserWindowConstructorOptions, TitleBarOverlayOptions } from 'electron'
 import type { AppSettings } from '@shared/types'
 
@@ -44,4 +45,25 @@ export function windowChromeOptions(input: WindowChromeInput): BrowserWindowCons
     return { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
   }
   return { titleBarStyle: 'hidden', titleBarOverlay: titleBarOverlayFor(input.theme) }
+}
+
+export interface WindowIconInput {
+  platform: NodeJS.Platform
+  packaged: boolean
+  /** process.resourcesPath (packaged: extraResources land there). */
+  resourcesPath: string
+  /** app.getAppPath() (development: the project folder). */
+  appPath: string
+}
+
+/**
+ * PNG used as the window icon on Windows and Linux (taskbar, Alt+Tab). macOS
+ * takes the Dock icon from the bundle's icon.icns, so it gets none. Packaged
+ * builds ship the PNG through electron-builder `extraResources`.
+ */
+export function windowIconPath(input: WindowIconInput): string | undefined {
+  if (input.platform === 'darwin') return undefined
+  return input.packaged
+    ? join(input.resourcesPath, 'icon.png')
+    : join(input.appPath, 'build', 'icons', '512x512.png')
 }

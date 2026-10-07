@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   TOOLBAR_HEIGHT,
   titleBarOverlayFor,
   usesTitleBarOverlay,
-  windowChromeOptions
+  windowChromeOptions,
+  windowIconPath
 } from './windowOptions'
 
 describe('windowChromeOptions', () => {
@@ -41,5 +42,21 @@ describe('windowChromeOptions', () => {
   it('matches the renderer toolbar height token', () => {
     const tokens = readFileSync(resolve('src/renderer/src/styles/tokens.css'), 'utf8')
     expect(tokens).toContain(`--nd-toolbar-h: ${TOOLBAR_HEIGHT}px;`)
+  })
+})
+
+describe('windowIconPath', () => {
+  const base = { resourcesPath: '/r', appPath: resolve('.') }
+  it('leaves the Dock icon to the bundle on macOS', () => {
+    expect(windowIconPath({ ...base, platform: 'darwin', packaged: true })).toBeUndefined()
+  })
+  it('uses the shipped PNG when packaged', () => {
+    expect(windowIconPath({ ...base, platform: 'win32', packaged: true })).toBe(
+      join('/r', 'icon.png')
+    )
+  })
+  it('points at an existing PNG in development', () => {
+    const path = windowIconPath({ ...base, platform: 'linux', packaged: false })
+    expect(path && existsSync(path)).toBe(true)
   })
 })

@@ -25,8 +25,9 @@ shots/
 electrondb-shots/
 *.png
 *.jpg
-# App icons live in build/ and are meant to be committed
+# App icons live in build/ (and a copy in the renderer assets) and are meant to be committed
 !build/**
+!src/renderer/src/assets/**
 
 # Real data that must never be committed: backups, keychains, keys, profile secrets
 *.nb3

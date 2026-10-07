@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import type { AppSettings } from '@shared/types'
-import { windowChromeOptions } from './windowOptions'
+import { windowChromeOptions, windowIconPath } from './windowOptions'
 
 export interface MainWindowOptions {
   width?: number
@@ -15,6 +15,12 @@ export interface MainWindowOptions {
 }
 
 export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow {
+  const icon = windowIconPath({
+    platform: process.platform,
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath()
+  })
   const win = new BrowserWindow({
     width: options.width ?? 1440,
     height: options.height ?? 900,
@@ -23,6 +29,7 @@ export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow
     show: false,
     title: 'ElectronDB',
     ...windowChromeOptions({ platform: process.platform, theme: options.theme ?? 'dark' }),
+    ...(icon ? { icon } : {}),
     backgroundColor: '#090c13',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

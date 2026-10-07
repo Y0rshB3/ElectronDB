@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useTourStore } from '@renderer/stores/tour'
+import appIcon from '@renderer/assets/app-icon.png'
 import {
   findTourTarget,
   placeCard,
@@ -238,6 +239,15 @@ const cardStyle = computed(() => ({
             Saltar tour
           </button>
         </div>
+        <img
+          v-if="step.logo"
+          :src="appIcon"
+          class="tour__logo"
+          alt=""
+          width="56"
+          height="56"
+          data-test="tour-logo"
+        />
         <h2 id="tour-title" class="tour__title" data-test="tour-title">{{ step.title }}</h2>
         <p id="tour-text" class="tour__text" data-test="tour-text">
           {{ textParts?.before
@@ -386,6 +396,12 @@ const cardStyle = computed(() => ({
 .tour__skip:focus-visible {
   outline: 2px solid rgba(var(--nd-accent-rgb), 0.8);
   outline-offset: 1px;
+}
+.tour__logo {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 2px 0 10px;
 }
 .tour__title {
   margin: 0 0 4px;
