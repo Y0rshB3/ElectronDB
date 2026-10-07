@@ -148,3 +148,41 @@ have an empty `Data` array and no data entry. Restore = `INSERT INTO t (Fields..
 
 Observed object `Type` values so far: only `Table`. Other types are expected to
 carry their DDL in the same `DDL` field.
+
+## Connection export file (`.ncx`)
+
+Written by Navicat's own **File › Export Connections** (optionally with **Export
+Password**); the user picks it in «Importar… › Navicat — archivo .ncx». Notes from
+the publicly known structure of the format; parser: `src/main/importers/connections/ncx.ts`,
+tests on synthetic files in `tests/fixtures/importers/ncx/`.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Connections Ver="1.5">
+  <Connection ConnectionName="…" ConnType="MYSQL" Host="…" Port="3306" UserName="…" Password="<hex>" … />
+</Connections>
+```
+
+- Only direct `<Connection>` children of `<Connections>` are read. A UTF-8 BOM is tolerated.
+- `Ver` 1.1 and 1.4 write every attribute on every connection; **1.5 omits default/off
+  attributes**, so every attribute is optional (MySQL port 3306, SSH port 22, flags off).
+- `ConnType` (case-insensitive): `MYSQL`, `MARIADB` (imported as a MySQL connection while
+  MariaDB has no driver of its own), `POSTGRESQL`, `SQLITE`, `MONGODB`, `SQLSERVER`,
+  `ORACLE`, `REDIS`, `SNOWFLAKE`. Only MySQL and MariaDB are importable today; the rest are
+  listed with «Motor no soportado en esta versión». The import identity is
+  `(type, ConnectionName)`, the same as for `conn.plist` imports, so an `.ncx` merges into
+  connections imported from the folder.
+- Attributes used: `ConnectionName`, `ConnType`, `Host`, `Port`, `UserName`, `Database`,
+  `SSH`, `SSH_Host`, `SSH_Port`, `SSH_UserName`, `SSH_AuthenMethod` (`PASSWORD` |
+  `PUBLICKEY`), `SSH_PrivateKey`, `SSL`, `SSL_CACert`, `SSL_ClientCert`, `SSL_ClientKey`,
+  `SSL_Authen`, `HTTP` («Túnel HTTP no soportado»).
+- **Unverified** (accepted when present, never required): `SSL_VerifyCA`, a colour attribute
+  (`Color` / `ConnectionColor`); no sample confirms how Navicat writes either.
+- Secrets: `Password`, `SSH_Password`, `SSH_Passphrase`, `SSL_PEMClientKeyPassword`, hex of
+  a fixed-key scheme (AES-128-CBC in current versions, Blowfish in older ones;
+  `src/main/importers/navicat/ncxCipher.ts`). `Ver` < 1.4 tries Blowfish first, newer files
+  AES first. Decoded values go only to `CredentialStore` (`mysql`; `ssh` takes
+  `SSH_Passphrase` with `PUBLICKEY`, else `SSH_Password`; `sslKey`). They are never logged
+  or sent to the renderer. The wizard reminds the user to delete the file afterwards.
+- Key/certificate paths written on another OS (`C:\…` on macOS/Linux, `/…` on Windows) are
+  kept with the warning «Ruta de otro equipo: revísala». `SettingsSavePath` is ignored.

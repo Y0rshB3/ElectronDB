@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Connections Ver="1.5">
+	<Connection ConnectionName="Production Shop" ConnType="MYSQL" Host="db.example.test" Port="3306" UserName="shop_app" />
+	<Connection ConnectionName="Maria Analytics" ConnType="mariadb" Host="maria.example.test" UserName="analyst" SSH="true" SSH_Host="jump.example.test" SSH_UserName="analyst" />
+	<Connection ConnectionName="Windows Laptop" ConnType="MYSQL" Host="192.168.1.20" UserName="dev" SSL="true" SSL_CACert="C:\Users\tester\certs\ca.pem" HTTP="true" />
+	<Connection ConnectionName="Cache" ConnType="REDIS" Host="cache.example.test" Port="6379" />
+	<Connection ConnectionName="Legacy MSSQL" ConnType="SQLSERVER" Host="mssql.example.test" />
+</Connections>

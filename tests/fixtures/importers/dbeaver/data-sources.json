@@ -1,0 +1,88 @@
+{
+	"folders": {
+		"Clientes": {}
+	},
+	"connection-types": {
+		"dev": { "name": "Development", "color": "255,255,255", "auto-commit": true, "confirm-execute": false },
+		"prod": { "name": "Production", "color": "247,159,129", "auto-commit": false, "confirm-execute": true }
+	},
+	"connections": {
+		"mysql8-18a2b3c4d5e-1f2e3d4c5b6a7980": {
+			"provider": "mysql",
+			"driver": "mysql8",
+			"name": "Local MySQL",
+			"save-password": true,
+			"configuration": {
+				"host": "localhost",
+				"port": "3306",
+				"database": "app_dev",
+				"url": "jdbc:mysql://localhost:3306/app_dev",
+				"user": "app_user",
+				"type": "dev",
+				"auth-model": "native"
+			}
+		},
+		"mysql8-18a2b3c4d5f-2a3b4c5d6e7f8091": {
+			"provider": "mysql",
+			"driver": "mysql8",
+			"name": "Shop production",
+			"save-password": true,
+			"folder": "Clientes",
+			"configuration": {
+				"host": "10.20.0.5",
+				"port": "3306",
+				"url": "jdbc:mysql://10.20.0.5:3306/",
+				"type": "prod",
+				"auth-model": "native",
+				"handlers": {
+					"ssh_tunnel": {
+						"type": "TUNNEL",
+						"enabled": true,
+						"save-password": true,
+						"properties": {
+							"host": "bastion.example.test",
+							"port": 2222,
+							"authType": "PUBLIC_KEY",
+							"keyPath": "/home/tester/.ssh/id_rsa"
+						}
+					}
+				}
+			}
+		},
+		"mariaDB-18a2b3c4d60-3b4c5d6e7f8091a2": {
+			"provider": "mysql",
+			"driver": "mariaDB",
+			"name": "Maria staging",
+			"configuration": {
+				"url": "jdbc:mariadb://maria.example.test:3307/stats",
+				"user": "stats",
+				"type": "test",
+				"auth-model": "native"
+			}
+		},
+		"postgres-jdbc-18a2b3c4d61-4c5d6e7f8091a2b3": {
+			"provider": "postgresql",
+			"driver": "postgres-jdbc",
+			"name": "Warehouse",
+			"configuration": {
+				"host": "pg.example.test",
+				"port": "5432",
+				"database": "warehouse",
+				"url": "jdbc:postgresql://pg.example.test:5432/warehouse",
+				"type": "dev",
+				"auth-model": "native"
+			}
+		},
+		"sqlite_jdbc-18a2b3c4d62-5d6e7f8091a2b3c4": {
+			"provider": "generic",
+			"driver": "sqlite_jdbc",
+			"name": "Local notes",
+			"configuration": {
+				"database": "/home/tester/notes.db",
+				"url": "jdbc:sqlite:/home/tester/notes.db",
+				"type": "dev",
+				"auth-model": "native"
+			}
+		}
+	}
+}
