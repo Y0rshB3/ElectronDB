@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, pbkdf2Sync } from 'node:crypto'
-import { isPrintable } from '../navicat/keychain'
+import { isPrintable } from '../text'
 
 /**
  * Chromium os_crypt on macOS, which is what Electron's safeStorage uses there:

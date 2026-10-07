@@ -2,7 +2,7 @@ import type { ConnectionsRepo } from '../storage/repos'
 import type { CredentialStore } from '../credentials/store'
 import { plainCodec, type CodecName } from '../credentials/store'
 import type { Logger } from '../log'
-import { isPrintable } from '../navicat/keychain'
+import { isPrintable } from '../text'
 import { decryptMacOsCrypt, deriveMacOsCryptKey, hasMacOsCryptPrefix } from './osCrypt'
 import type { KeychainReadResult } from './legacyKeychain'
 

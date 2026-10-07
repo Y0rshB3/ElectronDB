@@ -61,11 +61,6 @@ describe('ImportNavicatDialog', () => {
         jobs: [{ id: 'j' }],
         warnings: ['Aviso de prueba']
       }),
-      'navicat:recoverPasswords': () => ({
-        attempted: 2,
-        recovered: [{ account: 'a', connectionName: 'Local' }],
-        warnings: []
-      }),
       'connections:list': () => [],
       'jobs:list': () => [],
       'jobs:runs': () => []
@@ -113,10 +108,11 @@ describe('ImportNavicatDialog', () => {
     expect(calls(invoke, 'connections:list')).toHaveLength(1)
     expect(calls(invoke, 'jobs:list')).toHaveLength(1)
 
-    await wrapper.get('[data-test="import-recover"]').trigger('click')
-    await settle()
-    expect(calls(invoke, 'navicat:recoverPasswords')).toHaveLength(1)
-    expect(wrapper.get('[data-test="import-recovery"]').text()).toContain('Recuperadas 1 de 2')
+    // Passwords are typed by hand: no keychain access of any kind is offered.
+    expect(wrapper.find('[data-test="import-recover"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="import-passwords-manual"]').text()).toContain(
+      'Navicat no guarda las contraseñas'
+    )
   })
 
   it('does not show the copied-folder notice on macOS', async () => {

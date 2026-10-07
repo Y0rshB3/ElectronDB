@@ -211,7 +211,6 @@ export const api = {
     previewJobs: (rootPath?: string | null) => invoke('navicat:previewJobs', rootPath),
     import: (request: NavicatImportRequest, rootPath?: string | null) =>
       invoke('navicat:import', request, rootPath),
-    recoverPasswords: () => invoke('navicat:recoverPasswords'),
     /** Silent: an automatic search must never pop an error snackbar. */
     findCandidates: () => invokeSilent('navicat:findCandidates')
   },

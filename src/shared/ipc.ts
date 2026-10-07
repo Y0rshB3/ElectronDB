@@ -16,7 +16,6 @@ import type {
   JobInput,
   JobLogEvent,
   JobRun,
-  KeychainRecoveryResult,
   LogEvent,
   NavicatCandidatesResult,
   NavicatConnectionPreview,
@@ -261,7 +260,6 @@ export interface IpcInvokeMap {
     args: [request: NavicatImportRequest, rootPath?: string | null]
     result: NavicatImportResult
   }
-  'navicat:recoverPasswords': { args: []; result: KeychainRecoveryResult }
   /**
    * Looks for Navicat data folders in the usual places of this OS (read-only,
    * no network, nothing cached). Only folders whose Common/conn.plist parses.
@@ -410,7 +408,6 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'navicat:previewConnections',
   'navicat:previewJobs',
   'navicat:import',
-  'navicat:recoverPasswords',
   'navicat:findCandidates',
   'tour:state',
   'tour:markWelcomeDone',

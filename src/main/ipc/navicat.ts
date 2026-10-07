@@ -7,7 +7,6 @@ import { readNavicatJobs } from '../navicat/batchJobs'
 import { readNavicatConnections } from '../navicat/connPlist'
 import { detectNavicat } from '../navicat/detect'
 import { importFromNavicat } from '../navicat/importer'
-import { recoverNavicatPasswords } from '../navicat/keychain'
 import { getLogger } from '../log'
 import { handle } from './typed'
 
@@ -42,7 +41,6 @@ export function registerNavicatHandlers(ctx: AppContext): void {
   handle('navicat:import', (request, rootPath) =>
     importFromNavicat(ctx, request, requireRoot(rootPath))
   )
-  handle('navicat:recoverPasswords', () => recoverNavicatPasswords(ctx))
   handle('navicat:findCandidates', () =>
     findNavicatCandidates({
       home: homedir(),

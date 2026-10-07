@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type {
-  KeychainRecoveryResult,
   NavicatCandidate,
   NavicatCandidateSource,
   NavicatConnectionPreview,
@@ -46,14 +45,12 @@ const detection = ref<NavicatDetection | null>(null)
 const detecting = ref(false)
 const previewing = ref(false)
 const importing = ref(false)
-const recovering = ref(false)
 const error = ref('')
 const connPreviews = ref<NavicatConnectionPreview[]>([])
 const jobPreviews = ref<NavicatJobPreview[]>([])
 const selectedConnections = ref<string[]>([])
 const selectedJobs = ref<string[]>([])
 const importResult = ref<NavicatImportResult | null>(null)
-const recovery = ref<KeychainRecoveryResult | null>(null)
 
 /*
  * Automatic search (navicat:findCandidates): runs when the dialog opens with
@@ -78,13 +75,12 @@ const SOURCE_LABELS: Record<NavicatCandidateSource, string> = {
 const open = computed({
   get: () => ui.importDialog,
   set: (value: boolean) => {
-    if (!value && (importing.value || recovering.value)) return
+    if (!value && importing.value) return
     ui.importDialog = value
   }
 })
 const busy = computed(
-  () =>
-    detecting.value || searching.value || previewing.value || importing.value || recovering.value
+  () => detecting.value || searching.value || previewing.value || importing.value
 )
 const pathArg = computed(() => rootPath.value.trim() || null)
 const allConnectionsSelected = computed(
@@ -120,7 +116,6 @@ function reset(): void {
   selectedConnections.value = []
   selectedJobs.value = []
   importResult.value = null
-  recovery.value = null
 }
 
 async function detect(requested = false): Promise<void> {
@@ -272,18 +267,6 @@ async function runImport(): Promise<void> {
   }
 }
 
-async function recoverPasswords(): Promise<void> {
-  recovering.value = true
-  error.value = ''
-  try {
-    recovery.value = await api.navicat.recoverPasswords()
-  } catch (err) {
-    error.value = errorMessage(err)
-  } finally {
-    recovering.value = false
-  }
-}
-
 /** Opening: a folder confirmed in the welcome tour, «No es esta carpeta», or the usual detection. */
 async function onOpen(): Promise<void> {
   const request = ui.importDialogRequest
@@ -320,7 +303,7 @@ watch(
 </script>
 
 <template>
-  <v-dialog v-model="open" max-width="860" scrollable :persistent="importing || recovering">
+  <v-dialog v-model="open" max-width="860" scrollable :persistent="importing">
     <v-card data-test="import-dialog">
       <DialogHeader
         icon="mdi-import"
@@ -640,7 +623,7 @@ watch(
           </v-table>
         </template>
 
-        <!-- Step 3: result + keychain recovery -->
+        <!-- Step 3: result -->
         <template v-else-if="importResult">
           <v-alert type="success" variant="tonal" data-test="import-result">
             Importadas {{ importResult.connections.length }} conexiones y
@@ -656,73 +639,16 @@ watch(
             <div v-for="(w, i) in importResult.warnings" :key="i" class="text-body-2">{{ w }}</div>
           </v-alert>
 
-          <v-card v-if="mac" variant="outlined" class="import-dialog__keychain mt-4">
-            <v-card-text>
-              <div class="import-dialog__section mb-2">
-                <v-icon icon="mdi-key-chain-variant" size="16" aria-hidden="true" />
-                <span class="import-dialog__section-title">Contraseñas</span>
-              </div>
-              <p class="text-body-2">
-                Navicat no guarda las contraseñas en sus archivos. Vortaq puede intentar leerlas del
-                Llavero de macOS; el sistema puede pedirte permiso para cada elemento («Permitir» o
-                «Permitir siempre»).
-              </p>
-              <v-btn
-                class="mt-2"
-                color="primary"
-                variant="tonal"
-                prepend-icon="mdi-key-chain"
-                :loading="recovering"
-                data-test="import-recover"
-                @click="recoverPasswords"
-              >
-                Intentar recuperar contraseñas del Keychain de Navicat
-              </v-btn>
-              <template v-if="recovery">
-                <v-alert
-                  :type="recovery.recovered.length ? 'success' : 'info'"
-                  variant="tonal"
-                  density="compact"
-                  class="mt-3"
-                  data-test="import-recovery"
-                >
-                  Recuperadas {{ recovery.recovered.length }} de
-                  {{ recovery.attempted }} contraseñas.
-                  <ul v-if="recovery.recovered.length" class="ml-4">
-                    <li v-for="r in recovery.recovered" :key="r.account">
-                      {{ r.connectionName ?? 'Elemento sin conexión asociada' }}
-                    </li>
-                  </ul>
-                </v-alert>
-                <v-alert
-                  v-if="recovery.warnings.length"
-                  type="warning"
-                  variant="tonal"
-                  density="compact"
-                  class="mt-2"
-                >
-                  <div v-for="(w, i) in recovery.warnings" :key="i" class="text-body-2">
-                    {{ w }}
-                  </div>
-                </v-alert>
-              </template>
-              <p class="text-body-2 mt-3 text-medium-emphasis">
-                Para las contraseñas que no se recuperen, edita cada conexión (clic derecho → Editar
-                conexión…) y escríbela en «Contraseña».
-              </p>
-            </v-card-text>
-          </v-card>
           <v-alert
-            v-else
             type="info"
             variant="tonal"
             density="compact"
             class="mt-4"
             data-test="import-passwords-manual"
           >
-            Navicat no guarda las contraseñas en sus archivos y fuera de macOS no hay Llavero del
-            que recuperarlas. Edita cada conexión importada (clic derecho → Editar conexión…) y
-            escribe la contraseña en «Contraseña».
+            Navicat no guarda las contraseñas en sus archivos. Edita cada conexión importada (clic
+            derecho → Editar conexión…) y escribe la contraseña en «Contraseña», o márcala «Sin
+            contraseña» si el servidor no la pide.
           </v-alert>
         </template>
 
@@ -741,7 +667,7 @@ watch(
           >Atrás</v-btn
         >
         <v-spacer />
-        <v-btn :disabled="importing || recovering" @click="open = false">{{
+        <v-btn :disabled="importing" @click="open = false">{{
           step === 3 ? 'Cerrar' : 'Cancelar'
         }}</v-btn>
         <v-btn
@@ -957,8 +883,5 @@ watch(
   color: var(--nd-text-2);
   text-align: right;
   white-space: nowrap;
-}
-.import-dialog__keychain {
-  background: var(--nd-bg-raised);
 }
 </style>

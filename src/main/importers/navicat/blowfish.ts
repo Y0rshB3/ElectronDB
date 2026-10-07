@@ -2,9 +2,9 @@
  * Minimal Blowfish (single-block ECB primitives) in plain TypeScript.
  *
  * Node's OpenSSL 3 build and Electron's BoringSSL do not expose the legacy
- * `bf-ecb` cipher, and the Navicat 11 password scheme needs it. The P-array
- * and S-boxes are the hexadecimal digits of pi; they are computed once on
- * first use instead of embedding a 1042-entry table.
+ * `bf-ecb` cipher, and the older .ncx password scheme (ncxCipher.ts) needs
+ * it. The P-array and S-boxes are the hexadecimal digits of pi; they are
+ * computed once on first use instead of embedding a 1042-entry table.
  */
 
 const P_SIZE = 18

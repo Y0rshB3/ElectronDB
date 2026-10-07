@@ -963,12 +963,6 @@ export interface NavicatImportResult {
   warnings: string[]
 }
 
-export interface KeychainRecoveryResult {
-  attempted: number
-  recovered: { account: string; connectionName: string | null }[]
-  warnings: string[]
-}
-
 /* ---------- Settings / app ---------- */
 
 /** A message the renderer shows once after start, then dismisses through IPC. */
