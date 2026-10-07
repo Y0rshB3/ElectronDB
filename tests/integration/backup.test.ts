@@ -1,25 +1,25 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it } from 'vitest'
 import type { ConnectionInput, ProgressEvent } from '@shared/types'
 import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
 import type { AppContext } from '@main/context'
 import { CredentialStore, plainCodec } from '@main/credentials/store'
-import { envVar } from '@main/env'
 import { ConnectionsRepo, JobsRepo, RunsRepo, SettingsRepo } from '@main/storage/repos'
 import { getConnectionManager, getSessionFactory } from '@main/mysql/manager'
 import type { MysqlSession } from '@main/mysql/types'
 import { createBackupService, type BackupService } from '@main/backup/index'
 import { Nb3Reader } from '@main/backup/nb3/reader'
 import { PRODUCTION_GUARD_MESSAGE } from '@main/backup/restore'
+import { describeMysql } from './targets'
 
 /**
  * End-to-end .nb3 backup/restore against a throwaway MySQL server
- * (ELECTRONDB_TEST_MYSQL_URL, e.g. mysql://root:navidog@127.0.0.1:33306/navidog_test).
+ * (ELECTRONDB_TEST_MYSQL_URL, e.g. mysql://root:navidog@127.0.0.1:33306/navidog_test, and
+ * ELECTRONDB_TEST_MYSQL57_URL, e.g. mysql://root:navidog@127.0.0.1:33357/navidog_test).
  */
 
-const url = envVar('TEST_MYSQL_URL')
 const SRC = 'nb_src'
 const DST = 'nb_dst'
 const FX = 'nb_fx'
@@ -62,8 +62,9 @@ function connectionInput(
 const DIGITS =
   '(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)'
 
-const SETUP: string[] = [
-  `CREATE DATABASE ${SRC} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
+// 5.7 split: utf8mb4_0900_ai_ci is new in 8.0; 5.7 uses the closest Unicode collation it has.
+const setupSql = (is57: boolean): string[] => [
+  `CREATE DATABASE ${SRC} CHARACTER SET utf8mb4 COLLATE ${is57 ? 'utf8mb4_unicode_ci' : 'utf8mb4_0900_ai_ci'}`,
   `USE ${SRC}`,
   `CREATE TABLE items (
      id INT NOT NULL AUTO_INCREMENT,
@@ -112,7 +113,7 @@ async function tableChecksum(
   return { count: Number(row.cnt), md5: String(row.md5) }
 }
 
-describe.skipIf(!url)('backup module (integration)', () => {
+describeMysql('backup module (integration)', ({ url, is57 }) => {
   let dir: string
   let ctx: AppContext
   let service: BackupService
@@ -127,7 +128,7 @@ describe.skipIf(!url)('backup module (integration)', () => {
   }
 
   beforeAll(async () => {
-    const u = new URL(url!)
+    const u = new URL(url)
     dir = mkdtempSync(join(tmpdir(), 'electrondb-backup-it-'))
     ctx = {
       userDataPath: dir,
@@ -152,7 +153,14 @@ describe.skipIf(!url)('backup module (integration)', () => {
     admin = await sessions.acquire(connectionId)
     await admin.execute('SET SESSION group_concat_max_len = 67108864')
     await dropAll()
-    for (const sql of SETUP) await admin.execute(sql)
+    for (const sql of setupSql(is57)) await admin.execute(sql)
+    // 5.7 split: 5.7 has no information_schema_stats_expiry (withFreshStats skips it), and
+    // TABLE_ROWS can come from InnoDB's persisted statistics, which a background thread
+    // refreshes at most every 10 s after a bulk load. Under parallel load the backup then
+    // saw a stale estimate of 0 rows for a table filled a moment ago. ANALYZE TABLE brings
+    // the fixture to the settled state any real table has; 8.4 keeps relying on stats
+    // expiry 0, which is what the estimate assertion below checks there.
+    if (is57) await admin.query(`ANALYZE TABLE ${SRC}.items`)
     await admin.useSchema(null)
   }, 120_000)
 
@@ -270,11 +278,13 @@ describe.skipIf(!url)('backup module (integration)', () => {
 
   it('round-trips GEOMETRY columns (POINT with SRID, POLYGON, NULL) byte for byte', async () => {
     await admin.execute(`CREATE DATABASE ${GEO_SRC}`)
+    // 5.7 split: the SRID column attribute is new in 8.0. On 5.7 the SRID lives only in each
+    // value (ST_GeomFromText(..., 4326)), which the byte-for-byte and ST_SRID checks still cover.
     await admin.execute(
       `CREATE TABLE ${GEO_SRC}.places (
          id INT PRIMARY KEY,
          pt POINT NULL,
-         loc POINT NOT NULL SRID 4326,
+         loc POINT NOT NULL${is57 ? '' : ' SRID 4326'},
          area POLYGON NULL
        ) ENGINE=InnoDB`
     )

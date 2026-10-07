@@ -86,6 +86,7 @@ export function makeConnection(
   partial: Partial<ConnectionConfig> & { id: string; name: string }
 ): ConnectionConfig {
   return {
+    engine: 'mysql',
     color: null,
     environment: 'local',
     host: '127.0.0.1',

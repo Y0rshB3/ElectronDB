@@ -212,7 +212,8 @@ const SETTINGS: AppSettings = {
   aiEnabled: true,
   aiDefaultProviderId: null,
   aiEffort: 'medium',
-  aiMaxTokens: 8000
+  aiMaxTokens: 8000,
+  previewEngines: false
 }
 
 function harness(options: { settings?: Partial<AppSettings>; answer?: string } = {}) {

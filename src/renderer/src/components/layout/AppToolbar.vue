@@ -10,6 +10,7 @@ import { useTourStore } from '@renderer/stores/tour'
 import { useObjectsContext } from '@renderer/composables/useObjectsContext'
 import { useNotify } from '@renderer/composables/useNotify'
 import { runSafely } from '@renderer/utils/errors'
+import { descriptorOf } from '@renderer/engines/capabilities'
 
 const ws = useWorkspace()
 const tree = useTreeStore()
@@ -27,6 +28,16 @@ const schemaContext = computed(() => {
   return sel && sel.schema && connections.isOpen(sel.connectionId)
     ? { connectionId: sel.connectionId, schema: sel.schema }
     : null
+})
+
+/*
+ * Capabilities of the connection the toolbar acts on. Without a connection the
+ * descriptor is MySQL's, so the dock looks exactly as it did before
+ * multi-engine; modules an engine lacks are left out (Navicat does the same).
+ */
+const caps = computed(() => {
+  const id = ws.currentConnectionId()
+  return descriptorOf(id ? connections.get(id) : undefined)?.capabilities ?? null
 })
 
 interface ToolbarAction {
@@ -52,126 +63,139 @@ function requireSchema(fn: (connectionId: string, schema: string) => void): () =
   }
 }
 
-const actions = computed<ToolbarAction[]>(() => [
-  {
-    key: 'connection',
-    label: 'Conexión',
-    icon: 'mdi-database-plus-outline',
-    action: () => ui.openConnectionDialog(null),
-    menu: [
-      {
-        label: 'Nueva conexión MySQL…',
-        icon: 'mdi-database-plus-outline',
-        action: () => ui.openConnectionDialog(null)
-      },
-      { label: 'Importar desde Navicat…', icon: 'mdi-import', action: () => ui.openImportDialog() }
-    ]
-  },
-  {
-    key: 'query',
-    label: 'Nueva Consulta',
-    icon: 'mdi-database-search-outline',
-    disabled: !hasConnection.value,
-    separatorAfter: true,
-    action: () => ws.openQuery()
-  },
-  {
-    key: 'table',
-    label: 'Tabla',
-    icon: 'mdi-table',
-    disabled: !hasConnection.value,
-    action: () => ws.showGroup('tables'),
-    menu: [
-      {
-        label: 'Nueva tabla',
-        icon: 'mdi-table-plus',
-        action: requireSchema((c, s) => ws.openTableDesigner(c, s, null))
-      }
-    ]
-  },
-  {
-    key: 'view',
-    label: 'Ver',
-    icon: 'mdi-table-eye',
-    disabled: !hasConnection.value,
-    action: () => ws.showGroup('views'),
-    menu: [
-      {
-        label: 'Nueva vista',
-        icon: 'mdi-plus',
-        action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'view', null))
-      }
-    ]
-  },
-  {
-    key: 'function',
-    label: 'Función',
-    icon: 'mdi-function-variant',
-    disabled: !hasConnection.value,
-    action: () => ws.showGroup('functions'),
-    menu: [
-      {
-        label: 'Nueva función',
-        icon: 'mdi-function-variant',
-        action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'function', null))
-      },
-      {
-        label: 'Nuevo procedimiento',
-        icon: 'mdi-script-text-outline',
-        action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'procedure', null))
-      }
-    ]
-  },
-  {
-    key: 'users',
-    label: 'Usuario',
-    icon: 'mdi-account-multiple-outline',
-    disabled: !hasConnection.value,
-    action: () => ws.openUsers()
-  },
-  {
-    key: 'others',
-    label: 'Otros',
-    icon: 'mdi-dots-horizontal-circle-outline',
-    menu: [
-      { label: 'Eventos', icon: 'mdi-calendar-clock', action: () => ws.showGroup('events') },
-      { label: 'Importar desde Navicat…', icon: 'mdi-import', action: () => ui.openImportDialog() },
-      { label: 'Ajustes…', icon: 'mdi-cog-outline', action: () => ui.openSettingsDialog() },
-      { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) },
-      {
-        label: 'Buscar actualizaciones…',
-        icon: 'mdi-update',
-        action: () => updates.openDialog()
-      },
-      {
-        label: 'Ver tour de bienvenida',
-        icon: 'mdi-map-marker-path',
-        action: () => tour.startWelcome()
-      }
-    ]
-  },
-  {
-    key: 'queries',
-    label: 'Consulta',
-    icon: 'mdi-database-search',
-    disabled: !hasConnection.value,
-    separatorAfter: true,
-    action: () => ws.showGroup('queries')
-  },
-  {
-    key: 'backup',
-    label: 'Copia de seguridad',
-    icon: 'mdi-archive-outline',
-    disabled: !hasConnection.value,
-    action: () => ws.openBackups(ws.currentConnectionId(), tree.selected?.schema ?? null)
-  },
-  {
-    key: 'automation',
-    label: 'Automatización',
-    icon: 'mdi-robot-outline',
-    action: () => ws.openAutomation()
-  }
-])
+const actions = computed<ToolbarAction[]>(() => {
+  const items: (ToolbarAction | false)[] = [
+    {
+      key: 'connection',
+      label: 'Conexión',
+      icon: 'mdi-database-plus-outline',
+      action: () => ui.openConnectionDialog(null),
+      menu: [
+        {
+          label: 'Nueva conexión MySQL…',
+          icon: 'mdi-database-plus-outline',
+          action: () => ui.openConnectionDialog(null)
+        },
+        {
+          label: 'Importar desde Navicat…',
+          icon: 'mdi-import',
+          action: () => ui.openImportDialog()
+        }
+      ]
+    },
+    {
+      key: 'query',
+      label: 'Nueva Consulta',
+      icon: 'mdi-database-search-outline',
+      disabled: !hasConnection.value,
+      separatorAfter: true,
+      action: () => ws.openQuery()
+    },
+    {
+      key: 'table',
+      label: 'Tabla',
+      icon: 'mdi-table',
+      disabled: !hasConnection.value,
+      action: () => ws.showGroup('tables'),
+      menu: [
+        {
+          label: 'Nueva tabla',
+          icon: 'mdi-table-plus',
+          action: requireSchema((c, s) => ws.openTableDesigner(c, s, null))
+        }
+      ]
+    },
+    {
+      key: 'view',
+      label: 'Ver',
+      icon: 'mdi-table-eye',
+      disabled: !hasConnection.value,
+      action: () => ws.showGroup('views'),
+      menu: [
+        {
+          label: 'Nueva vista',
+          icon: 'mdi-plus',
+          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'view', null))
+        }
+      ]
+    },
+    !!caps.value?.routines && {
+      key: 'function',
+      label: 'Función',
+      icon: 'mdi-function-variant',
+      disabled: !hasConnection.value,
+      action: () => ws.showGroup('functions'),
+      menu: [
+        {
+          label: 'Nueva función',
+          icon: 'mdi-function-variant',
+          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'function', null))
+        },
+        {
+          label: 'Nuevo procedimiento',
+          icon: 'mdi-script-text-outline',
+          action: requireSchema((c, s) => ws.openDdlEditor(c, s, 'procedure', null))
+        }
+      ]
+    },
+    !!caps.value?.hasUsers && {
+      key: 'users',
+      label: 'Usuario',
+      icon: 'mdi-account-multiple-outline',
+      disabled: !hasConnection.value,
+      action: () => ws.openUsers()
+    },
+    {
+      key: 'others',
+      label: 'Otros',
+      icon: 'mdi-dots-horizontal-circle-outline',
+      menu: [
+        ...(caps.value?.events
+          ? [{ label: 'Eventos', icon: 'mdi-calendar-clock', action: () => ws.showGroup('events') }]
+          : []),
+        {
+          label: 'Importar desde Navicat…',
+          icon: 'mdi-import',
+          action: () => ui.openImportDialog()
+        },
+        { label: 'Ajustes…', icon: 'mdi-cog-outline', action: () => ui.openSettingsDialog() },
+        { label: 'Registro', icon: 'mdi-text-box-outline', action: () => ui.toggleLogDrawer(true) },
+        {
+          label: 'Buscar actualizaciones…',
+          icon: 'mdi-update',
+          action: () => updates.openDialog()
+        },
+        {
+          label: 'Ver tour de bienvenida',
+          icon: 'mdi-map-marker-path',
+          action: () => tour.startWelcome()
+        }
+      ]
+    },
+    {
+      key: 'queries',
+      label: 'Consulta',
+      icon: 'mdi-database-search',
+      disabled: !hasConnection.value,
+      separatorAfter: true,
+      action: () => ws.showGroup('queries')
+    },
+    !!caps.value?.supportsBackupsNb3 && {
+      key: 'backup',
+      label: 'Copia de seguridad',
+      icon: 'mdi-archive-outline',
+      disabled: !hasConnection.value,
+      action: () => ws.openBackups(ws.currentConnectionId(), tree.selected?.schema ?? null)
+    },
+    {
+      key: 'automation',
+      label: 'Automatización',
+      icon: 'mdi-robot-outline',
+      action: () => ws.openAutomation()
+    }
+  ]
+  return items.filter((a): a is ToolbarAction => !!a)
+})
 
 /** Toolbar module that matches what the active tab is showing (highlighted in the dock). */
 const activeKey = computed<string | null>(() => {

@@ -27,6 +27,8 @@ export const useQueriesStore = defineStore('queries', () => {
       name: query.name,
       sql: query.sql,
       schema: query.schema,
+      // Only stored when given, so MySQL records keep exactly their previous shape.
+      ...(query.database !== undefined ? { database: query.database } : {}),
       updatedAt: new Date().toISOString()
     }
     const idx = existing.findIndex((q) => q.id === saved.id || q.name === saved.name)

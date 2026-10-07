@@ -7,8 +7,8 @@ import { handle } from './typed'
 export function registerBackupsHandlers(ctx: AppContext): void {
   let service: Promise<BackupService> | null = null
   const getService = (): Promise<BackupService> => {
-    // The mysql manager is loaded lazily so registering handlers stays cheap.
-    service ??= import('../mysql/manager').then(({ getSessionFactory }) =>
+    // The connection manager is loaded lazily so registering handlers stays cheap.
+    service ??= import('../db/manager').then(({ getSessionFactory }) =>
       createBackupService(ctx, getSessionFactory(ctx))
     )
     service.catch(() => {

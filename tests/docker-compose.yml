@@ -1,0 +1,51 @@
+# Throwaway database servers for the integration tests (`npm run test:integration:required`).
+#
+#   docker compose -f tests/docker-compose.yml up -d --wait
+#   docker compose -f tests/docker-compose.yml down -v      # removes containers and data
+#
+# Every port is bound to 127.0.0.1 only, and never to 3306/3307 (real servers live there).
+# The credentials are throwaway test values (root / navidog, database navidog_test) that
+# match the URLs documented in the README; they have nothing to do with real data.
+#
+# If the older stand-alone 8.4 container (navidog-test-mysql or electrondb-test-mysql) already
+# owns 33306, start only the 5.7 service:
+#   docker compose -f tests/docker-compose.yml up -d --wait mysql57
+#
+# Later engines (MariaDB 33316, PostgreSQL 55432, MongoDB 57017/57018) join this file in their
+# own phases (docs/multi-engine-design.md, section 15.3).
+name: electrondb-test
+
+services:
+  # ELECTRONDB_TEST_MYSQL_URL=mysql://root:navidog@127.0.0.1:33306/navidog_test
+  mysql84:
+    image: mysql:8.4.7
+    environment:
+      MYSQL_ROOT_PASSWORD: navidog
+      MYSQL_DATABASE: navidog_test
+    ports:
+      - '127.0.0.1:33306:3306'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h127.0.0.1', '-uroot', '-pnavidog', '--silent']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  # ELECTRONDB_TEST_MYSQL57_URL=mysql://root:navidog@127.0.0.1:33357/navidog_test
+  # mysql:5.7 is amd64-only: on Apple Silicon it runs emulated (slower first start).
+  # Stock server settings on purpose (latin1 server charset, 5.7 default sql_mode), so the
+  # tests see what a default 5.7 production server does.
+  mysql57:
+    image: mysql:5.7
+    platform: linux/amd64
+    environment:
+      MYSQL_ROOT_PASSWORD: navidog
+      MYSQL_DATABASE: navidog_test
+    ports:
+      - '127.0.0.1:33357:3306'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h127.0.0.1', '-uroot', '-pnavidog', '--silent']
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 20s

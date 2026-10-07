@@ -3,6 +3,12 @@ export interface SavedQuery {
   name: string
   sql: string
   schema: string | null
+  /**
+   * Database the query runs in, for engines with a database level above
+   * schemas (PostgreSQL, MongoDB). Absent means the connection's initial
+   * database; MySQL records never have it.
+   */
+  database?: string
   updatedAt: string
 }
 

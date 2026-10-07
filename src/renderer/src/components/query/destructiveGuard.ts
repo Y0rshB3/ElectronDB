@@ -1,6 +1,5 @@
-import { splitStatements } from '@shared/sqlSplit'
+import { normalize, splitStatements } from '@shared/dialects/mysql'
 import type { ConfirmItem } from '@renderer/stores/ui'
-import { normalize } from './writeGuard'
 
 /**
  * Detection of destructive statements for the «Confirmar antes de borrar o

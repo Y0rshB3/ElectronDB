@@ -74,6 +74,7 @@ export function makeConnection(overrides: Partial<ConnectionConfig> = {}): Conne
   return {
     id: 'c1',
     name: 'Local dev',
+    engine: 'mysql',
     color: '#69f0ae',
     environment: 'local',
     host: '127.0.0.1',

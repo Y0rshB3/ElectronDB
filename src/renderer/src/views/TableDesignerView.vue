@@ -7,24 +7,23 @@ import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { firstError, friendlyError } from '@renderer/components/data/privileges'
 import ColumnsEditor from '@renderer/components/designer/ColumnsEditor.vue'
 import ForeignKeysEditor from '@renderer/components/designer/ForeignKeysEditor.vue'
-import { buildDesignerAlter, type DesignerAlter } from '@renderer/components/designer/alterTable'
+import type { DesignerAlter } from '@renderer/components/designer/alterTable'
 import IndexesEditor from '@renderer/components/designer/IndexesEditor.vue'
-import { ENGINES } from '@renderer/components/designer/columnType'
 import { validateDraft } from '@renderer/components/designer/validateDraft'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { tabTitle, useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { useTreeStore } from '@renderer/stores/tree'
-import {
-  buildCreateTable,
-  draftFromStructure,
-  emptyColumn,
-  emptyTable,
-  type TableDraft
-} from '@renderer/utils/tableDesigner'
+import { emptyColumn, type TableDraft } from '@renderer/utils/tableDesigner'
+import { useEngineUi } from '@renderer/engines'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
+
+/** Designer model and SQL builders of the connection's engine (MySQL: today's modules). */
+const engineUi = useEngineUi(() => props.tab.connectionId)
+const designer = computed(() => engineUi.value.designer!)
+const tableEngines = computed(() => engineUi.value.typeCatalog?.tableEngines ?? [])
 
 const tabs = useTabsStore()
 const tree = useTreeStore()
@@ -36,7 +35,7 @@ type Charset = { charset: string; defaultCollation: string; collations: string[]
 
 const tableName = ref<string | null>(props.tab.objectName || null)
 const original = ref<TableStructure | null>(null)
-const draft = ref<TableDraft>(emptyTable())
+const draft = ref<TableDraft>(designer.value.emptyTable())
 const initialSnapshot = ref('')
 const charsets = ref<Charset[]>([])
 const schemas = ref<string[]>([])
@@ -54,11 +53,11 @@ const plan = computed<DesignerAlter>(() => {
   if (!original.value) {
     const statements =
       draft.value.name && draft.value.columns.length
-        ? [buildCreateTable(schema.value, draft.value)]
+        ? [designer.value.buildCreate(schema.value, draft.value)]
         : []
     return { statements, risks: [], problems: [], drops: [] }
   }
-  return buildDesignerAlter(original.value, draft.value)
+  return designer.value.buildAlter(original.value, draft.value)
 })
 const statements = computed(() => plan.value.statements)
 const previewSql = computed(() =>
@@ -94,7 +93,7 @@ function newTableDraft(): TableDraft {
     primaryKey: true,
     unsigned: true
   }
-  return { ...emptyTable(), columns: [id] }
+  return { ...designer.value.emptyTable(), columns: [id] }
 }
 
 async function loadStructure(): Promise<void> {
@@ -113,7 +112,7 @@ async function loadStructure(): Promise<void> {
         tableName.value
       )
       original.value = structure
-      draft.value = draftFromStructure(structure)
+      draft.value = designer.value.draftFromStructure(structure)
     } else {
       original.value = null
       draft.value = newTableDraft()
@@ -338,7 +337,7 @@ defineExpose({ draft, previewSql, save })
                 <v-col cols="12" md="6">
                   <v-combobox
                     v-model="draft.engine"
-                    :items="ENGINES"
+                    :items="tableEngines"
                     label="Motor"
                     density="compact"
                     variant="outlined"
@@ -391,7 +390,12 @@ defineExpose({ draft, previewSql, save })
             </div>
           </v-window-item>
           <v-window-item value="sql" class="fill">
-            <SqlEditor :model-value="previewSql" readonly data-test="sql-preview" />
+            <SqlEditor
+              :model-value="previewSql"
+              :engine="engineUi.id"
+              readonly
+              data-test="sql-preview"
+            />
           </v-window-item>
         </v-window>
       </div>

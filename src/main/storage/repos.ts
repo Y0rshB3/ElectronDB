@@ -12,6 +12,7 @@ import {
   DEFAULT_TYPED_CONFIRM_ENVIRONMENTS,
   normalizeTypedConfirmEnvironments
 } from '@shared/typedConfirm'
+import { isEngineId, withEngineDefaults } from '@shared/engines'
 import { JsonStore } from './jsonStore'
 import { newId, nowIso } from './ids'
 
@@ -22,6 +23,9 @@ interface ListDoc<T> {
 
 const listDefaults = <T>(): ListDoc<T> => ({ version: 1, items: [] })
 
+export const ENGINE_CHANGE_MESSAGE =
+  'No se puede cambiar el motor de una conexión existente; crea una conexión nueva.'
+
 export class ConnectionsRepo {
   private store: JsonStore<ListDoc<ConnectionConfig>>
   constructor(dir: string) {
@@ -30,24 +34,46 @@ export class ConnectionsRepo {
       listDefaults
     )
   }
+  /*
+   * Reads normalise each record (missing engine => 'mysql', engine block
+   * defaults) without writing the file: the stored JSON only changes when a
+   * record is saved.
+   */
   list(): ConnectionConfig[] {
-    return [...this.store.get().items].sort((a, b) => a.name.localeCompare(b.name))
+    return this.store
+      .get()
+      .items.map(withEngineDefaults)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
   get(id: string): ConnectionConfig | null {
-    return this.store.get().items.find((c) => c.id === id) ?? null
+    const found = this.store.get().items.find((c) => c.id === id)
+    return found ? withEngineDefaults(found) : null
   }
   findByName(name: string): ConnectionConfig | null {
-    return this.store.get().items.find((c) => c.name === name) ?? null
+    const found = this.store.get().items.find((c) => c.name === name)
+    return found ? withEngineDefaults(found) : null
   }
+  /**
+   * Creates or replaces a connection. The engine is fixed once saved (the
+   * Navicat importer writes through here too): an input without `engine`
+   * keeps the stored one, a different one is refused.
+   */
   save(input: ConnectionInput): ConnectionConfig {
     const existing = input.id ? this.get(input.id) : null
+    if (input.engine !== undefined && !isEngineId(input.engine)) {
+      throw new Error(`Motor de base de datos desconocido: "${String(input.engine)}".`)
+    }
+    if (existing && input.engine !== undefined && input.engine !== existing.engine) {
+      throw new Error(ENGINE_CHANGE_MESSAGE)
+    }
     const now = nowIso()
-    const record: ConnectionConfig = {
+    const record: ConnectionConfig = withEngineDefaults({
       ...input,
+      engine: input.engine ?? existing?.engine,
       id: existing?.id ?? input.id ?? newId(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
-    }
+    })
     this.store.update((d) => {
       const idx = d.items.findIndex((c) => c.id === record.id)
       if (idx >= 0) d.items[idx] = record
@@ -175,7 +201,8 @@ export const DEFAULT_SETTINGS = (
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',
-  aiMaxTokens: DEFAULT_AI_MAX_TOKENS
+  aiMaxTokens: DEFAULT_AI_MAX_TOKENS,
+  previewEngines: false
 })
 
 /**
@@ -211,7 +238,9 @@ export class SettingsRepo {
       aiDefaultProviderId:
         typeof stored.aiDefaultProviderId === 'string' ? stored.aiDefaultProviderId : null,
       aiEffort: AI_EFFORTS.includes(stored.aiEffort) ? stored.aiEffort : 'low',
-      aiMaxTokens: normalizeAiMaxTokens(stored.aiMaxTokens)
+      aiMaxTokens: normalizeAiMaxTokens(stored.aiMaxTokens),
+      // Profiles saved before the switch existed (or invalid values): previews hidden.
+      previewEngines: stored.previewEngines === true
     }
     return settings.navicatRootPath === this.staleMacDefault
       ? { ...settings, navicatRootPath: '' }

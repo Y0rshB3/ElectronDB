@@ -19,7 +19,8 @@ const base: AppSettings = {
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',
-  aiMaxTokens: 16000
+  aiMaxTokens: 16000,
+  previewEngines: false
 }
 
 describe('SettingsDialog › Seguridad typed-confirmation environments', () => {
@@ -118,5 +119,78 @@ describe('SettingsDialog › Ver tour de bienvenida', () => {
     expect(useTourStore().active).toBe(true)
     expect(useTourStore().kind).toBe('welcome')
     wrapper.unmount()
+  })
+})
+
+// Written before "Motores en vista previa" existed: no previewEngines key.
+const legacySettings: Omit<AppSettings, 'previewEngines'> = {
+  navicatRootPath: '/nav',
+  backupsRootDir: '/backups',
+  defaultRowLimit: 1000,
+  theme: 'dark',
+  typedConfirmEnvironments: ['production'],
+  confirmDestructiveEverywhere: true,
+  checkUpdatesOnStartup: true,
+  autoDownloadUpdates: false,
+  aiEnabled: false,
+  aiDefaultProviderId: null,
+  aiEffort: 'low',
+  aiMaxTokens: 16000
+}
+
+describe('SettingsDialog preview engines switch', () => {
+  let invoke: Mock
+  let wrapper: ReturnType<typeof mountWith> | null = null
+  let stored: Record<string, unknown>
+
+  beforeEach(() => {
+    stored = { ...legacySettings }
+    invoke = mockElectronDB({
+      'app:info': () => ({ version: '0.1.9' }),
+      'settings:get': () => ({ ...stored }),
+      'settings:update': (patch) => {
+        stored = { ...stored, ...(patch as Partial<AppSettings>) }
+        return { ...stored }
+      }
+    })
+  })
+  afterEach(() => wrapper?.unmount())
+
+  async function openDialog() {
+    const pinia = freshPinia()
+    await useSettingsStore().load()
+    useUiStore().settingsDialog = true
+    wrapper = mountWith(SettingsDialog, pinia)
+    await settle()
+    return wrapper
+  }
+
+  const switchInput = () =>
+    wrapper!.get('[data-test="settings-preview-engines"] input[type="checkbox"]')
+
+  it('shows the Spanish switch, off by default, and says no preview engine ships yet', async () => {
+    await openDialog()
+    const field = wrapper!.get('[data-test="settings-preview-engines"]')
+    expect(field.text()).toContain('Motores en vista previa')
+    expect(field.text()).toContain('Esta versión todavía no incluye ninguno.')
+    expect((switchInput().element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('saves the switch with the other settings', async () => {
+    await openDialog()
+    await switchInput().setValue(true)
+    await wrapper!.get('[data-test="settings-save"]').trigger('click')
+    await settle()
+    const [patch] = calls(invoke, 'settings:update')[0] as [AppSettings]
+    expect(patch).toMatchObject({ ...legacySettings, previewEngines: true })
+    expect(useSettingsStore().settings.previewEngines).toBe(true)
+  })
+
+  it('saving without touching it keeps it off', async () => {
+    await openDialog()
+    await wrapper!.get('[data-test="settings-save"]').trigger('click')
+    await settle()
+    const [patch] = calls(invoke, 'settings:update')[0] as [AppSettings]
+    expect(patch.previewEngines).toBe(false)
   })
 })

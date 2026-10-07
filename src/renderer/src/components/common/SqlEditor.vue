@@ -3,15 +3,13 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
-import { sql } from '@codemirror/lang-sql'
+import { sql, StandardSQL, type SQLDialect } from '@codemirror/lang-sql'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { tabKeymap } from './editor/tabKeymap'
-import {
-  electronDBMySQL,
-  schemaCompletionSource,
-  type SchemaProvider
-} from './editor/sqlCompletion'
+import type { EngineId } from '@shared/types'
+import { engineUi } from '@renderer/engines'
+import { schemaCompletionSource, type SchemaProvider } from './editor/sqlCompletion'
 
 const props = defineProps<{
   /** Table names (optionally with column names) used for autocompletion. */
@@ -20,6 +18,8 @@ const props = defineProps<{
   provider?: SchemaProvider
   readonly?: boolean
   minHeight?: string
+  /** Engine whose SQL dialect the editor uses; absent means MySQL. */
+  engine?: EngineId
 }>()
 
 const emit = defineEmits<{
@@ -36,9 +36,18 @@ let view: EditorView | null = null
 const langCompartment = new Compartment()
 const readonlyCompartment = new Compartment()
 
+/** The engine's CodeMirror dialect (MySQL: electronDBMySQL); plain SQL for an engine without a UI. */
+function editorDialect(): SQLDialect {
+  try {
+    return engineUi(props.engine).editorLanguage
+  } catch {
+    return StandardSQL
+  }
+}
+
 function languageExt() {
   const lang = sql({
-    dialect: electronDBMySQL,
+    dialect: editorDialect(),
     schema: props.schema ?? {},
     upperCaseKeywords: true
   })
@@ -228,7 +237,7 @@ watch(model, (value) => {
 })
 
 watch(
-  () => [props.schema, props.provider],
+  () => [props.schema, props.provider, props.engine],
   () => view?.dispatch({ effects: langCompartment.reconfigure(languageExt()) }),
   { deep: true }
 )

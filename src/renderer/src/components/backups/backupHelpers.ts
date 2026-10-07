@@ -1,4 +1,5 @@
 import type { BackupFile, ConnectionConfig, Environment } from '@shared/types'
+import { can } from '@renderer/engines/capabilities'
 
 export const SOURCE_CHIPS: Record<BackupFile['source'], { label: string; color: string }> = {
   navicat: { label: 'Navicat', color: 'warning' },
@@ -30,6 +31,16 @@ export function environmentLabel(env: Environment): string {
 
 export function environmentColor(env: Environment): string {
   return ENVIRONMENTS.find((e) => e.value === env)?.color ?? 'secondary'
+}
+
+/** Connections whose engine supports .nb3 backups (every MySQL connection). */
+export function backupConnections(list: ConnectionConfig[]): ConnectionConfig[] {
+  return list.filter((c) => can(c, 'supportsBackupsNb3'))
+}
+
+/** Connections that automation tasks may target (every MySQL connection). */
+export function automationConnections(list: ConnectionConfig[]): ConnectionConfig[] {
+  return list.filter((c) => can(c, 'supportsAutomation'))
 }
 
 /** First connection flagged as local, used as default rollback target. */

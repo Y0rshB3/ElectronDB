@@ -1,17 +1,18 @@
+import { DbUserError, describeForLog as describeDbErrorForLog } from '../db/errors'
+
 /**
  * Error taxonomy for the mysql module.
  *
  * - MysqlUserError: business/usage errors with a Spanish, user-facing message
- *   (missing password, unknown connection, refused operation...).
+ *   (missing password, unknown connection, refused operation...). It extends
+ *   the engine-neutral DbUserError (src/main/db/errors.ts), so code that checks
+ *   `instanceof DbUserError` also accepts it; its code stays 'E_MYSQL_USER'.
  * - Technical errors coming from mysql2/ssh2 are passed through `describeError`
  *   so the renderer receives the server message plus its code.
  */
-export class MysqlUserError extends Error {
-  constructor(
-    message: string,
-    readonly code = 'E_MYSQL_USER'
-  ) {
-    super(message)
+export class MysqlUserError extends DbUserError {
+  constructor(message: string, code = 'E_MYSQL_USER') {
+    super(message, code)
     this.name = 'MysqlUserError'
   }
 }
@@ -79,9 +80,12 @@ export function describeError(err: unknown): string {
   return code ? `${message} (${code})` : message
 }
 
+/** Log-safe description (the driver's describeForLog): never the server message. */
+export const describeForLog = describeDbErrorForLog
+
 /** Wraps a low-level error into a plain Error with a readable message. */
 export function toUserError(err: unknown, prefix?: string): Error {
-  if (err instanceof MysqlUserError) return err
+  if (err instanceof DbUserError) return err
   const description = describeError(err)
   return new Error(prefix ? `${prefix}: ${description}` : description)
 }

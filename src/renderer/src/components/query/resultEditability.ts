@@ -1,4 +1,6 @@
 import type { CellValue, QueryColumn, TableStructure } from '@shared/types'
+// Relative (not @renderer): the node typecheck and integration tests compile this file too.
+import { isAutoIncrementColumn, isViewLike } from '../../utils/columnMeta'
 import { singleTableSelect } from './selectSource'
 
 /**
@@ -65,9 +67,12 @@ export function resultSource(columns: QueryColumn[], sql: string): SourceCheck {
   return { ok: true, source: { schema, table: ref.table, alias: ref.alias ?? ref.table } }
 }
 
-/** Primary key columns of a table, in index order (empty when it has none). */
+/**
+ * Primary key columns of a table, in index order (empty when it has none).
+ * IndexInfo.primary when the driver sets it; otherwise MySQL's index name.
+ */
 export function primaryKeyOf(structure: Pick<TableStructure, 'indexes'>): string[] {
-  return structure.indexes.find((i) => i.name === 'PRIMARY')?.columns ?? []
+  return structure.indexes.find((i) => i.primary ?? i.name === 'PRIMARY')?.columns ?? []
 }
 
 /** Index of the first row whose key repeats an earlier one, or -1. */
@@ -90,15 +95,14 @@ export function decideEditability(
   columns: QueryColumn[],
   source: ResultSource,
   structure:
-    | (Pick<TableStructure, 'indexes' | 'tableType'> & Partial<Pick<TableStructure, 'columns'>>)
+    | (Pick<TableStructure, 'indexes' | 'tableType'> &
+        Partial<Pick<TableStructure, 'columns' | 'kind'>>)
     | null,
   rows: CellValue[][] = []
 ): Editability {
   const where = { schema: source.schema, table: source.table }
   if (!structure) return { editable: false, reason: 'no se pudo comprobar la tabla', ...where }
-  // Older payloads lack tableType: an index list still only exists for base tables.
-  if (structure.tableType && structure.tableType !== 'BASE TABLE')
-    return { editable: false, reason: 'el origen es una vista', ...where }
+  if (isViewLike(structure)) return { editable: false, reason: 'el origen es una vista', ...where }
 
   if (columns.some((c) => !c.table || !c.schema || !c.sourceName))
     return { editable: false, reason: REASON_COMPUTED, ...where }
@@ -128,7 +132,7 @@ export function decideEditability(
   const keyCols = keyIndexes.map((i) => columns[i])
   const autoIncrement =
     pk.length === 1 &&
-    !!structure.columns?.some((c) => same(c.name, pk[0]) && /auto_increment/i.test(c.extra))
+    !!structure.columns?.some((c) => same(c.name, pk[0]) && isAutoIncrementColumn(c))
   return {
     editable: true,
     // Spelled as the result reports them so they match the payload columns below.

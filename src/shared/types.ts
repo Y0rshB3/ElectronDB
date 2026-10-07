@@ -7,6 +7,88 @@ import type { WhatsNewEntry } from './whatsNew'
 
 export type Environment = 'local' | 'staging' | 'production' | 'other'
 
+/* ---------- Engines (multi-engine model; only 'mysql' ships today) ---------- */
+
+/** Database engine of a connection. Fixed once the connection is saved. */
+export type EngineId = 'mysql' | 'mariadb' | 'postgresql' | 'sqlite' | 'mongodb'
+
+/** libpq names. 'allow' = try without TLS first, retry with TLS if the server refuses. */
+export type SslMode = 'disable' | 'allow' | 'prefer' | 'require' | 'verify-ca' | 'verify-full'
+
+/** Network options shared by PostgreSQL and MongoDB (MySQL ignores them for now). */
+export interface NetworkOptions {
+  /** Connect / server-selection timeout. Default 10 000 (Mongo's own default is 30 s). */
+  connectTimeoutMs: number
+  /** TCP keepalive interval; 0 = off. Default 60. Also used for the SSH tunnel. */
+  keepAliveSec: number
+}
+
+export interface PostgresOptions {
+  /** Database opened first (Navicat "Initial Database"; default 'postgres'). */
+  initialDatabase: string
+  /** Show pg_catalog / information_schema / pg_toast schemas and template / no-connect databases. */
+  showSystemSchemas: boolean
+  /** Session TimeZone; '' = server default. */
+  timeZone: string
+}
+
+export interface SqliteAttachedDatabase {
+  alias: string
+  filePath: string
+  pathNeedsReview?: boolean
+}
+
+export interface SqliteOptions {
+  /** Absolute path of the main database file. Required. Must exist when opening. */
+  filePath: string
+  /**
+   * Set by import when the path came from another OS or is not absolute here
+   * (e.g. 'C:\\…' on macOS). The connection cannot open until the user picks a file.
+   */
+  pathNeedsReview?: boolean
+  /** Open read-only. Default true when environment === 'production'. */
+  readOnly: boolean
+  /** PRAGMA foreign_keys at open. Default false for opened/imported files. */
+  foreignKeys: boolean
+  /** ATTACH DATABASE ? AS <quoted alias> on open (path bound as a parameter, must exist). */
+  attached: SqliteAttachedDatabase[]
+  /** Busy timeout for files other apps also have open. */
+  busyTimeoutMs: number
+}
+
+export type MongoTopology = 'standalone' | 'replicaSet' | 'shardCluster'
+export type MongoAuthMechanism =
+  | 'default' // SCRAM negotiated
+  | 'scram-sha-1'
+  | 'scram-sha-256'
+  | 'x509'
+  | 'plain' // LDAP
+  | 'none'
+export type MongoReadPreference =
+  'primary' | 'primaryPreferred' | 'secondary' | 'secondaryPreferred' | 'nearest'
+
+export interface MongoOptions {
+  topology: MongoTopology
+  /** mongodb+srv:// using `host` as the SRV name (no port). */
+  srv: boolean
+  /** Seed list for replicaSet/shardCluster. Standalone uses host/port. */
+  members: { host: string; port: number }[]
+  replicaSet: string
+  authMechanism: MongoAuthMechanism
+  /** Authentication database (Navicat "Auth Source"; default 'admin'). */
+  authSource: string
+  /** Database opened by default in the tree and the query editor. */
+  defaultDatabase: string
+  readPreference: MongoReadPreference
+  /** Forced to true when SSH is enabled (a tunnel forwards a single host). */
+  directConnection: boolean
+  /** Default true; forced false for DocumentDB and Cosmos DB service providers. */
+  retryWrites: boolean
+  retryReads: boolean
+  /** Other non-secret URI options. Credential keys are rejected on save and import. */
+  extraOptions: Record<string, string>
+}
+
 export type SshAuthType = 'password' | 'key'
 
 export interface SshConfig {
@@ -33,6 +115,8 @@ export interface SslConfig {
   clientCertPath?: string
   clientKeyPath?: string
   verifyServer: boolean
+  /** PostgreSQL / MongoDB only. Absent => derived from `enabled` and `verifyServer`. */
+  mode?: SslMode
 }
 
 export interface ConnectionConfig {
@@ -58,11 +142,38 @@ export interface ConnectionConfig {
   extraBackupDirs: string[]
   createdAt: string
   updatedAt: string
-  source?: { app: 'navicat'; name: string; importedAt: string }
+  /**
+   * Records written before multi-engine have no engine: ConnectionsRepo
+   * normalises them to 'mysql' on read. Cannot change once saved.
+   */
+  engine: EngineId
+  /** Engine blocks: present (with defaults filled by ConnectionsRepo) only for their engine. */
+  network?: NetworkOptions
+  postgres?: PostgresOptions
+  sqlite?: SqliteOptions
+  mongo?: MongoOptions
+  source?: {
+    app: 'navicat'
+    name: string
+    importedAt: string
+    /** Navicat section / ConnType ('MySQL', 'PostgreSQL', ...). Missing => 'MySQL'. */
+    navicatType?: string
+    format?: 'plist' | 'ncx'
+    /** Navicat ServiceProvider ('Default', 'Redshift', 'MongoDBAtlas', ...). */
+    serviceProvider?: string
+  }
 }
 
-export type ConnectionInput = Omit<ConnectionConfig, 'id' | 'createdAt' | 'updatedAt'> & {
+/**
+ * What the UI and the importer send to `connections:save`. Without `engine`,
+ * an existing record keeps its engine and a new one is 'mysql'.
+ */
+export type ConnectionInput = Omit<
+  ConnectionConfig,
+  'id' | 'createdAt' | 'updatedAt' | 'engine'
+> & {
   id?: string
+  engine?: EngineId
 }
 
 export interface ConnectionTestResult {
@@ -86,6 +197,23 @@ export interface ServerInfo {
   characterSet: string
   uptimeSeconds: number
   threadsConnected: number
+  /** Engine of the connection (absent from MySQL drivers that predate it: means 'mysql'). */
+  engine?: EngineId
+  /** Engine-neutral label/value pairs rendered by the info panel when present. */
+  details?: { label: string; value: string }[]
+  /** Facts detected at connect time that refine the static engine capabilities. */
+  runtime?: ServerRuntime
+}
+
+/** Runtime facts of a connected server (section 3 of docs/multi-engine-design.md). */
+export interface ServerRuntime {
+  /** Detected server flavour, e.g. 'mysql', 'mariadb', 'postgresql'. */
+  flavor: string
+  /** Numeric server version (e.g. 80407 for MySQL 8.4.7, 170002 for PostgreSQL 17.2). */
+  versionNumber: number
+  transactions: boolean
+  returning: 'none' | 'insert-delete' | 'all'
+  topology?: MongoTopology
 }
 
 export interface DatabaseInfo {
@@ -151,6 +279,27 @@ export interface TriggerInfo {
   definer: string
 }
 
+/**
+ * Engine-neutral type family of a column, so the renderer does not have to
+ * match engine type names. Absent => the renderer falls back to MySQL names.
+ */
+export type TypeKind =
+  | 'integer'
+  | 'decimal'
+  | 'float'
+  | 'boolean'
+  | 'text'
+  | 'binary'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'json'
+  | 'uuid'
+  | 'enum'
+  | 'array'
+  | 'spatial'
+  | 'other'
+
 export interface ColumnInfo {
   name: string
   ordinal: number
@@ -163,6 +312,25 @@ export interface ColumnInfo {
   characterSet: string | null
   collation: string | null
   comment: string
+  /*
+   * Engine-neutral metadata. Optional until every driver fills it; when it is
+   * absent the renderer keeps reading the MySQL fields above (key, extra, columnType).
+   */
+  primaryKey?: boolean
+  /** AUTO_INCREMENT / identity / serial / INTEGER PRIMARY KEY AUTOINCREMENT. */
+  autoIncrement?: boolean
+  generated?: 'virtual' | 'stored' | null
+  typeKind?: TypeKind
+  /** MariaDB INVISIBLE columns. */
+  hidden?: boolean
+  /** Omit from INSERT when the cell is untouched. */
+  hasDefault?: boolean
+  /** PostgreSQL identity; 'always' => read-only on insert. */
+  identity?: 'always' | 'by-default' | null
+  /** PostgreSQL pg_enum (enumsortorder); MySQL parsed from the type. */
+  enumValues?: string[]
+  /** PostgreSQL format_type(atttypid, atttypmod), for typed binds. */
+  sqlType?: string
 }
 
 export interface IndexInfo {
@@ -171,6 +339,8 @@ export interface IndexInfo {
   type: string
   columns: string[]
   comment: string
+  /** Engine-neutral primary-key flag; absent => the renderer checks name === 'PRIMARY'. */
+  primary?: boolean
 }
 
 export interface ForeignKeyInfo {
@@ -183,11 +353,19 @@ export interface ForeignKeyInfo {
   onDelete: string
 }
 
+/** Engine-neutral kind of a table-like object. */
+export type TableKind =
+  'table' | 'view' | 'system-versioned' | 'partitioned' | 'materialized-view' | 'foreign'
+
 export interface TableStructure {
   schema: string
   name: string
   /** information_schema TABLE_TYPE ('BASE TABLE', 'VIEW', 'SYSTEM VIEW'); absent from older callers. */
   tableType?: string
+  /** Engine-neutral kind; absent => the renderer reads `tableType`. */
+  kind?: TableKind
+  /** PostgreSQL: database that holds `schema`. */
+  database?: string
   columns: ColumnInfo[]
   indexes: IndexInfo[]
   foreignKeys: ForeignKeyInfo[]
@@ -209,6 +387,37 @@ export interface UserInfo {
 
 export type ObjectType = 'table' | 'view' | 'function' | 'procedure' | 'event' | 'trigger'
 
+/**
+ * Object types of every engine. `ObjectType` (what the MySQL channels and
+ * views handle today) is the subset the current UI knows; the extra members
+ * are for engines that are not available yet.
+ */
+export type EngineObjectType =
+  ObjectType | 'materialized_view' | 'sequence' | 'collection' | 'index' | 'type'
+
+/**
+ * Namespace that holds objects. A plain string keeps today's meaning (the
+ * MySQL database, the SQLite attached alias, the MongoDB database);
+ * PostgreSQL needs the object form, and main rejects a plain string for it.
+ */
+export type SchemaRef = string | { database: string; schema: string }
+
+/** For objects whose name alone is not unique or not enough to drop them. */
+export interface ObjectRef {
+  type: EngineObjectType
+  name: string
+  /** PostgreSQL routines: identity args from pg_get_function_identity_arguments (overloads). */
+  signature?: string
+  /** PostgreSQL/SQLite triggers and indexes: owning table (DROP TRIGGER t ON tbl). */
+  table?: string
+}
+
+/** A plain string keeps today's meaning (the object name). */
+export type NameRef = string | ObjectRef
+
+/** SQLite storage class of a cell. */
+export type StorageClass = 'null' | 'integer' | 'real' | 'text' | 'blob'
+
 export interface QueryColumn {
   /** Name shown in the result (the alias when the query uses `AS`). */
   name: string
@@ -222,6 +431,12 @@ export interface QueryColumn {
   sourceName?: string
   /** Table alias used by the query (mysql2 table); tells self-joins apart. */
   tableAlias?: string
+  /** Engine-neutral type family; absent => the renderer matches `type`. */
+  typeKind?: TypeKind
+  /** PostgreSQL: database of the source table. */
+  database?: string
+  /** Why the column cannot be edited, when the driver knows. */
+  readOnlyReason?: string
 }
 
 export type CellValue = string | number | boolean | null
@@ -241,6 +456,8 @@ export interface QueryStatementResult {
   warnings: number
   resultSet: QueryResultSet | null
   error: string | null
+  /** SQLite only: storage class of each cell of `resultSet.rows`. */
+  storage?: StorageClass[][]
 }
 
 /**
@@ -361,6 +578,8 @@ export interface TableDataPage {
   primaryKey: string[]
   total: number | null
   durationMs: number
+  /** SQLite only: storage class of each cell of `rows`. */
+  storage?: StorageClass[][]
 }
 
 export type RowChange =
@@ -801,6 +1020,8 @@ export interface AppSettings {
   aiEffort: AiEffort
   /** Max output tokens per answer. */
   aiMaxTokens: number
+  /** Shows engines that are still in preview in the connection pickers. Off by default. */
+  previewEngines: boolean
 }
 
 /* ---------- Updates ---------- */

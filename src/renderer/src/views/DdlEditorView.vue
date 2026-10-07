@@ -4,18 +4,13 @@ import { api } from '@renderer/api'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { firstError, friendlyError } from '@renderer/components/data/privileges'
-import {
-  buildDdlScript,
-  ddlTemplate,
-  isRename,
-  parseObjectName,
-  type DdlObjectType
-} from '@renderer/components/designer/ddl'
+import type { DdlObjectType } from '@renderer/components/designer/ddl'
 import {
   analyzeDestructiveScript,
   destructiveItems,
   destructiveTitle
 } from '@renderer/components/query/destructiveGuard'
+import { useEngineUi } from '@renderer/engines'
 import { useConfirm, type DestructiveDetails } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -25,6 +20,10 @@ import { OBJECT_TYPE_LABELS, OBJECT_TYPE_WITH_ARTICLE } from '@renderer/utils/ob
 import type { GroupKind } from '@renderer/utils/objectTypes'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
+
+/** Templates and apply script of the connection's engine (MySQL: designer/ddl.ts). */
+const engineUi = useEngineUi(() => props.tab.connectionId)
+const ddl = computed(() => engineUi.value.ddl!)
 
 const tabs = useTabsStore()
 const tree = useTreeStore()
@@ -50,7 +49,7 @@ const typeLabel = computed(() => OBJECT_TYPE_LABELS[objectType.value])
 const dirty = computed(() => sql.value !== loadedSql.value)
 const script = computed(() =>
   sql.value.trim()
-    ? buildDdlScript(sql.value, {
+    ? ddl.value.buildScript(sql.value, {
         type: objectType.value,
         schema: schema.value,
         originalName: objectName.value,
@@ -78,7 +77,7 @@ async function load(): Promise<void> {
   }
   loadError.value = null
   if (!objectName.value) {
-    sql.value = ddlTemplate(objectType.value)
+    sql.value = ddl.value.template(objectType.value)
     loadedSql.value = ''
     return
   }
@@ -102,8 +101,8 @@ async function load(): Promise<void> {
 
 async function apply(): Promise<void> {
   if (applying.value || !script.value) return
-  const rename = isRename(sql.value, objectType.value, objectName.value)
-  const newName = parseObjectName(sql.value, objectType.value)
+  const rename = ddl.value.isRename(sql.value, objectType.value, objectName.value)
+  const newName = ddl.value.parseObjectName(sql.value, objectType.value)
   const replaces = !!objectName.value && (objectType.value !== 'view' || rename)
   const message = rename
     ? `El nombre cambia: se creará ${typeLabel.value} "${newName}" y se eliminará "${objectName.value}". Lo que dependa del nombre anterior dejará de funcionar.`
@@ -147,7 +146,7 @@ async function apply(): Promise<void> {
       notify.error(friendlyError(error))
       return
     }
-    const name = parseObjectName(sql.value, objectType.value) ?? objectName.value
+    const name = ddl.value.parseObjectName(sql.value, objectType.value) ?? objectName.value
     const wasNew = !objectName.value
     const renamed = name !== objectName.value
     objectName.value = name
@@ -257,7 +256,7 @@ defineExpose({ sql, script, apply })
           height="2"
           class="nd-viewpanel__loader"
         />
-        <SqlEditor v-model="sql" @run="apply" @save="apply" />
+        <SqlEditor v-model="sql" :engine="engineUi.id" @run="apply" @save="apply" />
       </div>
       <div v-if="showScript" class="nd-viewpanel ddl-editor__script">
         <div class="ddl-editor__script-head">

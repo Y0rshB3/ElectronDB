@@ -1,6 +1,7 @@
 import type { AppContext } from '../context'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
+import { getConnectionManager } from '../db/manager'
 import * as introspect from '../mysql/introspect'
-import { getConnectionManager } from '../mysql/manager'
 import { executeScript } from '../mysql/query'
 import { applyRowChanges, isBinaryDataType } from '../mysql/rowChanges'
 import type { PooledSession } from '../mysql/session'
@@ -35,9 +36,12 @@ export function registerDbHandlers(ctx: AppContext): void {
   handle('db:routines', (id, schema) =>
     withSession(id, null, (s) => introspect.listRoutines(s, schema))
   )
-  handle('db:events', (id, schema) =>
-    withSession(id, null, (s) => introspect.listEvents(s, schema))
-  )
+  handle('db:events', (id, schema) => {
+    // Main mirrors the UI: engines without scheduled events are refused (MySQL has them).
+    const connection = ctx.connections.get(id)
+    if (connection) requireConnectionCapability(connection, 'events', CAPABILITY_MESSAGES.events)
+    return withSession(id, null, (s) => introspect.listEvents(s, schema))
+  })
   handle('db:triggers', (id, schema) =>
     withSession(id, null, (s) => introspect.listTriggers(s, schema))
   )

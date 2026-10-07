@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import type { ConnectionConfig, RestoreOptions, RestoreResult } from '@shared/types'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
@@ -263,6 +264,7 @@ export async function restoreBackup(
   validate(options)
   const connection = deps.connections.get(options.connectionId)
   if (!connection) throw new Error('La conexión de destino ya no existe.')
+  requireConnectionCapability(connection, 'supportsBackupsNb3', CAPABILITY_MESSAGES.backups)
   // Guard before touching the file or the server.
   assertRestoreAllowed(connection, options)
 

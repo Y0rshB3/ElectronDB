@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitStatements } from './sqlSplit'
+import { splitStatements } from './mysql'
 
 describe('splitStatements', () => {
   it('splits simple statements and drops empty ones', () => {

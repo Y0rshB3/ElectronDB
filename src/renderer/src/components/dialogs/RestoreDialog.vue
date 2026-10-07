@@ -15,6 +15,7 @@ import { formatBytes, formatDate, formatDuration, formatNumber } from '@renderer
 import OperationProgress from '@renderer/components/backups/OperationProgress.vue'
 import SourcePill from '@renderer/components/backups/SourcePill.vue'
 import {
+  backupConnections,
   environmentLabel,
   environmentPillClass,
   findLocalConnection
@@ -71,7 +72,7 @@ const open = computed({
 })
 
 const connectionItems = computed(() =>
-  connections.sorted.map((c) => ({
+  backupConnections(connections.sorted).map((c) => ({
     title: c.name,
     value: c.id,
     subtitle: environmentLabel(c.environment),
@@ -107,11 +108,12 @@ const canRestore = computed(
 
 function defaultTarget(): string | null {
   const preferred = ui.restoreDialog.connectionId
-  if (preferred && connections.get(preferred)) return preferred
+  const backupable = backupConnections(connections.sorted)
+  if (preferred && backupable.some((c) => c.id === preferred)) return preferred
   // A safety copy goes back to the connection it was taken from.
   const own = backup.value?.connectionId
-  if (isSafetyCopy(backup.value) && own && connections.get(own)) return own
-  return findLocalConnection(connections.sorted)?.id ?? own ?? null
+  if (isSafetyCopy(backup.value) && own && backupable.some((c) => c.id === own)) return own
+  return findLocalConnection(backupable)?.id ?? own ?? null
 }
 
 async function loadMeta(): Promise<void> {

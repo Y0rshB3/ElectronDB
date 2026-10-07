@@ -19,7 +19,26 @@ interface SecretsDoc {
   items: Record<string, string>
 }
 
-export type SecretKind = 'mysql' | 'ssh' | 'ai'
+/**
+ * Every secret slot a connection can own, stored as `<kind>:<connectionId>`.
+ * - 'mysql': the generic database password of every engine (see DB_PASSWORD).
+ * - 'ssh': SSH password or private key passphrase.
+ * - 'sslKey': SSL client key passphrase (written from P2a; none exist yet).
+ * deleteAll removes them all, so a new kind only needs to be listed here.
+ */
+export const SECRET_KINDS = ['mysql', 'ssh', 'sslKey'] as const
+
+/** A secret owned by a connection (removed with it by deleteAll). */
+export type ConnectionSecretKind = (typeof SECRET_KINDS)[number]
+
+/**
+ * Every slot kind. 'ai' holds AI provider keys, stored as `ai:<providerId>`:
+ * they do not belong to a connection, so deleteAll never touches them.
+ */
+export type SecretKind = ConnectionSecretKind | 'ai'
+
+/** Generic database password slot; the 'mysql' prefix predates multi-engine (D10). */
+export const DB_PASSWORD: ConnectionSecretKind = 'mysql'
 
 export class CredentialStore {
   private store: JsonStore<SecretsDoc>
@@ -86,8 +105,10 @@ export class CredentialStore {
     return this.codec.decrypt(cipher)
   }
 
+  /** Removes every secret of a connection, of every kind, in one write. */
   deleteAll(id: string): void {
-    this.set('mysql', id, null)
-    this.set('ssh', id, null)
+    this.store.update((d) => {
+      for (const kind of SECRET_KINDS) delete d.items[this.key(kind, id)]
+    })
   }
 }

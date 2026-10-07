@@ -6,7 +6,6 @@ import type { ConnectionInput } from '@shared/types'
 import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
 import type { AppContext } from '@main/context'
 import { CredentialStore, plainCodec } from '@main/credentials/store'
-import { envVar } from '@main/env'
 import { ConnectionsRepo, JobsRepo, RunsRepo, SettingsRepo } from '@main/storage/repos'
 import { ConnectionManager } from '@main/mysql/manager'
 import { executeScript } from '@main/mysql/query'
@@ -25,8 +24,8 @@ import {
   resultSource,
   type Editability
 } from '../../src/renderer/src/components/query/resultEditability'
+import { describeMysql } from './targets'
 
-const url = envVar('TEST_MYSQL_URL')
 const SCHEMA = `electrondb_it_${process.pid}`
 
 function connectionInput(u: URL): ConnectionInput {
@@ -54,7 +53,7 @@ function connectionInput(u: URL): ConnectionInput {
   }
 }
 
-describe.skipIf(!url)('mysql module (integration)', () => {
+describeMysql('mysql module (integration)', ({ url, version, is57 }) => {
   let dir: string
   let ctx: AppContext
   let manager: ConnectionManager
@@ -64,7 +63,7 @@ describe.skipIf(!url)('mysql module (integration)', () => {
   const events: { channel: IpcEventChannel; payload: unknown }[] = []
 
   beforeAll(async () => {
-    const u = new URL(url!)
+    const u = new URL(url)
     dir = mkdtempSync(join(tmpdir(), 'electrondb-it-'))
     ctx = {
       userDataPath: dir,
@@ -115,18 +114,18 @@ describe.skipIf(!url)('mysql module (integration)', () => {
   })
 
   it('reports failures from test() without throwing', async () => {
-    const u = new URL(url!)
+    const u = new URL(url)
     const res = await manager.test({ ...connectionInput(u), port: 1 }, 'x', null)
     expect(res.ok).toBe(false)
     expect(res.error).toBeTruthy()
     const ok = await manager.test(connectionInput(u), decodeURIComponent(u.password), null)
     expect(ok.ok).toBe(true)
-    expect(ok.serverVersion?.startsWith('8.4')).toBe(true)
+    expect(ok.serverVersion?.startsWith(version)).toBe(true)
   })
 
   it('opens the connection and returns server info', async () => {
     const info = await manager.open(connectionId)
-    expect(info.version.startsWith('8.4')).toBe(true)
+    expect(info.version.startsWith(version)).toBe(true)
     expect(info.characterSet).toBeTruthy()
     expect(info.uptimeSeconds).toBeGreaterThan(0)
     expect(info.threadsConnected).toBeGreaterThan(0)
@@ -289,9 +288,22 @@ describe.skipIf(!url)('mysql module (integration)', () => {
         await s.execute(
           'CREATE VIEW ed_v_totals AS SELECT i.id, i.name, COUNT(*) AS n FROM ed_items i JOIN ed_decoy d ON d.id = i.id GROUP BY i.id, i.name'
         )
-        await s.execute(
-          'CREATE TABLE ed_ai (code VARCHAR(36) PRIMARY KEY DEFAULT (uuid()), n INT AUTO_INCREMENT UNIQUE, v VARCHAR(20))'
-        )
+        // 5.7 split: expression defaults such as DEFAULT (uuid()) need 8.0.13+. On 5.7 the
+        // server fills the key from a trigger instead; the table shape seen by the
+        // editability decision (non-AUTO_INCREMENT key + AUTO_INCREMENT unique column) is
+        // the same.
+        if (is57) {
+          await s.execute(
+            'CREATE TABLE ed_ai (code VARCHAR(36) PRIMARY KEY, n INT AUTO_INCREMENT UNIQUE, v VARCHAR(20))'
+          )
+          await s.execute(
+            'CREATE TRIGGER ed_ai_code BEFORE INSERT ON ed_ai FOR EACH ROW SET NEW.code = IFNULL(NEW.code, uuid())'
+          )
+        } else {
+          await s.execute(
+            'CREATE TABLE ed_ai (code VARCHAR(36) PRIMARY KEY DEFAULT (uuid()), n INT AUTO_INCREMENT UNIQUE, v VARCHAR(20))'
+          )
+        }
       } finally {
         await s.release()
       }
@@ -348,9 +360,24 @@ describe.skipIf(!url)('mysql module (integration)', () => {
       await expect(decide('SELECT * FROM (SELECT * FROM ed_v_pairs) d')).resolves.toMatchObject({
         editable: false
       })
-      await expect(decide('WITH c AS (SELECT * FROM ed_v_pairs) SELECT * FROM c')).resolves.toEqual(
-        { editable: false, reason: 'la consulta usa WITH (CTE)' }
-      )
+      const cte = 'WITH c AS (SELECT * FROM ed_v_pairs) SELECT * FROM c'
+      if (is57) {
+        // 5.7 split: CTEs arrived in 8.0, so 5.7 rejects the statement and there is no
+        // result to edit.
+        const s = await manager.acquire(connectionId, ED)
+        try {
+          const [r] = await executeScript(s, cte)
+          expect(r.error).toMatch(/\(ER_PARSE_ERROR 1064\)/)
+          expect(r.resultSet).toBeNull()
+        } finally {
+          await s.release()
+        }
+      } else {
+        await expect(decide(cte)).resolves.toEqual({
+          editable: false,
+          reason: 'la consulta usa WITH (CTE)'
+        })
+      }
     })
 
     it('keeps joins read-only even when only one table is selected', async () => {
@@ -363,12 +390,23 @@ describe.skipIf(!url)('mysql module (integration)', () => {
     })
 
     it('says a view is a view, whatever its algorithm or columns', async () => {
+      // 5.7 split: for views it materialises (ALGORITHM=TEMPTABLE, GROUP BY) 5.7 sends an
+      // empty schema in every result column, so an unqualified SELECT names no schema and the
+      // result stays read-only as "columnas calculadas" instead of being identified as a view.
+      // Merged views (ed_v_pairs) carry the schema on 5.7 too.
+      const materialised = is57 ? ['ed_v_temp', 'ed_v_totals'] : []
       for (const view of ['ed_v_temp', 'ed_v_totals', 'ed_v_pairs'])
-        await expect(decide(`SELECT * FROM ${view}`)).resolves.toMatchObject({
-          editable: false,
-          reason: 'el origen es una vista',
-          table: view
-        })
+        if (materialised.includes(view))
+          await expect(decide(`SELECT * FROM ${view}`)).resolves.toEqual({
+            editable: false,
+            reason: 'columnas calculadas'
+          })
+        else
+          await expect(decide(`SELECT * FROM ${view}`)).resolves.toMatchObject({
+            editable: false,
+            reason: 'el origen es una vista',
+            table: view
+          })
     })
 
     it('only fills generated ids into an AUTO_INCREMENT primary key', async () => {
@@ -548,7 +586,9 @@ describe.skipIf(!url)('mysql module (integration)', () => {
       ])
       expect(columns[0]).toMatchObject({
         ordinal: 1,
-        columnType: 'int unsigned',
+        // 5.7 split: integer display widths were deprecated (and dropped from COLUMN_TYPE)
+        // in 8.0.19; 5.7 still reports them.
+        columnType: is57 ? 'int(10) unsigned' : 'int unsigned',
         nullable: false,
         key: 'PRI',
         extra: 'auto_increment'
@@ -567,7 +607,9 @@ describe.skipIf(!url)('mysql module (integration)', () => {
           referencedSchema: SCHEMA,
           referencedTable: 'items',
           referencedColumns: ['id'],
-          onUpdate: 'NO ACTION',
+          // 5.7 split: an omitted ON UPDATE is reported as RESTRICT by 5.7 and as NO ACTION
+          // by 8.x (REFERENTIAL_CONSTRAINTS.UPDATE_RULE); InnoDB treats both the same.
+          onUpdate: is57 ? 'RESTRICT' : 'NO ACTION',
           onDelete: 'CASCADE'
         }
       ])
@@ -605,8 +647,10 @@ describe.skipIf(!url)('mysql module (integration)', () => {
         /PROCEDURE `p_items`/
       )
       expect(await introspect.showCreate(s, SCHEMA, 'event', 'ev_noop')).toMatch(/EVENT `ev_noop`/)
+      // 5.7 split: SHOW CREATE TRIGGER returns the statement as it was written (unquoted
+      // name); 8.x regenerates it with a quoted name.
       expect(await introspect.showCreate(s, SCHEMA, 'trigger', 'trg_items')).toMatch(
-        /TRIGGER `trg_items`/
+        is57 ? /TRIGGER trg_items BEFORE INSERT ON items/ : /TRIGGER `trg_items`/
       )
       await expect(introspect.showCreate(s, SCHEMA, 'table', 'nope')).rejects.toThrow(
         /doesn't exist/
@@ -852,7 +896,7 @@ describe.skipIf(!url)('mysql module (integration)', () => {
     expect(manager.isOpen(connectionId)).toBe(false)
     await manager.close(connectionId) // idempotent
     const info = await manager.open(connectionId)
-    expect(info.version.startsWith('8.4')).toBe(true)
+    expect(info.version.startsWith(version)).toBe(true)
     expect(events.filter((e) => e.channel === 'event:connectionClosed')).toEqual([])
   })
 })

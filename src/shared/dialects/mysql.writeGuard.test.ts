@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeWrites } from './writeGuard'
+import { analyzeWrites } from './mysql'
 
 describe('analyzeWrites', () => {
   it.each([

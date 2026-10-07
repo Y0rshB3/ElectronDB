@@ -1,9 +1,11 @@
+import type { EngineCapabilities } from '@shared/engines'
 import type { ObjectType } from '@shared/types'
 import { api } from '@renderer/api'
+import { descriptorOf } from '@renderer/engines/capabilities'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useQueriesStore } from '@renderer/stores/queries'
 import { useTabsStore } from '@renderer/stores/tabs'
-import { useTreeStore, type TreeNode } from '@renderer/stores/tree'
+import { nodeIds, useTreeStore, type TreeNode } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
 import { OBJECT_TYPE_LABELS, OBJECT_TYPE_WITH_ARTICLE } from '@renderer/utils/objectTypes'
 import { qualified } from '@renderer/utils/sql'
@@ -45,6 +47,15 @@ export function useObjectActions() {
   const ws = useWorkspace()
   const notify = useNotify()
   const { confirmDestructive, ask } = useConfirm()
+
+  /**
+   * Capabilities of the node's engine. Menus only drop entries the engine
+   * cannot do, so MySQL (which can do all of them) keeps its v0.1.0 menus.
+   * An unknown engine gets no capability-gated entry.
+   */
+  function capsOf(connectionId: string): Partial<EngineCapabilities> {
+    return descriptorOf(connections.get(connectionId))?.capabilities ?? {}
+  }
 
   async function copyText(text: string, what = 'Texto'): Promise<void> {
     try {
@@ -154,7 +165,7 @@ export function useObjectActions() {
     tabs.closeForConnection(connectionId)
     tree.forget(connectionId)
     await connections.remove(connectionId)
-    if (tree.selectedId === `c:${connectionId}`) tree.select(null)
+    if (tree.selectedId === nodeIds.connection(connectionId)) tree.select(null)
     notify.success('Conexión eliminada')
   }
 
@@ -184,6 +195,7 @@ export function useObjectActions() {
   function newObjectFor(node: TreeNode): MenuAction[] {
     const c = node.connectionId
     const s = node.schema!
+    const caps = capsOf(c)
     switch (node.group) {
       case 'tables':
         return [
@@ -219,6 +231,7 @@ export function useObjectActions() {
           }
         ]
       case 'events':
+        if (!caps.events) return []
         return [
           {
             key: 'new',
@@ -237,6 +250,7 @@ export function useObjectActions() {
           }
         ]
       case 'backups':
+        if (!caps.supportsBackupsNb3) return []
         return [
           {
             key: 'new',
@@ -258,9 +272,10 @@ export function useObjectActions() {
       icon: 'mdi-refresh',
       action: () => tree.refresh(node)
     }
+    const caps = capsOf(c)
     if (node.kind === 'connection') {
       const open = connections.isOpen(c)
-      return [
+      const items: (MenuAction | false)[] = [
         open
           ? {
               key: 'close',
@@ -288,20 +303,20 @@ export function useObjectActions() {
           disabled: !open,
           action: () => ws.openQuery(c, null)
         },
-        {
+        !!caps.createDatabase && {
           key: 'newdb',
           label: 'Nueva base de datos…',
           icon: 'mdi-database-plus',
           disabled: !open,
           action: () => ui.openNewDatabaseDialog(c)
         },
-        {
+        !!caps.supportsBackupsNb3 && {
           key: 'backups',
           label: 'Copias de seguridad',
           icon: 'mdi-archive-outline',
           action: () => ws.openBackups(c, null)
         },
-        {
+        !!caps.hasUsers && {
           key: 'users',
           label: 'Usuarios',
           icon: 'mdi-account-multiple-outline',
@@ -318,29 +333,30 @@ export function useObjectActions() {
           action: () => deleteConnection(c)
         }
       ]
+      return items.filter((a): a is MenuAction => !!a)
     }
     if (node.kind === 'schema') {
       const s = node.schema!
-      return [
+      const items: (MenuAction | false)[] = [
         {
           key: 'query',
           label: 'Nueva consulta',
           icon: 'mdi-database-search-outline',
           action: () => ws.openQuery(c, s)
         },
-        {
+        caps.designer === 'table' && {
           key: 'table',
           label: 'Nueva tabla',
           icon: 'mdi-table-plus',
           action: () => ws.openTableDesigner(c, s, null)
         },
-        {
+        !!caps.supportsBackupsNb3 && {
           key: 'backup',
           label: 'Nueva copia de seguridad…',
           icon: 'mdi-archive-plus-outline',
           action: () => ui.openBackupDialog(c, s)
         },
-        {
+        !!caps.supportsBackupsNb3 && {
           key: 'backups',
           label: 'Copias de seguridad',
           icon: 'mdi-archive-outline',
@@ -356,6 +372,7 @@ export function useObjectActions() {
           action: () => dropDatabase(node)
         }
       ]
+      return items.filter((a): a is MenuAction => !!a)
     }
     if (node.kind === 'group')
       return [...newObjectFor(node), { key: 'd1', label: '', divider: true }, refresh]
@@ -371,7 +388,7 @@ export function useObjectActions() {
         action: () => ws.openNode(node)
       }
     ]
-    if (isTable)
+    if (isTable && caps.designer === 'table')
       items.push({
         key: 'design',
         label: 'Diseñar tabla',
@@ -407,7 +424,7 @@ export function useObjectActions() {
           icon: 'mdi-code-tags',
           action: () => exportDdl(node)
         })
-      if (isTable)
+      if (isTable && caps.truncate)
         items.push({
           key: 'truncate',
           label: 'Truncar tabla',

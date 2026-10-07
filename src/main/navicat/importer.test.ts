@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CredentialStore, plainCodec } from '../credentials/store'
-import { ConnectionsRepo, JobsRepo, SettingsRepo } from '../storage/repos'
+import { ConnectionsRepo, ENGINE_CHANGE_MESSAGE, JobsRepo, SettingsRepo } from '../storage/repos'
 import { importFromNavicat, safeDirName, type ImportContext } from './importer'
 import { FIXTURE_ROOT } from './testing'
 
@@ -190,5 +190,51 @@ describe('safeDirName', () => {
     expect(safeDirName('a/b:c*d?e"f<g>h|i')).toBe('a_b_c_d_e_f_g_h_i')
     expect(safeDirName('..hidden')).toBe('hidden')
     expect(safeDirName('   ')).toBe('connection')
+  })
+})
+
+describe('importFromNavicat engine model', () => {
+  let dir: string
+  let ctx: ImportContext
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'electrondb-import-'))
+    const settings = new SettingsRepo(dir, dir)
+    settings.update({ navicatRootPath: FIXTURE_ROOT, backupsRootDir: join(dir, 'backups') })
+    ctx = { connections: new ConnectionsRepo(dir), jobs: new JobsRepo(dir), settings }
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  it('imports MySQL sections as engine mysql', async () => {
+    const result = await importFromNavicat(ctx, { connections: ['Dev'], jobs: [] })
+    expect(result.connections[0].engine).toBe('mysql')
+    expect(new ConnectionsRepo(dir).get(result.connections[0].id)?.engine).toBe('mysql')
+  })
+
+  it('never turns a record of another engine into MySQL on re-import', async () => {
+    const first = await importFromNavicat(ctx, { connections: ['Dev'], jobs: [] })
+    const dev = first.connections[0]
+    // A record with the same Navicat identity but another engine (written by a later phase).
+    const { engine: _engine, ...rest } = dev
+    ctx.connections.delete(dev.id)
+    const other = ctx.connections.save({ ...rest, engine: 'postgresql', host: 'pg.local' })
+    expect(other.id).toBe(dev.id)
+
+    await expect(importFromNavicat(ctx, { connections: ['Dev'], jobs: [] })).rejects.toThrow(
+      ENGINE_CHANGE_MESSAGE
+    )
+    expect(ctx.connections.get(dev.id)).toMatchObject({ engine: 'postgresql', host: 'pg.local' })
+  })
+  it('never resolves a batch-job server to a connection of another engine', async () => {
+    // Same display name as the job's Navicat server, but PostgreSQL: jobs stay MySQL-only.
+    const first = await importFromNavicat(ctx, { connections: ['Production'], jobs: [] })
+    const { engine: _engine, id: _id, ...rest } = first.connections[0]
+    ctx.connections.delete(first.connections[0].id)
+    ctx.connections.save({ ...rest, source: undefined, engine: 'postgresql' })
+    const result = await importFromNavicat(ctx, {
+      connections: [],
+      jobs: ['backup prod.nbatmysql']
+    })
+    expect(result.jobs[0].tasks).toEqual([])
+    expect(result.warnings[0]).toMatch(/"Production"/)
   })
 })

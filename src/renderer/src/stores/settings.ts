@@ -20,7 +20,8 @@ const DEFAULTS: AppSettings = {
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',
-  aiMaxTokens: 16000
+  aiMaxTokens: 16000,
+  previewEngines: false
 }
 
 export const useSettingsStore = defineStore('settings', () => {

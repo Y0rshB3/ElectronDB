@@ -5,16 +5,19 @@ import { api } from '@renderer/api'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import UserActionDialog from '@renderer/components/data/UserActionDialog.vue'
 import { firstError, friendlyError, isPrivilegeError } from '@renderer/components/data/privileges'
-import {
-  userActionSql,
-  type UserAction,
-  type UserActionForm
-} from '@renderer/components/data/userSql'
+import type { UserAction, UserActionForm } from '@renderer/components/data/userSql'
+import { useEngineUi } from '@renderer/engines'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import type { WorkspaceTab } from '@renderer/stores/tabs'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
+
+/** Account SQL of the connection's engine (MySQL: data/userSql.ts). */
+const engineUi = useEngineUi(() => props.tab.connectionId)
+function userActionSql(action: UserAction, form: UserActionForm, masked?: boolean): string {
+  return engineUi.value.userSql!.actionSql(action, form, masked)
+}
 
 const notify = useNotify()
 const { confirmDestructive } = useConfirm()

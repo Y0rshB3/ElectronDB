@@ -651,6 +651,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
           ref="editor"
           v-model="sql"
           :provider="completion"
+          :engine="connections.get(connectionId)?.engine"
           min-height="80px"
           @run="run()"
           @save="save"

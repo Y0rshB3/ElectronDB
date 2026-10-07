@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import type { TableDataPage, TableDataRequest } from '@shared/types'
+import { fetchTablePage } from '../db/tableData'
 import { MysqlUserError } from './errors'
 import { escapeId, listColumns, primaryKeyColumns, type Queryable } from './introspect'
 import { MAX_ROWS_CAP } from './query'
@@ -86,21 +87,23 @@ export async function fetchTableData(
   const select = buildSelectSql(req, columnNames)
   const countSql = buildCountSql(req, columnNames)
 
-  const primaryKey = await primaryKeyColumns(session, req.schema, req.table)
-  const raw = await session.runStatement(select, req.limit)
-  const first = raw.resultSets[0]
-  const columns = first ? first.fields.map(toQueryColumn) : []
-  const rows = first ? first.rows.map(normalizeRow) : []
-
-  let total: number | null = null
-  try {
-    const [row] = await session.query<{ total: unknown }>(countSql)
-    const n = Number(row?.total)
-    total = Number.isFinite(n) ? n : null
-  } catch {
-    // timeout (ER_QUERY_TIMEOUT) or an engine that cannot count cheaply: leave null
-    total = null
-  }
-
-  return { columns, rows, primaryKey, total, durationMs: Math.round(performance.now() - started) }
+  return fetchTablePage(
+    {
+      primaryKey: () => primaryKeyColumns(session, req.schema, req.table),
+      page: async () => {
+        const raw = await session.runStatement(select, req.limit)
+        const first = raw.resultSets[0]
+        const columns = first ? first.fields.map(toQueryColumn) : []
+        const rows = first ? first.rows.map(normalizeRow) : []
+        return { columns, rows }
+      },
+      // A timeout (ER_QUERY_TIMEOUT) rejects here and the total stays null.
+      count: async () => {
+        const [row] = await session.query<{ total: unknown }>(countSql)
+        const n = Number(row?.total)
+        return Number.isFinite(n) ? n : null
+      }
+    },
+    started
+  )
 }

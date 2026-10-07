@@ -1,77 +1,17 @@
-export function quoteIdent(name: string): string {
-  return '`' + name.replace(/`/g, '``') + '`'
-}
+import { quoteIdent, quoteString } from '@shared/dialects/mysql'
 
-export function quoteString(value: string): string {
-  return "'" + value.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"
-}
-
-export function qualified(schema: string | null | undefined, name: string): string {
-  return schema ? `${quoteIdent(schema)}.${quoteIdent(name)}` : quoteIdent(name)
-}
-
-/** Strip comments and string literals so keyword heuristics do not misfire. */
-function stripLiterals(sql: string): string {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/--[^\n]*/g, ' ')
-    .replace(/#[^\n]*/g, ' ')
-    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-}
-
-export function splitStatements(sql: string): string[] {
-  const out: string[] = []
-  let current = ''
-  let quote: string | null = null
-  for (let i = 0; i < sql.length; i++) {
-    const ch = sql[i]
-    if (quote) {
-      current += ch
-      if (ch === '\\' && i + 1 < sql.length) {
-        current += sql[++i]
-      } else if (ch === quote) quote = null
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      quote = ch
-      current += ch
-      continue
-    }
-    if (ch === ';') {
-      if (current.trim()) out.push(current.trim())
-      current = ''
-      continue
-    }
-    current += ch
-  }
-  if (current.trim()) out.push(current.trim())
-  return out
-}
-
-export interface DestructiveCheck {
-  destructive: boolean
-  /** Human readable reasons such as "DELETE sin WHERE". */
-  reasons: string[]
-}
-
-/** Heuristic classification of a SQL script for the production guard. */
-export function analyzeDestructive(sql: string): DestructiveCheck {
-  const reasons: string[] = []
-  for (const stmt of splitStatements(stripLiterals(sql))) {
-    const upper = stmt.toUpperCase().replace(/\s+/g, ' ').trim()
-    if (/^(DROP|TRUNCATE)\b/.test(upper)) reasons.push(upper.split(' ').slice(0, 2).join(' '))
-    else if (/^ALTER\b/.test(upper)) reasons.push('ALTER')
-    else if (/^DELETE\b/.test(upper) && !/\bWHERE\b/.test(upper)) reasons.push('DELETE sin WHERE')
-    else if (/^UPDATE\b/.test(upper) && !/\bWHERE\b/.test(upper)) reasons.push('UPDATE sin WHERE')
-    else if (
-      /^(DELETE|UPDATE|INSERT|REPLACE|CREATE|RENAME|GRANT|REVOKE|SET PASSWORD)\b/.test(upper)
-    ) {
-      reasons.push(upper.split(' ')[0])
-    }
-  }
-  return { destructive: reasons.length > 0, reasons: [...new Set(reasons)] }
-}
+/**
+ * Quoting, the plain ';' splitter and analyzeDestructive moved to the MySQL
+ * dialect (src/shared/dialects/mysql.ts) in P1a; re-exported here for one phase.
+ */
+export {
+  analyzeDestructive,
+  qualified,
+  quoteIdent,
+  quoteString,
+  splitOnSemicolons as splitStatements
+} from '@shared/dialects/mysql'
+export type { DestructiveCheck } from '@shared/dialects/mysql'
 
 export function createUserSql(
   user: string,

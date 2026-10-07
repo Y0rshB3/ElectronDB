@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CellValue, QueryColumn } from '@shared/types'
+import { isNumericKind } from '@renderer/utils/columnMeta'
 
 const props = defineProps<{
   columns: QueryColumn[]
@@ -9,10 +10,15 @@ const props = defineProps<{
   height?: string | number
 }>()
 
-/** MySQL numeric column types: right aligned, tabular monospace. */
+/** MySQL numeric column types: the fallback when the driver sends no `typeKind`. */
 const NUMERIC_TYPE = /^(tinyint|smallint|mediumint|int|integer|bigint|decimal|float|double|year)\b/i
 
-const numeric = computed(() => props.columns.map((c) => NUMERIC_TYPE.test(c.type ?? '')))
+/** Numeric columns are right aligned in tabular monospace. */
+const numeric = computed(() =>
+  props.columns.map((c) =>
+    c.typeKind ? isNumericKind(c.typeKind) : NUMERIC_TYPE.test(c.type ?? '')
+  )
+)
 
 const headers = computed(() => [
   { title: '#', key: '__index', width: 56, sortable: false, align: 'end' as const },

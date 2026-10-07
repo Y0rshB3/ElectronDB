@@ -1,4 +1,4 @@
-import { splitStatements } from '@shared/sqlSplit'
+import { splitStatements } from '@shared/dialects/mysql'
 import type { Queryable } from './metadata'
 
 /**

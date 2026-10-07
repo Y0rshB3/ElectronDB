@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { CellValue, ColumnInfo, QueryColumn } from '@shared/types'
 import { useColumnWidthsStore } from '@renderer/stores/columnWidths'
-import { columnKind, type ColumnKind } from './columnKind'
+import { columnKindOf, type ColumnKind } from './columnKind'
 import { displayCell, isCellChanged, type ActiveCell, type EditableRow } from './rowEditing'
 import TemporalInput from './TemporalInput.vue'
 import { temporalSpec, type TemporalSpec } from './temporal'
@@ -36,7 +36,7 @@ const selected = defineModel<string[]>('selected', { default: () => [] })
 const active = defineModel<ActiveCell | null>('active', { default: null })
 
 /** Presentation only: numbers right aligned in mono, dates in mono. */
-const kinds = computed<ColumnKind[]>(() => props.columns.map((c) => columnKind(c.type)))
+const kinds = computed<ColumnKind[]>(() => props.columns.map(columnKindOf))
 /** Date/time picker per column (DATE, DATETIME/TIMESTAMP with fsp, TIME, YEAR). */
 const specs = computed<(TemporalSpec | null)[]>(() =>
   props.columns.map((c, i) => temporalSpec(c.type, props.columnInfo?.[i]?.columnType))

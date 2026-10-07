@@ -7,7 +7,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
-import { environmentLabel } from '@renderer/components/backups/backupHelpers'
+import { automationConnections, environmentLabel } from '@renderer/components/backups/backupHelpers'
 import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
 import {
   TASK_ICONS,
@@ -25,7 +25,7 @@ const settings = useSettingsStore()
 const schemaLoader = useSchemaLoader()
 
 const connectionItems = computed(() =>
-  connections.sorted.map((c) => ({ title: c.name, value: c.id }))
+  automationConnections(connections.sorted).map((c) => ({ title: c.name, value: c.id }))
 )
 
 function update(index: number, changes: Partial<JobTask>): void {
@@ -39,7 +39,7 @@ function update(index: number, changes: Partial<JobTask>): void {
  * environments chosen in Ajustes › Seguridad) are listed but cannot be chosen.
  */
 const targetItems = computed(() =>
-  connections.sorted.map((c) => {
+  automationConnections(connections.sorted).map((c) => {
     const blocked = settings.needsTypedConfirm(c.environment)
     return {
       title: c.name,
@@ -66,8 +66,10 @@ function changeType(index: number, type: JobTaskType): void {
   const current = tasks.value[index]
   const base =
     type === 'restoreschema'
-      ? newRestoreTask(tasks.value.slice(0, index), connections.sorted, (c) =>
-          settings.needsTypedConfirm(c.environment)
+      ? newRestoreTask(
+          tasks.value.slice(0, index),
+          automationConnections(connections.sorted),
+          (c) => settings.needsTypedConfirm(c.environment)
         )
       : newTask(type, current.connectionId, current.schema)
   const replacement = { ...base, id: current.id, referenceName: current.referenceName }
@@ -140,7 +142,7 @@ function add(type: JobTaskType): void {
   const last = tasks.value[tasks.value.length - 1]
   const task =
     type === 'restoreschema'
-      ? newRestoreTask(tasks.value, connections.sorted, (c) =>
+      ? newRestoreTask(tasks.value, automationConnections(connections.sorted), (c) =>
           settings.needsTypedConfirm(c.environment)
         )
       : newTask(type, last?.connectionId ?? '', '')

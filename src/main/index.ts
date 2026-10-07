@@ -112,7 +112,8 @@ app.whenReady().then(async () => {
 
   // Like Navicat: connections stay open until the user disconnects them or quits.
   // On quit, close every pool and SSH tunnel cleanly (bounded so quitting never hangs).
-  const { getConnectionManager } = await import('./mysql/manager')
+  const { getConnectionManager } = await import('./db/manager')
+  const { describeForLog } = await import('./db/errors')
   let closingConnections = false
   app.on('before-quit', (event) => {
     if (quitVetoed(event) || closingConnections) return
@@ -120,7 +121,8 @@ app.whenReady().then(async () => {
     event.preventDefault()
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000))
     Promise.race([getConnectionManager(ctx).closeAll(), timeout])
-      .catch((err) => log.warn('closing connections on quit failed', err))
+      // Never the raw error: its stack and message may carry server text.
+      .catch((err) => log.warn(`closing connections on quit failed: ${describeForLog(err)}`))
       .finally(() => app.quit())
   })
 

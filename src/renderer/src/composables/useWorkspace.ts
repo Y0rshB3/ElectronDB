@@ -1,6 +1,6 @@
 import type { ObjectType } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
-import { OBJECTS_TAB_ID, useTabsStore, tabTitle } from '@renderer/stores/tabs'
+import { OBJECTS_TAB_ID, objectTabId, useTabsStore, tabTitle } from '@renderer/stores/tabs'
 import { nodeIds, useTreeStore, type TreeNode } from '@renderer/stores/tree'
 import type { GroupKind } from '@renderer/utils/objectTypes'
 import { useUiStore } from '@renderer/stores/ui'
@@ -39,7 +39,7 @@ export function useWorkspace() {
     if (connections.isOpen(connectionId)) return true
     try {
       await connections.open(connectionId)
-      tree.setExpanded(`c:${connectionId}`, true)
+      tree.setExpanded(nodeIds.connection(connectionId), true)
       await tree.loadDatabases(connectionId)
       return true
     } catch {
@@ -47,26 +47,42 @@ export function useWorkspace() {
     }
   }
 
-  function openTableData(connectionId: string, schema: string, table: string): void {
+  /*
+   * `database` is only for engines with a database level above schemas
+   * (PostgreSQL); MySQL callers omit it and get the v0.1.0 ids and titles.
+   */
+  function openTableData(
+    connectionId: string,
+    schema: string,
+    table: string,
+    database?: string
+  ): void {
     tabs.open({
       kind: 'tableData',
-      id: `tableData:${connectionId}:${schema}:${table}`,
-      title: tabTitle(table, schema, connections.nameOf(connectionId)),
+      id: objectTabId('tableData', connectionId, database, schema, table),
+      title: tabTitle(table, schema, connections.nameOf(connectionId), database),
       connectionId,
+      database,
       schema,
       objectName: table,
       objectType: 'table'
     })
   }
 
-  function openTableDesigner(connectionId: string, schema: string, table: string | null): void {
+  function openTableDesigner(
+    connectionId: string,
+    schema: string,
+    table: string | null,
+    database?: string
+  ): void {
     tabs.open({
       kind: 'tableDesigner',
-      id: table ? `tableDesigner:${connectionId}:${schema}:${table}` : undefined,
+      id: table ? objectTabId('tableDesigner', connectionId, database, schema, table) : undefined,
       title: table
-        ? tabTitle(table, schema, connections.nameOf(connectionId))
-        : `Nueva tabla@${schema} (${connections.nameOf(connectionId)})`,
+        ? tabTitle(table, schema, connections.nameOf(connectionId), database)
+        : tabTitle('Nueva tabla', schema, connections.nameOf(connectionId), database),
       connectionId,
+      database,
       schema,
       objectName: table ?? undefined,
       objectType: 'table'
@@ -77,15 +93,17 @@ export function useWorkspace() {
     connectionId: string,
     schema: string,
     type: ObjectType,
-    name: string | null
+    name: string | null,
+    database?: string
   ): void {
     tabs.open({
       kind: 'ddlEditor',
-      id: name ? `ddl:${connectionId}:${schema}:${type}:${name}` : undefined,
+      id: name ? objectTabId('ddl', connectionId, database, schema, type, name) : undefined,
       title: name
-        ? tabTitle(name, schema, connections.nameOf(connectionId))
-        : `Nuevo ${type}@${schema} (${connections.nameOf(connectionId)})`,
+        ? tabTitle(name, schema, connections.nameOf(connectionId), database)
+        : tabTitle(`Nuevo ${type}`, schema, connections.nameOf(connectionId), database),
       connectionId,
+      database,
       schema,
       objectName: name ?? undefined,
       objectType: type

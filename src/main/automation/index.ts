@@ -66,7 +66,7 @@ interface ActiveRun {
 
 async function resolveRunnerDeps(ctx: AppContext): Promise<RunnerDeps> {
   const [{ getSessionFactory }, { createBackupService }] = await Promise.all([
-    import('../mysql/manager'),
+    import('../db/manager'),
     import('../backup/index')
   ])
   const sessions = getSessionFactory(ctx)

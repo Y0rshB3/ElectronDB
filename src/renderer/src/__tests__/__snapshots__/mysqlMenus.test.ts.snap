@@ -1,0 +1,326 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MySQL context menus (golden) > connection, database, group and object menus are unchanged 1`] = `
+{
+  "connection (closed)": [
+    "open | Abrir conexión | mdi-lan-connect",
+    "edit | Editar conexión… | mdi-pencil-outline",
+    "---",
+    "query | Nueva consulta | mdi-database-search-outline | disabled",
+    "newdb | Nueva base de datos… | mdi-database-plus | disabled",
+    "backups | Copias de seguridad | mdi-archive-outline",
+    "users | Usuarios | mdi-account-multiple-outline | disabled",
+    "---",
+    "refresh | Actualizar | mdi-refresh | disabled",
+    "delete | Eliminar conexión | mdi-delete-outline | danger",
+  ],
+  "connection (open)": [
+    "close | Cerrar conexión | mdi-lan-disconnect",
+    "edit | Editar conexión… | mdi-pencil-outline",
+    "---",
+    "query | Nueva consulta | mdi-database-search-outline",
+    "newdb | Nueva base de datos… | mdi-database-plus",
+    "backups | Copias de seguridad | mdi-archive-outline",
+    "users | Usuarios | mdi-account-multiple-outline",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+    "delete | Eliminar conexión | mdi-delete-outline | danger",
+  ],
+  "database": [
+    "query | Nueva consulta | mdi-database-search-outline",
+    "table | Nueva tabla | mdi-table-plus",
+    "backup | Nueva copia de seguridad… | mdi-archive-plus-outline",
+    "backups | Copias de seguridad | mdi-archive-outline",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+    "drop | Eliminar base de datos | mdi-delete-outline | danger",
+  ],
+  "group backups": [
+    "new | Nueva copia de seguridad… | mdi-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "group events": [
+    "new | Nuevo evento | mdi-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "group functions": [
+    "newf | Nueva función | mdi-plus",
+    "newp | Nuevo procedimiento | mdi-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "group queries": [
+    "new | Nueva consulta | mdi-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "group tables": [
+    "new | Nueva tabla | mdi-table-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "group views": [
+    "new | Nueva vista | mdi-plus",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object backup": [
+    "open | Ver copias de seguridad | mdi-open-in-app",
+    "new | Nueva copia de seguridad… | mdi-plus",
+    "---",
+    "restore | Restaurar… | mdi-backup-restore",
+    "finder | Mostrar en Finder | mdi-folder-open-outline",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object event": [
+    "open | Abrir | mdi-open-in-app",
+    "new | Nuevo evento | mdi-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "ddl | Exportar DDL (copiar) | mdi-code-tags",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object function": [
+    "open | Abrir | mdi-open-in-app",
+    "newf | Nueva función | mdi-plus",
+    "newp | Nuevo procedimiento | mdi-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "ddl | Exportar DDL (copiar) | mdi-code-tags",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object procedure": [
+    "open | Abrir | mdi-open-in-app",
+    "newf | Nueva función | mdi-plus",
+    "newp | Nuevo procedimiento | mdi-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "ddl | Exportar DDL (copiar) | mdi-code-tags",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object saved query": [
+    "open | Abrir | mdi-open-in-app",
+    "new | Nueva consulta | mdi-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object table": [
+    "open | Abrir | mdi-open-in-app",
+    "design | Diseñar tabla | mdi-table-edit",
+    "new | Nueva tabla | mdi-table-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "ddl | Exportar DDL (copiar) | mdi-code-tags",
+    "truncate | Truncar tabla | mdi-eraser | danger",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "object view": [
+    "open | Abrir | mdi-open-in-app",
+    "new | Nueva vista | mdi-plus",
+    "---",
+    "copy | Copiar nombre | mdi-content-copy",
+    "ddl | Exportar DDL (copiar) | mdi-code-tags",
+    "delete | Eliminar | mdi-delete-outline | danger",
+    "---",
+    "refresh | Actualizar | mdi-refresh",
+  ],
+  "production connection (closed)": [
+    "open | Abrir conexión | mdi-lan-connect",
+    "edit | Editar conexión… | mdi-pencil-outline",
+    "---",
+    "query | Nueva consulta | mdi-database-search-outline | disabled",
+    "newdb | Nueva base de datos… | mdi-database-plus | disabled",
+    "backups | Copias de seguridad | mdi-archive-outline",
+    "users | Usuarios | mdi-account-multiple-outline | disabled",
+    "---",
+    "refresh | Actualizar | mdi-refresh | disabled",
+    "delete | Eliminar conexión | mdi-delete-outline | danger",
+  ],
+}
+`;
+
+exports[`MySQL main toolbar (golden) > is unchanged with an open MySQL database selected 1`] = `
+{
+  "buttons": [
+    {
+      "disabled": false,
+      "key": "toolbar-connection",
+      "label": "Conexión",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-query",
+      "label": "Nueva Consulta",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-table",
+      "label": "Tabla",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-view",
+      "label": "Ver",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-function",
+      "label": "Función",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-users",
+      "label": "Usuario",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-others",
+      "label": "Otros",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-queries",
+      "label": "Consulta",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-backup",
+      "label": "Copia de seguridad",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-automation",
+      "label": "Automatización",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-ai",
+      "label": "Asistente de IA",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-settings",
+      "label": "Preferencias",
+    },
+  ],
+  "menus": {
+    "toolbar-connection": [
+      "Nueva conexión MySQL…",
+      "Importar desde Navicat…",
+    ],
+    "toolbar-function": [
+      "Nueva función",
+      "Nuevo procedimiento",
+    ],
+    "toolbar-others": [
+      "Eventos",
+      "Importar desde Navicat…",
+      "Ajustes…",
+      "Registro",
+      "Buscar actualizaciones…",
+      "Ver tour de bienvenida",
+    ],
+    "toolbar-table": [
+      "Nueva tabla",
+    ],
+    "toolbar-view": [
+      "Nueva vista",
+    ],
+  },
+}
+`;
+
+exports[`MySQL main toolbar (golden) > is unchanged without a selection 1`] = `
+{
+  "buttons": [
+    {
+      "disabled": false,
+      "key": "toolbar-connection",
+      "label": "Conexión",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-query",
+      "label": "Nueva Consulta",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-table",
+      "label": "Tabla",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-view",
+      "label": "Ver",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-function",
+      "label": "Función",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-users",
+      "label": "Usuario",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-others",
+      "label": "Otros",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-queries",
+      "label": "Consulta",
+    },
+    {
+      "disabled": true,
+      "key": "toolbar-backup",
+      "label": "Copia de seguridad",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-automation",
+      "label": "Automatización",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-ai",
+      "label": "Asistente de IA",
+    },
+    {
+      "disabled": false,
+      "key": "toolbar-settings",
+      "label": "Preferencias",
+    },
+  ],
+  "menus": {
+    "toolbar-connection": [
+      "Nueva conexión MySQL…",
+      "Importar desde Navicat…",
+    ],
+    "toolbar-others": [
+      "Eventos",
+      "Importar desde Navicat…",
+      "Ajustes…",
+      "Registro",
+      "Buscar actualizaciones…",
+      "Ver tour de bienvenida",
+    ],
+  },
+}
+`;

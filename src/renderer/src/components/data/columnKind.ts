@@ -1,3 +1,6 @@
+import type { QueryColumn } from '@shared/types'
+import { isNumericKind, isTemporalKind } from '@renderer/utils/columnMeta'
+
 /**
  * Visual classification of a result column from its MySQL type name (as sent by
  * the main process, e.g. "INT UNSIGNED", "DECIMAL", "DATETIME"). Only used for
@@ -49,4 +52,12 @@ export function typeLabel(type: string | null | undefined): string {
   if (columnKind(t) === 'number') return 'Número'
   if (/^(BLOB|TINYBLOB|MEDIUMBLOB|LONGBLOB|BINARY|VARBINARY|GEOMETRY)\b/.test(t)) return 'Binario'
   return 'Texto'
+}
+
+/** Same classification from the driver's `typeKind`; falls back to the MySQL type name. */
+export function columnKindOf(column: Pick<QueryColumn, 'type' | 'typeKind'>): ColumnKind {
+  if (!column.typeKind) return columnKind(column.type)
+  if (isNumericKind(column.typeKind)) return 'number'
+  if (isTemporalKind(column.typeKind)) return 'temporal'
+  return 'text'
 }

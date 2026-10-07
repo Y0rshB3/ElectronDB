@@ -8,6 +8,7 @@ import type {
   RestoreOptions,
   RestoreResult
 } from '@shared/types'
+import { engineOf } from '@shared/engines'
 import type { AppContext } from '../context'
 import type { SessionFactory } from '../mysql/types'
 import { createBackup } from './create'
@@ -73,7 +74,12 @@ export async function readBackupMeta(userDataPath: string, path: string): Promis
 
 export function createBackupService(ctx: AppContext, sessions: SessionFactory): BackupService {
   const service: BackupService = {
-    list: (connectionId, schema) => listBackups(ctx, connectionId, schema),
+    list: async (connectionId, schema) => {
+      // Engines without .nb3 backups have none to list (section 11); MySQL is unchanged.
+      const connection = ctx.connections.get(connectionId)
+      if (connection && !engineOf(connection).capabilities.supportsBackupsNb3) return []
+      return listBackups(ctx, connectionId, schema)
+    },
     readMeta: (path) => readBackupMeta(ctx.userDataPath, path),
     create: (options, progress, signal) =>
       createBackup({ connections: ctx.connections, sessions }, options, progress, signal),

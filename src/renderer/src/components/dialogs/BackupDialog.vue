@@ -14,6 +14,7 @@ import { vPathTail } from './pathTail'
 import { revealInFinder } from '@renderer/components/backups/reveal'
 import OperationProgress from '@renderer/components/backups/OperationProgress.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
+import { backupConnections } from '@renderer/components/backups/backupHelpers'
 import DialogHeader from './DialogHeader.vue'
 
 const ui = useUiStore()
@@ -48,7 +49,7 @@ const open = computed({
 })
 
 const connectionItems = computed(() =>
-  connections.sorted.map((c) => ({ title: c.name, value: c.id }))
+  backupConnections(connections.sorted).map((c) => ({ title: c.name, value: c.id }))
 )
 const connection = computed(() =>
   connectionId.value ? connections.get(connectionId.value) : undefined

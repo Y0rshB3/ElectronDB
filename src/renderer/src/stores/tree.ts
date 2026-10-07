@@ -10,7 +10,8 @@ import type {
 } from '@shared/types'
 import { api } from '@renderer/api'
 import { errorMessage } from '@renderer/composables/useNotify'
-import { GROUPS, type GroupKind } from '@renderer/utils/objectTypes'
+import { groupsFor } from '@renderer/engines/capabilities'
+import type { GroupKind } from '@renderer/utils/objectTypes'
 import type { SavedQuery } from '@renderer/utils/savedQueries'
 import { useConnectionsStore } from './connections'
 import { useQueriesStore } from './queries'
@@ -40,14 +41,36 @@ export interface GroupItems {
   backups: BackupFile[]
 }
 
+/*
+ * Node ids are ':'-joined segments, each one percent-encoded, so a database
+ * or object name that contains ':' (or '%') round-trips through parse().
+ * Names made only of letters, digits and -_.!~*'() keep the same id as before.
+ */
+const seg = encodeURIComponent
+
 export const nodeIds = {
-  connection: (c: string) => `c:${c}`,
-  schema: (c: string, s: string) => `s:${c}:${s}`,
-  group: (c: string, s: string, g: GroupKind) => `g:${c}:${s}:${g}`,
-  object: (c: string, s: string, g: GroupKind, name: string) => `o:${c}:${s}:${g}:${name}`
+  connection: (c: string) => `c:${seg(c)}`,
+  schema: (c: string, s: string) => `s:${seg(c)}:${seg(s)}`,
+  group: (c: string, s: string, g: GroupKind) => `g:${seg(c)}:${seg(s)}:${g}`,
+  object: (c: string, s: string, g: GroupKind, name: string) =>
+    `o:${seg(c)}:${seg(s)}:${g}:${seg(name)}`
 }
 
-export const groupKey = (c: string, s: string, g: GroupKind): string => `${c}:${s}:${g}`
+/** Cache key of a group's items (same escaping as node ids). */
+export const groupKey = (c: string, s: string, g: GroupKind): string => `${seg(c)}:${seg(s)}:${g}`
+
+/** Prefix shared by the group keys of one connection, or of one of its databases. */
+const groupKeyPrefix = (c: string, s?: string): string =>
+  s === undefined ? `${seg(c)}:` : `${seg(c)}:${seg(s)}:`
+
+/** Splits an id into its decoded segments; null when a segment is not valid encoding. */
+function splitId(id: string): string[] | null {
+  try {
+    return id.split(':').map((part) => decodeURIComponent(part))
+  } catch {
+    return null
+  }
+}
 
 export const useTreeStore = defineStore('tree', () => {
   const expanded = ref<Record<string, boolean>>({})
@@ -62,8 +85,10 @@ export const useTreeStore = defineStore('tree', () => {
   const queries = useQueriesStore()
 
   function parse(id: string): TreeNode | null {
-    const [kind, ...rest] = id.split(':')
-    if (kind === 'c')
+    const parts = splitId(id)
+    if (!parts) return null
+    const [kind, ...rest] = parts
+    if (kind === 'c' && rest.length === 1)
       return {
         id,
         kind: 'connection',
@@ -71,7 +96,7 @@ export const useTreeStore = defineStore('tree', () => {
         connectionId: rest[0],
         parentId: null
       }
-    if (kind === 's')
+    if (kind === 's' && rest.length === 2)
       return {
         id,
         kind: 'schema',
@@ -80,7 +105,7 @@ export const useTreeStore = defineStore('tree', () => {
         schema: rest[1],
         parentId: nodeIds.connection(rest[0])
       }
-    if (kind === 'g') {
+    if (kind === 'g' && rest.length === 3) {
       const group = rest[2] as GroupKind
       return {
         id,
@@ -92,9 +117,9 @@ export const useTreeStore = defineStore('tree', () => {
         parentId: nodeIds.schema(rest[0], rest[1])
       }
     }
-    if (kind === 'o') {
+    if (kind === 'o' && rest.length === 4) {
       const group = rest[2] as GroupKind
-      const name = rest.slice(3).join(':')
+      const name = rest[3]
       return {
         id,
         kind: 'object',
@@ -110,6 +135,11 @@ export const useTreeStore = defineStore('tree', () => {
   }
 
   const selected = computed(() => (selectedId.value ? parse(selectedId.value) : null))
+
+  /** Groups under a database of this connection (engine-driven; GROUPS for MySQL). */
+  function groupsOf(connectionId: string): GroupKind[] {
+    return groupsFor(connections.get(connectionId))
+  }
 
   function isExpanded(id: string): boolean {
     return !!expanded.value[id]
@@ -206,7 +236,8 @@ export const useTreeStore = defineStore('tree', () => {
       if (!connections.isOpen(c)) return []
       return (databases.value[c] ?? []).map((d) => parse(nodeIds.schema(c, d.name))!)
     }
-    if (node.kind === 'schema') return GROUPS.map((g) => parse(nodeIds.group(c, node.schema!, g))!)
+    if (node.kind === 'schema')
+      return groupsOf(c).map((g) => parse(nodeIds.group(c, node.schema!, g))!)
     if (node.kind === 'group') {
       const s = node.schema!
       const g = node.group!
@@ -260,11 +291,11 @@ export const useTreeStore = defineStore('tree', () => {
   async function refresh(node: TreeNode): Promise<void> {
     if (node.kind === 'connection') await loadDatabases(node.connectionId, true)
     else if (node.kind === 'schema') {
-      const prefix = `${node.connectionId}:${node.schema}:`
+      const prefix = groupKeyPrefix(node.connectionId, node.schema!)
       const next = { ...groupItems.value }
       for (const key of Object.keys(next)) if (key.startsWith(prefix)) delete next[key]
       groupItems.value = next
-      for (const g of GROUPS)
+      for (const g of groupsOf(node.connectionId))
         if (isExpanded(nodeIds.group(node.connectionId, node.schema!, g)))
           await loadGroup(node.connectionId, node.schema!, g, true)
     } else if (node.kind === 'group')
@@ -279,18 +310,15 @@ export const useTreeStore = defineStore('tree', () => {
     delete nextDb[connectionId]
     databases.value = nextDb
     const nextItems = { ...groupItems.value }
-    for (const key of Object.keys(nextItems))
-      if (key.startsWith(`${connectionId}:`)) delete nextItems[key]
+    const prefix = groupKeyPrefix(connectionId)
+    for (const key of Object.keys(nextItems)) if (key.startsWith(prefix)) delete nextItems[key]
     groupItems.value = nextItems
     const nextExpanded = { ...expanded.value }
     for (const key of Object.keys(nextExpanded))
-      if (key.includes(`:${connectionId}`)) delete nextExpanded[key]
+      if (parse(key)?.connectionId === connectionId) delete nextExpanded[key]
     expanded.value = nextExpanded
-    if (
-      selectedId.value &&
-      selectedId.value !== nodeIds.connection(connectionId) &&
-      selectedId.value.includes(`:${connectionId}:`)
-    ) {
+    const selectedNode = selectedId.value ? parse(selectedId.value) : null
+    if (selectedNode?.connectionId === connectionId && selectedNode.kind !== 'connection') {
       selectedId.value = nodeIds.connection(connectionId)
     }
   }
@@ -310,6 +338,7 @@ export const useTreeStore = defineStore('tree', () => {
     databases,
     groupItems,
     parse,
+    groupsOf,
     isExpanded,
     setExpanded,
     select,

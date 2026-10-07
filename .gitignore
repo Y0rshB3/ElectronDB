@@ -37,3 +37,6 @@ electrondb-shots/
 *.key
 *.p12
 credentials.json
+
+# Research notes based on third-party binaries: never commit
+docs/research/

@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { engineOf } from '@shared/engines'
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -61,6 +62,9 @@ function toConnectionInput(
   const { connection, backupSourceDir } = entry
   return {
     id: existing?.id,
+    // Navicat's MySQL section: ConnectionsRepo.save refuses to turn a record of
+    // another engine into MySQL.
+    engine: 'mysql',
     name: existing?.name ?? connection.name,
     color: connection.color,
     environment: mergeEnvironment(existing, connection.environment),
@@ -85,12 +89,22 @@ function findByNavicatName(connections: ConnectionConfig[], name: string): Conne
   return connections.find((c) => isImportedFromNavicat(c, name)) ?? null
 }
 
-/** Resolves a batch-job `Server` to a ElectronDB connection: same-request imports first, then Navicat name, then display name. */
+/**
+ * Resolves a batch-job `Server` to a ElectronDB connection: same-request imports first, then Navicat name, then display name.
+ * Only connections whose engine has automation (MySQL) are candidates (section 11).
+ */
 function resolveServer(
   server: string,
   imported: Map<string, ConnectionConfig>,
-  all: ConnectionConfig[]
+  connections: ConnectionConfig[]
 ): ConnectionConfig | null {
+  const all = connections.filter((c) => {
+    try {
+      return engineOf(c).capabilities.supportsAutomation
+    } catch {
+      return false // a hand-edited, unknown engine is never a job target
+    }
+  })
   return (
     imported.get(server) ??
     findByNavicatName(all, server) ??

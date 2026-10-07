@@ -1,0 +1,55 @@
+/**
+ * Capability checks for the renderer: pure functions over the shared engine
+ * descriptors (no store or view imports), so stores, composables and
+ * components can all use them. For MySQL every check passes, which keeps the
+ * MySQL menus, toolbar, tree and pickers exactly as they were.
+ */
+import {
+  DEFAULT_ENGINE,
+  ENGINES,
+  engineOf,
+  type BooleanCapability,
+  type EngineDescriptor
+} from '@shared/engines'
+import type { EngineId } from '@shared/types'
+import { GROUPS, type GroupKind } from '@renderer/utils/objectTypes'
+
+type EngineHolder = { engine?: EngineId | null } | undefined | null
+
+/**
+ * Descriptor of a connection's engine. A connection without `engine` (or one
+ * the renderer has not loaded) is MySQL, as before multi-engine; an unknown
+ * engine yields null, which grants no capability.
+ */
+export function descriptorOf(connection: EngineHolder): EngineDescriptor | null {
+  if (!connection) return ENGINES[DEFAULT_ENGINE]
+  try {
+    return engineOf(connection)
+  } catch {
+    return null
+  }
+}
+
+/** True when the connection's engine has the capability. */
+export function can(connection: EngineHolder, capability: BooleanCapability): boolean {
+  return !!descriptorOf(connection)?.capabilities[capability]
+}
+
+const RENDERER_GROUPS: ReadonlySet<string> = new Set(GROUPS)
+
+/**
+ * Tree groups under a database, in the engine's order, limited to the groups
+ * this renderer can list and to the engine's capabilities. MySQL gets GROUPS.
+ */
+export function groupsFor(connection: EngineHolder): GroupKind[] {
+  const descriptor = descriptorOf(connection)
+  if (!descriptor) return []
+  const caps = descriptor.capabilities
+  return descriptor.groups.filter((g): g is GroupKind => {
+    if (!RENDERER_GROUPS.has(g)) return false
+    if (g === 'backups') return caps.supportsBackupsNb3
+    if (g === 'events') return caps.events
+    if (g === 'functions') return caps.routines
+    return true
+  })
+}

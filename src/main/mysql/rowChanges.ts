@@ -1,5 +1,5 @@
-import { formatRowChangeFailure } from '@shared/rowChangeFailure'
 import type { ApplyRowChangesResult, CellValue, RowChange } from '@shared/types'
+import { applyRowChangesAtomically } from '../db/rowChanges'
 import { MysqlUserError, describeError, isMysqlErrorLike } from './errors'
 import type { MysqlSession } from './types'
 
@@ -243,35 +243,21 @@ export async function applyRowChanges(
   const built = changes.map((c) =>
     buildRowChangeStatement(c, schema, table, session, binaryColumns)
   )
-  const failure = (i: number, reason: string, cause?: unknown): RowChangeError =>
-    new RowChangeError(formatRowChangeFailure(i, changes.length, changes[i].kind, reason), cause)
-
-  const statements: string[] = []
-  const insertIds: (number | null)[] = []
-  await session.execute('START TRANSACTION')
-  try {
-    for (let i = 0; i < built.length; i++) {
-      const stmt = built[i]
-      let res: Awaited<ReturnType<Session['execute']>>
-      try {
-        res = await session.execute(stmt.sql, stmt.params)
-      } catch (err) {
-        throw failure(i, explainRowChangeError(err), err)
-      }
-      if (changes[i].kind !== 'insert' && res.affectedRows > 1)
-        throw failure(i, `afectaría ${res.affectedRows} filas en lugar de una`)
-      if (changes[i].kind !== 'insert' && res.affectedRows === 0)
-        throw failure(
-          i,
-          'la fila ya no existe o su clave cambió desde que se cargó; recarga los datos e inténtalo de nuevo'
-        )
-      statements.push(stmt.display)
-      insertIds.push(changes[i].kind === 'insert' ? (res.insertId ?? null) : null)
-    }
-    await session.execute('COMMIT')
-  } catch (err) {
-    await session.execute('ROLLBACK').catch(() => undefined)
-    throw err
-  }
-  return { applied: statements.length, statements, insertIds }
+  // The all-or-nothing loop is engine-neutral (src/main/db/rowChanges.ts);
+  // the statements and the transaction SQL stay MySQL's.
+  return applyRowChangesAtomically(changes, built, {
+    begin: async () => {
+      await session.execute('START TRANSACTION')
+    },
+    execute: (stmt) => session.execute(stmt.sql, stmt.params),
+    commit: async () => {
+      await session.execute('COMMIT')
+    },
+    rollback: async () => {
+      await session.execute('ROLLBACK')
+    },
+    display: (stmt) => stmt.display,
+    explainError: explainRowChangeError,
+    toError: (message, cause) => new RowChangeError(message, cause)
+  })
 }

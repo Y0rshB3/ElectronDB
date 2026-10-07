@@ -1,5 +1,6 @@
 import type { ForeignKeyInfo, IndexInfo, TableStructure } from '@shared/types'
 import { quoteIdent, quoteString } from './sql'
+import { isAutoIncrementColumn, isPrimaryKeyColumn } from './columnMeta'
 
 export interface ColumnDraft {
   /** Stable id for the row while editing. */
@@ -108,10 +109,11 @@ export function emptyTable(): TableDraft {
   }
 }
 
+/** IndexInfo.primary when the driver sets it; otherwise MySQL's index name. */
+const isPrimaryIndex = (i: IndexInfo): boolean => i.primary ?? i.name.toUpperCase() === 'PRIMARY'
+
 export function draftFromStructure(structure: TableStructure): TableDraft {
-  const primary = new Set(
-    structure.indexes.find((i) => i.name.toUpperCase() === 'PRIMARY')?.columns ?? []
-  )
+  const primary = new Set(structure.indexes.find(isPrimaryIndex)?.columns ?? [])
   return {
     name: structure.name,
     engine: structure.engine ?? 'InnoDB',
@@ -125,14 +127,14 @@ export function draftFromStructure(structure: TableStructure): TableDraft {
       columnType: c.columnType.replace(/\s+unsigned/i, ''),
       nullable: c.nullable,
       defaultValue: c.defaultValue,
-      autoIncrement: /auto_increment/i.test(c.extra),
-      primaryKey: primary.has(c.name) || c.key === 'PRI',
+      autoIncrement: isAutoIncrementColumn(c),
+      primaryKey: primary.has(c.name) || isPrimaryKeyColumn(c),
       unsigned: /unsigned/i.test(c.columnType),
       collation: c.collation,
       comment: c.comment
     })),
     indexes: structure.indexes
-      .filter((i) => i.name.toUpperCase() !== 'PRIMARY')
+      .filter((i) => !isPrimaryIndex(i))
       .map((i) => ({ id: nextId(), originalName: i.name, ...i })),
     foreignKeys: structure.foreignKeys.map((f) => ({ id: nextId(), originalName: f.name, ...f }))
   }
@@ -289,7 +291,7 @@ export function buildAlterTable(original: TableStructure, draft: TableDraft): st
       clauses.push(`ADD PRIMARY KEY (${draftPk.map((c) => quoteIdent(c.name)).join(', ')})`)
   }
 
-  const origIndexes = original.indexes.filter((i) => i.name.toUpperCase() !== 'PRIMARY')
+  const origIndexes = original.indexes.filter((i) => !isPrimaryIndex(i))
   for (const i of origIndexes) {
     const kept = draft.indexes.find((d) => d.originalName === i.name)
     if (!kept || !sameIndex(kept, i)) clauses.push(`DROP INDEX ${quoteIdent(i.name)}`)

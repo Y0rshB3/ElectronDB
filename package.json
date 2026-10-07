@@ -36,6 +36,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --project node",
+    "test:integration:required": "node scripts/test-integration-required.mjs",
     "check": "npm run lint && npm run typecheck && npm run test",
     "screenshots": "node scripts/seed-screenshots.mjs && npm run build && ELECTRONDB_USER_DATA=${ELECTRONDB_SHOTS_PROFILE:-${NAVIDOG_SHOTS_PROFILE:-${TMPDIR:-/tmp}/electrondb-shots/profile}} ELECTRONDB_PLAIN_SECRETS=1 ELECTRONDB_AI_FIXTURE=1 ELECTRONDB_NAVICAT_CANDIDATES=${ELECTRONDB_NAVICAT_CANDIDATES:-tests/fixtures/navicat} ELECTRONDB_UPDATES_FIXTURE=${ELECTRONDB_UPDATES_FIXTURE:-tests/fixtures/updates/latest-release.json} ELECTRONDB_WHATS_NEW_FROM=${ELECTRONDB_WHATS_NEW_FROM:-0.1.2} ELECTRONDB_WHATS_NEW_VERSION=${ELECTRONDB_WHATS_NEW_VERSION:-0.1.4} ELECTRONDB_SCREENSHOTS=${ELECTRONDB_SHOTS_DIR:-${NAVIDOG_SHOTS_DIR:-${TMPDIR:-/tmp}/electrondb-shots}} npx electron ."
   },

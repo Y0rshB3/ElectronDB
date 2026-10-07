@@ -21,6 +21,11 @@ export interface WorkspaceTab {
   closable: boolean
   dirty: boolean
   connectionId?: string
+  /**
+   * Database that holds `schema`, for engines with a database level above
+   * schemas (PostgreSQL). Absent for MySQL, where `schema` is the database.
+   */
+  database?: string
   schema?: string
   objectName?: string
   objectType?: ObjectType
@@ -48,6 +53,8 @@ export interface OpenTabInput {
   id?: string
   title: string
   connectionId?: string
+  /** See WorkspaceTab.database (absent for MySQL). */
+  database?: string
   schema?: string
   objectName?: string
   objectType?: ObjectType
@@ -89,6 +96,8 @@ export const useTabsStore = defineStore('tabs', () => {
       closable: true,
       dirty: false,
       connectionId: input.connectionId,
+      // Only set when given, so MySQL tabs keep exactly their previous shape.
+      ...(input.database !== undefined ? { database: input.database } : {}),
       schema: input.schema,
       objectName: input.objectName,
       objectType: input.objectType,
@@ -163,6 +172,28 @@ export const useTabsStore = defineStore('tabs', () => {
   }
 })
 
-export function tabTitle(object: string, schema: string, connectionName: string): string {
-  return `${object}@${schema} (${connectionName})`
+/** "object@schema (conn)"; with a database (PostgreSQL) "object@db.schema (conn)". */
+export function tabTitle(
+  object: string,
+  schema: string,
+  connectionName: string,
+  database?: string
+): string {
+  const where = database !== undefined ? `${database}.${schema}` : schema
+  return `${object}@${where} (${connectionName})`
+}
+
+/**
+ * Dedupe id of an object tab: `<kind>:<connection>:<parts…>`. With a database
+ * (PostgreSQL) it follows the connection, so the same schema.table in two
+ * databases opens two tabs. MySQL ids are unchanged.
+ */
+export function objectTabId(
+  kind: string,
+  connectionId: string,
+  database: string | undefined,
+  ...parts: string[]
+): string {
+  const head = database !== undefined ? [kind, connectionId, database] : [kind, connectionId]
+  return [...head, ...parts].join(':')
 }

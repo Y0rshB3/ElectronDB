@@ -23,11 +23,9 @@ const NO_LOG = 'Sin registro'
 export function registerJobsHandlers(ctx: AppContext): void {
   const automation = getAutomationService(ctx)
   const lookup = (id: string) => ctx.connections.get(id)
-  // The mysql manager is loaded lazily so registering handlers stays cheap.
+  // The connection manager is loaded lazily so registering handlers stays cheap.
   const inspector = () =>
-    createRollbackInspector(ctx, async () =>
-      (await import('../mysql/manager')).getSessionFactory(ctx)
-    )
+    createRollbackInspector(ctx, async () => (await import('../db/manager')).getSessionFactory(ctx))
 
   handle('jobs:list', () => ctx.jobs.list())
   handle('jobs:get', (id) => ctx.jobs.get(id))

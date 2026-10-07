@@ -1,0 +1,7450 @@
+{
+  "source": "Captured from the v0.1.0 (c147306) helpers before the P1a move: main/mysql/sqlSplit.ts, shared/productionGuard.ts, renderer components/query/writeGuard.ts and utils/sql.ts.",
+  "sql": [
+    {
+      "input": "",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": " ",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": "  \n\t",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": ";",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": ";;;",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": " ; ; ",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": "\n\n;\n",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": []
+    },
+    {
+      "input": "-- only a comment",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["-- only a comment"]
+    },
+    {
+      "input": "-- only a comment\n/* and a block */",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["-- only a comment\n/* and a block */"]
+    },
+    {
+      "input": "# hash only",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["# hash only"]
+    },
+    {
+      "input": "/* block only */",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* block only */"]
+    },
+    {
+      "input": "/* unterminated",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* unterminated"]
+    },
+    {
+      "input": "--",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["--"]
+    },
+    {
+      "input": "--\nSELECT 1",
+      "splitStatements": [
+        {
+          "sql": "--\nSELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["--\nSELECT 1"]
+    },
+    {
+      "input": "--\tDELETE FROM t",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["--\tDELETE FROM t"]
+    },
+    {
+      "input": "-- x\r\nDELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "-- x\nDELETE FROM t",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["-- x\r\nDELETE FROM t"]
+    },
+    {
+      "input": "--x\nDELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "--x\nDELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "--X"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["--x\nDELETE FROM t"]
+    },
+    {
+      "input": "--DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "--DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["--DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["--DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 1 --x; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 --x",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 --x", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 1 -- x; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 -- x; DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 -- x", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 1 # x; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 # x; DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 # x", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 1 /* x; */ ; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 /* x; */",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT 1 /* x", "*/", "DELETE FROM t"]
+    },
+    {
+      "input": "  /* a */ -- b\n# c\n  delete from t",
+      "splitStatements": [
+        {
+          "sql": "/* a */ -- b\n# c\n  delete from t",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["/* a */ -- b\n# c\n  delete from t"]
+    },
+    {
+      "input": "/* DROP TABLE t */ SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/* DROP TABLE t */ SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* DROP TABLE t */ SELECT 1"]
+    },
+    {
+      "input": "/** doc **/ SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/** doc **/ SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/** doc **/ SELECT 1"]
+    },
+    {
+      "input": "/* a */ /* b */ UPDATE t SET a = 1",
+      "splitStatements": [
+        {
+          "sql": "/* a */ /* b */ UPDATE t SET a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["/* a */ /* b */ UPDATE t SET a = 1"]
+    },
+    {
+      "input": "/* nested /* not */ DELETE FROM t */ SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/* nested /* not */ DELETE FROM t */ SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["/* nested /* not */ DELETE FROM t */ SELECT 1"]
+    },
+    {
+      "input": "SELECT 1;\n\nSELECT 2 ; ;\n  ",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1; SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT 2"]
+    },
+    {
+      "input": "INSERT INTO t VALUES ('a;b', \"c;d\", 'it''s', 'x\\';y');\nSELECT `we;ird` FROM t;",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES ('a;b', \"c;d\", 'it''s', 'x\\';y')",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT `we;ird` FROM t",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": [
+        "INSERT INTO t VALUES ('a;b', \"c;d\", 'it''s', 'x\\';y')",
+        "SELECT `we;ird` FROM t"
+      ]
+    },
+    {
+      "input": "-- first; not a split\n# second; neither\nSELECT 1; -- trailing; comment\n/* multi\n line; comment */ SELECT 2;\nSELECT 3 --not-a-comment;",
+      "splitStatements": [
+        {
+          "sql": "-- first; not a split\n# second; neither\nSELECT 1",
+          "startLine": 3
+        },
+        {
+          "sql": "-- trailing; comment\n/* multi\n line; comment */ SELECT 2",
+          "startLine": 5
+        },
+        {
+          "sql": "SELECT 3 --not-a-comment",
+          "startLine": 6
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "-- first",
+        "not a split\n# second",
+        "neither\nSELECT 1",
+        "-- trailing",
+        "comment\n/* multi\n line",
+        "comment */ SELECT 2",
+        "SELECT 3 --not-a-comment"
+      ]
+    },
+    {
+      "input": "/*!40101 SET NAMES utf8mb4 */;\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 SET NAMES utf8mb4 */",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 SET NAMES utf8mb4 */", "SELECT 1"]
+    },
+    {
+      "input": "-- c\n/*!50001 CREATE VIEW v AS SELECT 1 */;\nSELECT /*+ MAX_EXECUTION_TIME(5) */ 1;",
+      "splitStatements": [
+        {
+          "sql": "-- c\n/*!50001 CREATE VIEW v AS SELECT 1 */",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT /*+ MAX_EXECUTION_TIME(5) */ 1",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "-- c\n/*!50001 CREATE VIEW v AS SELECT 1 */",
+        "SELECT /*+ MAX_EXECUTION_TIME(5) */ 1"
+      ]
+    },
+    {
+      "input": "DROP PROCEDURE IF EXISTS p;\nDELIMITER $$\nCREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 'a$$b';\nEND$$\nDELIMITER ;\nCALL p();",
+      "splitStatements": [
+        {
+          "sql": "DROP PROCEDURE IF EXISTS p",
+          "startLine": 1
+        },
+        {
+          "sql": "CREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 'a$$b';\nEND",
+          "startLine": 3
+        },
+        {
+          "sql": "CALL p()",
+          "startLine": 9
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP PROCEDURE", "DROP", "CREATE", "END$$", "CALL"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP PROCEDURE"]
+      },
+      "splitSimple": [
+        "DROP PROCEDURE IF EXISTS p",
+        "DELIMITER $$\nCREATE PROCEDURE p()\nBEGIN\n  SELECT 1",
+        "SELECT 'a$$b'",
+        "END$$\nDELIMITER",
+        "CALL p()"
+      ]
+    },
+    {
+      "input": "delimiter //\nCREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1;//\ndelimiter ;\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "CREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1;",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT 1",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE", "//"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "delimiter //\nCREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1",
+        "//\ndelimiter",
+        "SELECT 1"
+      ]
+    },
+    {
+      "input": "SELECT 'x\nDELIMITER $$\ny';\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'x\nDELIMITER $$\ny'",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'x\nDELIMITER $$\ny'", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1;\r\n\r\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT 2"]
+    },
+    {
+      "input": "INSERT INTO t VALUES (1)",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES (1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT INTO t VALUES (1)"]
+    },
+    {
+      "input": "update t set a = 1",
+      "splitStatements": [
+        {
+          "sql": "update t set a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["update t set a = 1"]
+    },
+    {
+      "input": "DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["DELETE FROM t"]
+    },
+    {
+      "input": "REPLACE INTO t VALUES (1)",
+      "splitStatements": [
+        {
+          "sql": "REPLACE INTO t VALUES (1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "REPLACE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["REPLACE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["REPLACE"]
+      },
+      "splitSimple": ["REPLACE INTO t VALUES (1)"]
+    },
+    {
+      "input": "DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["DROP TABLE t"]
+    },
+    {
+      "input": "CREATE TABLE t (id int)",
+      "splitStatements": [
+        {
+          "sql": "CREATE TABLE t (id int)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE TABLE t (id int)"]
+    },
+    {
+      "input": "ALTER TABLE t ADD c int",
+      "splitStatements": [
+        {
+          "sql": "ALTER TABLE t ADD c int",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "ALTER",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ALTER"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["ALTER"]
+      },
+      "splitSimple": ["ALTER TABLE t ADD c int"]
+    },
+    {
+      "input": "TRUNCATE t",
+      "splitStatements": [
+        {
+          "sql": "TRUNCATE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "TRUNCATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["TRUNCATE T", "TRUNCATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["TRUNCATE T"]
+      },
+      "splitSimple": ["TRUNCATE t"]
+    },
+    {
+      "input": "RENAME TABLE a TO b",
+      "splitStatements": [
+        {
+          "sql": "RENAME TABLE a TO b",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "RENAME",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["RENAME"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["RENAME"]
+      },
+      "splitSimple": ["RENAME TABLE a TO b"]
+    },
+    {
+      "input": "GRANT SELECT ON *.* TO x",
+      "splitStatements": [
+        {
+          "sql": "GRANT SELECT ON *.* TO x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "GRANT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["GRANT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["GRANT"]
+      },
+      "splitSimple": ["GRANT SELECT ON *.* TO x"]
+    },
+    {
+      "input": "REVOKE ALL ON *.* FROM x",
+      "splitStatements": [
+        {
+          "sql": "REVOKE ALL ON *.* FROM x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "REVOKE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["REVOKE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["REVOKE"]
+      },
+      "splitSimple": ["REVOKE ALL ON *.* FROM x"]
+    },
+    {
+      "input": "LOAD DATA INFILE 'f' INTO TABLE t",
+      "splitStatements": [
+        {
+          "sql": "LOAD DATA INFILE 'f' INTO TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "LOAD",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOAD DATA"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOAD DATA INFILE 'f' INTO TABLE t"]
+    },
+    {
+      "input": "CALL p()",
+      "splitStatements": [
+        {
+          "sql": "CALL p()",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CALL",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CALL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CALL p()"]
+    },
+    {
+      "input": "SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1"]
+    },
+    {
+      "input": "SHOW TABLES",
+      "splitStatements": [
+        {
+          "sql": "SHOW TABLES",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SHOW",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SHOW TABLES"]
+    },
+    {
+      "input": "DESCRIBE t",
+      "splitStatements": [
+        {
+          "sql": "DESCRIBE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DESCRIBE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DESCRIBE t"]
+    },
+    {
+      "input": "EXPLAIN SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN SELECT 1"]
+    },
+    {
+      "input": "USE app",
+      "splitStatements": [
+        {
+          "sql": "USE app",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "USE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["USE app"]
+    },
+    {
+      "input": "SET @a = 1",
+      "splitStatements": [
+        {
+          "sql": "SET @a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @a = 1"]
+    },
+    {
+      "input": "SELECT * FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t"]
+    },
+    {
+      "input": "select 1; show tables; describe t; explain select 1; use shop",
+      "splitStatements": [
+        {
+          "sql": "select 1",
+          "startLine": 1
+        },
+        {
+          "sql": "show tables",
+          "startLine": 1
+        },
+        {
+          "sql": "describe t",
+          "startLine": 1
+        },
+        {
+          "sql": "explain select 1",
+          "startLine": 1
+        },
+        {
+          "sql": "use shop",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["select 1", "show tables", "describe t", "explain select 1", "use shop"]
+    },
+    {
+      "input": "(SELECT 1) UNION (SELECT 2)",
+      "splitStatements": [
+        {
+          "sql": "(SELECT 1) UNION (SELECT 2)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["(SELECT 1) UNION (SELECT 2)"]
+    },
+    {
+      "input": "WITH x AS (SELECT 1) SELECT * FROM x",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 1) SELECT * FROM x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 1) SELECT * FROM x"]
+    },
+    {
+      "input": "SELECT 'DELETE FROM t' AS txt -- it's fine\n",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'DELETE FROM t' AS txt -- it's fine",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'DELETE FROM t' AS txt -- it's fine"]
+    },
+    {
+      "input": "SELECT REPLACE(name, 'a', 'b'), INSERT('abc', 1, 1, 'z') FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT REPLACE(name, 'a', 'b'), INSERT('abc', 1, 1, 'z') FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT REPLACE(name, 'a', 'b'), INSERT('abc', 1, 1, 'z') FROM t"]
+    },
+    {
+      "input": "SET @x = 1; SET NAMES utf8mb4; SET SESSION sql_mode = \"\"",
+      "splitStatements": [
+        {
+          "sql": "SET @x = 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SET NAMES utf8mb4",
+          "startLine": 1
+        },
+        {
+          "sql": "SET SESSION sql_mode = \"\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @x = 1", "SET NAMES utf8mb4", "SET SESSION sql_mode = \"\""]
+    },
+    {
+      "input": "CALL purge_all()",
+      "splitStatements": [
+        {
+          "sql": "CALL purge_all()",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CALL",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CALL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CALL purge_all()"]
+    },
+    {
+      "input": "LOAD DATA INFILE '/x' INTO TABLE t",
+      "splitStatements": [
+        {
+          "sql": "LOAD DATA INFILE '/x' INTO TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "LOAD",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOAD DATA"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOAD DATA INFILE '/x' INTO TABLE t"]
+    },
+    {
+      "input": "WITH x AS (SELECT 1) DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 1) DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["WITH + DML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 1) DELETE FROM t"]
+    },
+    {
+      "input": "(DELETE FROM t)",
+      "splitStatements": [
+        {
+          "sql": "(DELETE FROM t)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["(DELETE FROM t)"]
+    },
+    {
+      "input": "SET GLOBAL read_only = 1",
+      "splitStatements": [
+        {
+          "sql": "SET GLOBAL read_only = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET GLOBAL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET GLOBAL read_only = 1"]
+    },
+    {
+      "input": "IMPORT TABLE FROM '/tmp/t.sdi'",
+      "splitStatements": [
+        {
+          "sql": "IMPORT TABLE FROM '/tmp/t.sdi'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "IMPORT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["IMPORT TABLE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["IMPORT TABLE FROM '/tmp/t.sdi'"]
+    },
+    {
+      "input": "/*!40000 DROP TABLE t */",
+      "splitStatements": [
+        {
+          "sql": "/*!40000 DROP TABLE t */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40000 DROP TABLE t */"]
+    },
+    {
+      "input": "SELECT * FROM t INTO OUTFILE '/tmp/x'",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t INTO OUTFILE '/tmp/x'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t INTO OUTFILE '/tmp/x'"]
+    },
+    {
+      "input": "SELECT * FROM t FOR UPDATE",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t FOR UPDATE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t FOR UPDATE"]
+    },
+    {
+      "input": "UPDATE t SET a = 1 WHERE id = 1",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = 1 WHERE id = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE"]
+      },
+      "splitSimple": ["UPDATE t SET a = 1 WHERE id = 1"]
+    },
+    {
+      "input": "DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; END$$\nDELIMITER ;",
+      "splitStatements": [
+        {
+          "sql": "CREATE PROCEDURE p() BEGIN SELECT 1; END",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE", "END$$"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1", "END$$\nDELIMITER"]
+    },
+    {
+      "input": "SELECT 1; OPTIMIZE TABLE t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "OPTIMIZE TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["OPTIMIZE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "OPTIMIZE TABLE t"]
+    },
+    {
+      "input": "select * from t where a = 1",
+      "splitStatements": [
+        {
+          "sql": "select * from t where a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["select * from t where a = 1"]
+    },
+    {
+      "input": "SHOW CREATE TABLE `t`",
+      "splitStatements": [
+        {
+          "sql": "SHOW CREATE TABLE `t`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SHOW",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SHOW CREATE TABLE `t`"]
+    },
+    {
+      "input": "SHOW FULL PROCESSLIST",
+      "splitStatements": [
+        {
+          "sql": "SHOW FULL PROCESSLIST",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SHOW",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SHOW FULL PROCESSLIST"]
+    },
+    {
+      "input": "DESC t",
+      "splitStatements": [
+        {
+          "sql": "DESC t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DESC",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DESC t"]
+    },
+    {
+      "input": "EXPLAIN FORMAT=JSON SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN FORMAT=JSON SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN FORMAT=JSON SELECT 1"]
+    },
+    {
+      "input": "EXPLAIN ANALYZE SELECT * FROM t",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN ANALYZE SELECT * FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN ANALYZE SELECT * FROM t"]
+    },
+    {
+      "input": "EXPLAIN ANALYZE DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN ANALYZE DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["EXPLAIN ANALYZE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN ANALYZE DELETE FROM t"]
+    },
+    {
+      "input": "EXPLAIN DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN DELETE FROM t"]
+    },
+    {
+      "input": "EXPLAIN UPDATE t SET a = 1",
+      "splitStatements": [
+        {
+          "sql": "EXPLAIN UPDATE t SET a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXPLAIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXPLAIN UPDATE t SET a = 1"]
+    },
+    {
+      "input": "HELP SELECT",
+      "splitStatements": [
+        {
+          "sql": "HELP SELECT",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "HELP",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["HELP SELECT"]
+    },
+    {
+      "input": "TABLE t",
+      "splitStatements": [
+        {
+          "sql": "TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "TABLE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["TABLE t"]
+    },
+    {
+      "input": "TABLE t ORDER BY a LIMIT 1",
+      "splitStatements": [
+        {
+          "sql": "TABLE t ORDER BY a LIMIT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "TABLE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["TABLE t ORDER BY a LIMIT 1"]
+    },
+    {
+      "input": "VALUES ROW(1, 2), ROW(3, 4)",
+      "splitStatements": [
+        {
+          "sql": "VALUES ROW(1, 2), ROW(3, 4)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "VALUES",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["VALUES ROW(1, 2), ROW(3, 4)"]
+    },
+    {
+      "input": "SELECT 1 UNION SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 UNION SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 UNION SELECT 2"]
+    },
+    {
+      "input": "((SELECT 1))",
+      "splitStatements": [
+        {
+          "sql": "((SELECT 1))",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["((SELECT 1))"]
+    },
+    {
+      "input": "( ( DELETE FROM t ) )",
+      "splitStatements": [
+        {
+          "sql": "( ( DELETE FROM t ) )",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["("]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["( ( DELETE FROM t ) )"]
+    },
+    {
+      "input": "(UPDATE t SET a = 1)",
+      "splitStatements": [
+        {
+          "sql": "(UPDATE t SET a = 1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["(UPDATE t SET a = 1)"]
+    },
+    {
+      "input": "SELECT * FROM t LOCK IN SHARE MODE",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t LOCK IN SHARE MODE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t LOCK IN SHARE MODE"]
+    },
+    {
+      "input": "SELECT * FROM t FOR SHARE",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t FOR SHARE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t FOR SHARE"]
+    },
+    {
+      "input": "SELECT * FROM t FOR  UPDATE NOWAIT",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t FOR  UPDATE NOWAIT",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t FOR  UPDATE NOWAIT"]
+    },
+    {
+      "input": "SELECT * FROM t INTO DUMPFILE '/tmp/x'",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t INTO DUMPFILE '/tmp/x'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t INTO DUMPFILE '/tmp/x'"]
+    },
+    {
+      "input": "SELECT a INTO @x FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT a INTO @x FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT a INTO @x FROM t"]
+    },
+    {
+      "input": "SELECT * INTO OUTFILE '/tmp/x' FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT * INTO OUTFILE '/tmp/x' FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * INTO OUTFILE '/tmp/x' FROM t"]
+    },
+    {
+      "input": "SELECT update_count FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT update_count FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT update_count FROM t"]
+    },
+    {
+      "input": "SELECT `delete` FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT `delete` FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT `delete` FROM t"]
+    },
+    {
+      "input": "SELECT \"DROP TABLE t\"",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"DROP TABLE t\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT \"DROP TABLE t\""]
+    },
+    {
+      "input": "SELECT 'it''s; DROP TABLE t'",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'it''s; DROP TABLE t'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'it''s; DROP TABLE t'"]
+    },
+    {
+      "input": "SELECT 'a\\'; DROP TABLE t; --'",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a\\'; DROP TABLE t; --'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'a\\'; DROP TABLE t; --'"]
+    },
+    {
+      "input": "SELECT \"a\\\"; DROP TABLE t\"",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"a\\\"; DROP TABLE t\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT \"a\\\"; DROP TABLE t\""]
+    },
+    {
+      "input": "SELECT `a``; DROP TABLE t`",
+      "splitStatements": [
+        {
+          "sql": "SELECT `a``; DROP TABLE t`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT `a``; DROP TABLE t`"]
+    },
+    {
+      "input": "SELECT `a\\`; DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "SELECT `a\\`",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT `a\\`; DROP TABLE t"]
+    },
+    {
+      "input": "SELECT 'unterminated; DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'unterminated; DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'unterminated; DROP TABLE t"]
+    },
+    {
+      "input": "SELECT \"unterminated",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"unterminated",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT \"unterminated"]
+    },
+    {
+      "input": "SELECT `unterminated",
+      "splitStatements": [
+        {
+          "sql": "SELECT `unterminated",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT `unterminated"]
+    },
+    {
+      "input": "SELECT REPLACE (a, b, c) FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT REPLACE (a, b, c) FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT REPLACE (a, b, c) FROM t"]
+    },
+    {
+      "input": "SELECT INSERT (a, 1, 1, b) FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT INSERT (a, 1, 1, b) FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT INSERT (a, 1, 1, b) FROM t"]
+    },
+    {
+      "input": "SELECT replace(a,\"x\",\"y\") FROM t WHERE b IN (SELECT c FROM u)",
+      "splitStatements": [
+        {
+          "sql": "SELECT replace(a,\"x\",\"y\") FROM t WHERE b IN (SELECT c FROM u)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT replace(a,\"x\",\"y\") FROM t WHERE b IN (SELECT c FROM u)"]
+    },
+    {
+      "input": "SELECT * FROM t WHERE x = \"UPDATE\"",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t WHERE x = \"UPDATE\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t WHERE x = \"UPDATE\""]
+    },
+    {
+      "input": "SELECT * FROM t; SELECT * FROM u",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT * FROM u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t", "SELECT * FROM u"]
+    },
+    {
+      "input": "WITH RECURSIVE r AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT * FROM r",
+      "splitStatements": [
+        {
+          "sql": "WITH RECURSIVE r AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT * FROM r",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "WITH RECURSIVE r AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT * FROM r"
+      ]
+    },
+    {
+      "input": "WITH x AS (SELECT 1) UPDATE t SET a = 1",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 1) UPDATE t SET a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["WITH + DML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 1) UPDATE t SET a = 1"]
+    },
+    {
+      "input": "WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["WITH + DML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x"]
+    },
+    {
+      "input": "WITH x AS (SELECT 1) SELECT * FROM x FOR UPDATE",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 1) SELECT * FROM x FOR UPDATE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["WITH + DML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 1) SELECT * FROM x FOR UPDATE"]
+    },
+    {
+      "input": "WITH x AS (SELECT 'DELETE') SELECT * FROM x",
+      "splitStatements": [
+        {
+          "sql": "WITH x AS (SELECT 'DELETE') SELECT * FROM x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["WITH x AS (SELECT 'DELETE') SELECT * FROM x"]
+    },
+    {
+      "input": "with x as (select 1) replace into t select * from x",
+      "splitStatements": [
+        {
+          "sql": "with x as (select 1) replace into t select * from x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "WITH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["WITH + DML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["with x as (select 1) replace into t select * from x"]
+    },
+    {
+      "input": "SET @@SESSION.sql_mode = \"\"",
+      "splitStatements": [
+        {
+          "sql": "SET @@SESSION.sql_mode = \"\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @@SESSION.sql_mode = \"\""]
+    },
+    {
+      "input": "SET @@GLOBAL.read_only = 1",
+      "splitStatements": [
+        {
+          "sql": "SET @@GLOBAL.read_only = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET @@GLOBAL.READ_ONLY"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @@GLOBAL.read_only = 1"]
+    },
+    {
+      "input": "SET @@global.read_only = 1",
+      "splitStatements": [
+        {
+          "sql": "SET @@global.read_only = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET @@GLOBAL.READ_ONLY"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @@global.read_only = 1"]
+    },
+    {
+      "input": "SET @@read_only = 1",
+      "splitStatements": [
+        {
+          "sql": "SET @@read_only = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET @@READ_ONLY"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @@read_only = 1"]
+    },
+    {
+      "input": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
+      "splitStatements": [
+        {
+          "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"]
+    },
+    {
+      "input": "SET TRANSACTION READ WRITE",
+      "splitStatements": [
+        {
+          "sql": "SET TRANSACTION READ WRITE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET TRANSACTION"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET TRANSACTION READ WRITE"]
+    },
+    {
+      "input": "SET PERSIST max_connections = 10",
+      "splitStatements": [
+        {
+          "sql": "SET PERSIST max_connections = 10",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET PERSIST"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET PERSIST max_connections = 10"]
+    },
+    {
+      "input": "SET PERSIST_ONLY max_connections = 10",
+      "splitStatements": [
+        {
+          "sql": "SET PERSIST_ONLY max_connections = 10",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET PERSIST_ONLY"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET PERSIST_ONLY max_connections = 10"]
+    },
+    {
+      "input": "SET PASSWORD = 'x'",
+      "splitStatements": [
+        {
+          "sql": "SET PASSWORD = 'x'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET", "SET PASSWORD"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["SET"]
+      },
+      "splitSimple": ["SET PASSWORD = 'x'"]
+    },
+    {
+      "input": "SET PASSWORD FOR u = 'x'",
+      "splitStatements": [
+        {
+          "sql": "SET PASSWORD FOR u = 'x'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET", "SET PASSWORD"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["SET"]
+      },
+      "splitSimple": ["SET PASSWORD FOR u = 'x'"]
+    },
+    {
+      "input": "SET CHARACTER SET utf8mb4",
+      "splitStatements": [
+        {
+          "sql": "SET CHARACTER SET utf8mb4",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET CHARACTER SET utf8mb4"]
+    },
+    {
+      "input": "SET CHARSET utf8mb4",
+      "splitStatements": [
+        {
+          "sql": "SET CHARSET utf8mb4",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET CHARSET utf8mb4"]
+    },
+    {
+      "input": "SET names utf8mb4",
+      "splitStatements": [
+        {
+          "sql": "SET names utf8mb4",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET names utf8mb4"]
+    },
+    {
+      "input": "set @a := 1",
+      "splitStatements": [
+        {
+          "sql": "set @a := 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["set @a := 1"]
+    },
+    {
+      "input": "SET autocommit = 0",
+      "splitStatements": [
+        {
+          "sql": "SET autocommit = 0",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET AUTOCOMMIT"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET autocommit = 0"]
+    },
+    {
+      "input": "SET foreign_key_checks = 0",
+      "splitStatements": [
+        {
+          "sql": "SET foreign_key_checks = 0",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET FOREIGN_KEY_CHECKS"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET foreign_key_checks = 0"]
+    },
+    {
+      "input": "SET ROLE ALL",
+      "splitStatements": [
+        {
+          "sql": "SET ROLE ALL",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET ROLE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET ROLE ALL"]
+    },
+    {
+      "input": "SET DEFAULT ROLE ALL TO u",
+      "splitStatements": [
+        {
+          "sql": "SET DEFAULT ROLE ALL TO u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET DEFAULT"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET DEFAULT ROLE ALL TO u"]
+    },
+    {
+      "input": "INSERT INTO t SELECT * FROM u",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t SELECT * FROM u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT INTO t SELECT * FROM u"]
+    },
+    {
+      "input": "INSERT IGNORE INTO t VALUES (1)",
+      "splitStatements": [
+        {
+          "sql": "INSERT IGNORE INTO t VALUES (1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT IGNORE INTO t VALUES (1)"]
+    },
+    {
+      "input": "INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE a = 1",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE a = 1"]
+    },
+    {
+      "input": "insert into t(a) values(1)",
+      "splitStatements": [
+        {
+          "sql": "insert into t(a) values(1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["insert into t(a) values(1)"]
+    },
+    {
+      "input": "REPLACE t SET a = 1",
+      "splitStatements": [
+        {
+          "sql": "REPLACE t SET a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "REPLACE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["REPLACE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["REPLACE"]
+      },
+      "splitSimple": ["REPLACE t SET a = 1"]
+    },
+    {
+      "input": "DELETE t FROM t JOIN u ON t.id = u.id",
+      "splitStatements": [
+        {
+          "sql": "DELETE t FROM t JOIN u ON t.id = u.id",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["DELETE t FROM t JOIN u ON t.id = u.id"]
+    },
+    {
+      "input": "DELETE FROM t WHERE id = 1",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t WHERE id = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE"]
+      },
+      "splitSimple": ["DELETE FROM t WHERE id = 1"]
+    },
+    {
+      "input": "DELETE FROM t LIMIT 10",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t LIMIT 10",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["DELETE FROM t LIMIT 10"]
+    },
+    {
+      "input": "UPDATE t SET a = 1",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t SET a = 1"]
+    },
+    {
+      "input": "UPDATE t JOIN u ON t.id = u.id SET t.a = u.a",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t JOIN u ON t.id = u.id SET t.a = u.a",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t JOIN u ON t.id = u.id SET t.a = u.a"]
+    },
+    {
+      "input": "UPDATE t SET a = \"WHERE\"",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = \"WHERE\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t SET a = \"WHERE\""]
+    },
+    {
+      "input": "DELETE FROM t WHERE a = ';'",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t WHERE a = ';'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE"]
+      },
+      "splitSimple": ["DELETE FROM t WHERE a = ';'"]
+    },
+    {
+      "input": "DROP DATABASE shop",
+      "splitStatements": [
+        {
+          "sql": "DROP DATABASE shop",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP DATABASE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP DATABASE"]
+      },
+      "splitSimple": ["DROP DATABASE shop"]
+    },
+    {
+      "input": "DROP TABLE IF EXISTS t",
+      "splitStatements": [
+        {
+          "sql": "DROP TABLE IF EXISTS t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["DROP TABLE IF EXISTS t"]
+    },
+    {
+      "input": "DROP   TEMPORARY   TABLE t",
+      "splitStatements": [
+        {
+          "sql": "DROP   TEMPORARY   TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TEMPORARY", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TEMPORARY"]
+      },
+      "splitSimple": ["DROP   TEMPORARY   TABLE t"]
+    },
+    {
+      "input": "drop view v",
+      "splitStatements": [
+        {
+          "sql": "drop view v",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP VIEW", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP VIEW"]
+      },
+      "splitSimple": ["drop view v"]
+    },
+    {
+      "input": "DROP USER u",
+      "splitStatements": [
+        {
+          "sql": "DROP USER u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP USER", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP USER"]
+      },
+      "splitSimple": ["DROP USER u"]
+    },
+    {
+      "input": "TRUNCATE TABLE t",
+      "splitStatements": [
+        {
+          "sql": "TRUNCATE TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "TRUNCATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["TRUNCATE TABLE", "TRUNCATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["TRUNCATE TABLE"]
+      },
+      "splitSimple": ["TRUNCATE TABLE t"]
+    },
+    {
+      "input": "ALTER USER u IDENTIFIED BY \"x\"",
+      "splitStatements": [
+        {
+          "sql": "ALTER USER u IDENTIFIED BY \"x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "ALTER",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ALTER"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["ALTER"]
+      },
+      "splitSimple": ["ALTER USER u IDENTIFIED BY \"x\""]
+    },
+    {
+      "input": "ALTER DATABASE shop CHARACTER SET utf8mb4",
+      "splitStatements": [
+        {
+          "sql": "ALTER DATABASE shop CHARACTER SET utf8mb4",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "ALTER",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ALTER"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["ALTER"]
+      },
+      "splitSimple": ["ALTER DATABASE shop CHARACTER SET utf8mb4"]
+    },
+    {
+      "input": "CREATE DATABASE shop",
+      "splitStatements": [
+        {
+          "sql": "CREATE DATABASE shop",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE DATABASE shop"]
+    },
+    {
+      "input": "CREATE TEMPORARY TABLE t (a int)",
+      "splitStatements": [
+        {
+          "sql": "CREATE TEMPORARY TABLE t (a int)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE TEMPORARY TABLE t (a int)"]
+    },
+    {
+      "input": "CREATE USER u IDENTIFIED BY \"x\"",
+      "splitStatements": [
+        {
+          "sql": "CREATE USER u IDENTIFIED BY \"x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE USER u IDENTIFIED BY \"x\""]
+    },
+    {
+      "input": "CREATE OR REPLACE VIEW v AS SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "CREATE OR REPLACE VIEW v AS SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE OR REPLACE VIEW v AS SELECT 1"]
+    },
+    {
+      "input": "CREATE INDEX i ON t (a)",
+      "splitStatements": [
+        {
+          "sql": "CREATE INDEX i ON t (a)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE INDEX i ON t (a)"]
+    },
+    {
+      "input": "RENAME USER a TO b",
+      "splitStatements": [
+        {
+          "sql": "RENAME USER a TO b",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "RENAME",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["RENAME"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["RENAME"]
+      },
+      "splitSimple": ["RENAME USER a TO b"]
+    },
+    {
+      "input": "GRANT ALL ON shop.* TO u",
+      "splitStatements": [
+        {
+          "sql": "GRANT ALL ON shop.* TO u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "GRANT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["GRANT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["GRANT"]
+      },
+      "splitSimple": ["GRANT ALL ON shop.* TO u"]
+    },
+    {
+      "input": "REVOKE SELECT ON shop.* FROM u",
+      "splitStatements": [
+        {
+          "sql": "REVOKE SELECT ON shop.* FROM u",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "REVOKE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["REVOKE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["REVOKE"]
+      },
+      "splitSimple": ["REVOKE SELECT ON shop.* FROM u"]
+    },
+    {
+      "input": "LOAD XML INFILE 'f' INTO TABLE t",
+      "splitStatements": [
+        {
+          "sql": "LOAD XML INFILE 'f' INTO TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "LOAD",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOAD XML"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOAD XML INFILE 'f' INTO TABLE t"]
+    },
+    {
+      "input": "LOAD DATA LOCAL INFILE 'f' INTO TABLE t",
+      "splitStatements": [
+        {
+          "sql": "LOAD DATA LOCAL INFILE 'f' INTO TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "LOAD",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOAD DATA"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOAD DATA LOCAL INFILE 'f' INTO TABLE t"]
+    },
+    {
+      "input": "IMPORT TABLE FROM 'a.sdi'",
+      "splitStatements": [
+        {
+          "sql": "IMPORT TABLE FROM 'a.sdi'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "IMPORT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["IMPORT TABLE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["IMPORT TABLE FROM 'a.sdi'"]
+    },
+    {
+      "input": "LOCK TABLES t WRITE",
+      "splitStatements": [
+        {
+          "sql": "LOCK TABLES t WRITE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "LOCK",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOCK TABLES"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOCK TABLES t WRITE"]
+    },
+    {
+      "input": "LOCK TABLE t READ",
+      "splitStatements": [
+        {
+          "sql": "LOCK TABLE t READ",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "LOCK",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["LOCK TABLE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["LOCK TABLE t READ"]
+    },
+    {
+      "input": "UNLOCK TABLES",
+      "splitStatements": [
+        {
+          "sql": "UNLOCK TABLES",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "UNLOCK",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UNLOCK"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["UNLOCK TABLES"]
+    },
+    {
+      "input": "OPTIMIZE TABLE t",
+      "splitStatements": [
+        {
+          "sql": "OPTIMIZE TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "OPTIMIZE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["OPTIMIZE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["OPTIMIZE TABLE t"]
+    },
+    {
+      "input": "ANALYZE TABLE t",
+      "splitStatements": [
+        {
+          "sql": "ANALYZE TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "ANALYZE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ANALYZE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["ANALYZE TABLE t"]
+    },
+    {
+      "input": "CHECK TABLE t",
+      "splitStatements": [
+        {
+          "sql": "CHECK TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "CHECK",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CHECK"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CHECK TABLE t"]
+    },
+    {
+      "input": "REPAIR TABLE t",
+      "splitStatements": [
+        {
+          "sql": "REPAIR TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "REPAIR",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["REPAIR"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["REPAIR TABLE t"]
+    },
+    {
+      "input": "FLUSH PRIVILEGES",
+      "splitStatements": [
+        {
+          "sql": "FLUSH PRIVILEGES",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "FLUSH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["FLUSH"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["FLUSH PRIVILEGES"]
+    },
+    {
+      "input": "FLUSH TABLES WITH READ LOCK",
+      "splitStatements": [
+        {
+          "sql": "FLUSH TABLES WITH READ LOCK",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "FLUSH",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["FLUSH"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["FLUSH TABLES WITH READ LOCK"]
+    },
+    {
+      "input": "KILL 42",
+      "splitStatements": [
+        {
+          "sql": "KILL 42",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "KILL",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["KILL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["KILL 42"]
+    },
+    {
+      "input": "KILL QUERY 42",
+      "splitStatements": [
+        {
+          "sql": "KILL QUERY 42",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "KILL",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["KILL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["KILL QUERY 42"]
+    },
+    {
+      "input": "RESET MASTER",
+      "splitStatements": [
+        {
+          "sql": "RESET MASTER",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "RESET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["RESET"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["RESET MASTER"]
+    },
+    {
+      "input": "PURGE BINARY LOGS BEFORE NOW()",
+      "splitStatements": [
+        {
+          "sql": "PURGE BINARY LOGS BEFORE NOW()",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "PURGE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["PURGE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["PURGE BINARY LOGS BEFORE NOW()"]
+    },
+    {
+      "input": "START TRANSACTION",
+      "splitStatements": [
+        {
+          "sql": "START TRANSACTION",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "START",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["START"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["START TRANSACTION"]
+    },
+    {
+      "input": "BEGIN",
+      "splitStatements": [
+        {
+          "sql": "BEGIN",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "BEGIN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["BEGIN"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["BEGIN"]
+    },
+    {
+      "input": "COMMIT",
+      "splitStatements": [
+        {
+          "sql": "COMMIT",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "COMMIT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["COMMIT"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["COMMIT"]
+    },
+    {
+      "input": "ROLLBACK",
+      "splitStatements": [
+        {
+          "sql": "ROLLBACK",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "ROLLBACK",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ROLLBACK"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["ROLLBACK"]
+    },
+    {
+      "input": "SAVEPOINT s",
+      "splitStatements": [
+        {
+          "sql": "SAVEPOINT s",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SAVEPOINT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SAVEPOINT"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SAVEPOINT s"]
+    },
+    {
+      "input": "XA START \"x\"",
+      "splitStatements": [
+        {
+          "sql": "XA START \"x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "XA",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["XA"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["XA START \"x\""]
+    },
+    {
+      "input": "HANDLER t OPEN",
+      "splitStatements": [
+        {
+          "sql": "HANDLER t OPEN",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "HANDLER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["HANDLER"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["HANDLER t OPEN"]
+    },
+    {
+      "input": "DO SLEEP(1)",
+      "splitStatements": [
+        {
+          "sql": "DO SLEEP(1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DO",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DO"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DO SLEEP(1)"]
+    },
+    {
+      "input": "DO RELEASE_LOCK(\"x\")",
+      "splitStatements": [
+        {
+          "sql": "DO RELEASE_LOCK(\"x\")",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DO",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DO"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DO RELEASE_LOCK(\"x\")"]
+    },
+    {
+      "input": "PREPARE s FROM \"DELETE FROM t\"",
+      "splitStatements": [
+        {
+          "sql": "PREPARE s FROM \"DELETE FROM t\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "PREPARE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["PREPARE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["PREPARE s FROM \"DELETE FROM t\""]
+    },
+    {
+      "input": "EXECUTE s",
+      "splitStatements": [
+        {
+          "sql": "EXECUTE s",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "EXECUTE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["EXECUTE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["EXECUTE s"]
+    },
+    {
+      "input": "DEALLOCATE PREPARE s",
+      "splitStatements": [
+        {
+          "sql": "DEALLOCATE PREPARE s",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DEALLOCATE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DEALLOCATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DEALLOCATE PREPARE s"]
+    },
+    {
+      "input": "INSTALL PLUGIN p SONAME \"p.so\"",
+      "splitStatements": [
+        {
+          "sql": "INSTALL PLUGIN p SONAME \"p.so\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "INSTALL",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSTALL"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["INSTALL PLUGIN p SONAME \"p.so\""]
+    },
+    {
+      "input": "SHUTDOWN",
+      "splitStatements": [
+        {
+          "sql": "SHUTDOWN",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SHUTDOWN",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SHUTDOWN"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SHUTDOWN"]
+    },
+    {
+      "input": "CHANGE MASTER TO MASTER_HOST = \"h\"",
+      "splitStatements": [
+        {
+          "sql": "CHANGE MASTER TO MASTER_HOST = \"h\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "CHANGE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CHANGE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CHANGE MASTER TO MASTER_HOST = \"h\""]
+    },
+    {
+      "input": "STOP REPLICA",
+      "splitStatements": [
+        {
+          "sql": "STOP REPLICA",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "STOP",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["STOP"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["STOP REPLICA"]
+    },
+    {
+      "input": "CACHE INDEX t IN c",
+      "splitStatements": [
+        {
+          "sql": "CACHE INDEX t IN c",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "CACHE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CACHE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CACHE INDEX t IN c"]
+    },
+    {
+      "input": "CLONE LOCAL DATA DIRECTORY = \"/x\"",
+      "splitStatements": [
+        {
+          "sql": "CLONE LOCAL DATA DIRECTORY = \"/x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "CLONE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CLONE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CLONE LOCAL DATA DIRECTORY = \"/x\""]
+    },
+    {
+      "input": "CHECKSUM TABLE t",
+      "splitStatements": [
+        {
+          "sql": "CHECKSUM TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "CHECKSUM",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CHECKSUM"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["CHECKSUM TABLE t"]
+    },
+    {
+      "input": "BINLOG \"x\"",
+      "splitStatements": [
+        {
+          "sql": "BINLOG \"x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "BINLOG",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["BINLOG"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["BINLOG \"x\""]
+    },
+    {
+      "input": "/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */"]
+    },
+    {
+      "input": "/*!40101 SET NAMES utf8mb4 */",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 SET NAMES utf8mb4 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 SET NAMES utf8mb4 */"]
+    },
+    {
+      "input": "/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */",
+      "splitStatements": [
+        {
+          "sql": "/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */"
+      ]
+    },
+    {
+      "input": "/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER t1 BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1 */",
+      "splitStatements": [
+        {
+          "sql": "/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER t1 BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER t1 BEFORE INSERT ON t FOR EACH ROW SET NEW.a = 1 */"
+      ]
+    },
+    {
+      "input": "/*! DELETE FROM t */",
+      "splitStatements": [
+        {
+          "sql": "/*! DELETE FROM t */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*! DELETE FROM t */"]
+    },
+    {
+      "input": "/*!DELETE FROM t */",
+      "splitStatements": [
+        {
+          "sql": "/*!DELETE FROM t */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!DELETE FROM t */"]
+    },
+    {
+      "input": "/*!80000 SELECT 1 */",
+      "splitStatements": [
+        {
+          "sql": "/*!80000 SELECT 1 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!80000 SELECT 1 */"]
+    },
+    {
+      "input": "/*+ SET_VAR(sort_buffer_size = 16M) */ SELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/*+ SET_VAR(sort_buffer_size = 16M) */ SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*+ SET_VAR(sort_buffer_size = 16M) */ SELECT 1"]
+    },
+    {
+      "input": "SELECT /*+ BKA(t1) */ * FROM t1",
+      "splitStatements": [
+        {
+          "sql": "SELECT /*+ BKA(t1) */ * FROM t1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT /*+ BKA(t1) */ * FROM t1"]
+    },
+    {
+      "input": "UPDATE /*+ NO_RANGE_OPTIMIZATION(t) */ t SET a = 1 WHERE b = 2",
+      "splitStatements": [
+        {
+          "sql": "UPDATE /*+ NO_RANGE_OPTIMIZATION(t) */ t SET a = 1 WHERE b = 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE"]
+      },
+      "splitSimple": ["UPDATE /*+ NO_RANGE_OPTIMIZATION(t) */ t SET a = 1 WHERE b = 2"]
+    },
+    {
+      "input": "/*M!100100 DELETE FROM t */",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*M!100100 DELETE FROM t */"]
+    },
+    {
+      "input": "/*!40000 ALTER TABLE `t` DISABLE KEYS */;\nINSERT INTO `t` VALUES (1);\n/*!40000 ALTER TABLE `t` ENABLE KEYS */;",
+      "splitStatements": [
+        {
+          "sql": "/*!40000 ALTER TABLE `t` DISABLE KEYS */",
+          "startLine": 1
+        },
+        {
+          "sql": "INSERT INTO `t` VALUES (1)",
+          "startLine": 2
+        },
+        {
+          "sql": "/*!40000 ALTER TABLE `t` ENABLE KEYS */",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT", "ALTER"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": [
+        "/*!40000 ALTER TABLE `t` DISABLE KEYS */",
+        "INSERT INTO `t` VALUES (1)",
+        "/*!40000 ALTER TABLE `t` ENABLE KEYS */"
+      ]
+    },
+    {
+      "input": "/*!40000 unterminated",
+      "splitStatements": [
+        {
+          "sql": "/*!40000 unterminated",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UNTERMINATED"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40000 unterminated"]
+    },
+    {
+      "input": "DELIMITER ;;\nCREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1; END;;\nDELIMITER ;",
+      "splitStatements": [
+        {
+          "sql": "CREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1; END",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE", "END"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": [
+        "DELIMITER",
+        "CREATE TRIGGER x BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1",
+        "END",
+        "DELIMITER"
+      ]
+    },
+    {
+      "input": "DELIMITER //\nSELECT 1//\nSELECT 2//",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER //\nSELECT 1//\nSELECT 2//"]
+    },
+    {
+      "input": "DELIMITER $$\nSELECT 1$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nSELECT 1$$"]
+    },
+    {
+      "input": "  DELIMITER $$\nSELECT 1$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nSELECT 1$$"]
+    },
+    {
+      "input": "DELIMITER\t$$\nSELECT 1$$\n",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER\t$$\nSELECT 1$$"]
+    },
+    {
+      "input": "DELIMITER $$ \r\nSELECT 1$$\r\nDELIMITER ;\r\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$ \r\nSELECT 1$$\r\nDELIMITER", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1; DELIMITER $$\nSELECT 2$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "DELIMITER $$\nSELECT 2$$",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELIMITER"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "DELIMITER $$\nSELECT 2$$"]
+    },
+    {
+      "input": "DELIMITER",
+      "splitStatements": [
+        {
+          "sql": "DELIMITER",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELIMITER"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER"]
+    },
+    {
+      "input": "DELIMITER \nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "DELIMITER \nSELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELIMITER"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER \nSELECT 1"]
+    },
+    {
+      "input": "DELIMITERX $$",
+      "splitStatements": [
+        {
+          "sql": "DELIMITERX $$",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITERX",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELIMITERX"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITERX $$"]
+    },
+    {
+      "input": "DELIMITER $$",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$"]
+    },
+    {
+      "input": "DELIMITER $$\n",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$"]
+    },
+    {
+      "input": "DELIMITER GO\nSELECT 1 GO\nSELECT 2 GO",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER GO\nSELECT 1 GO\nSELECT 2 GO"]
+    },
+    {
+      "input": "DELIMITER ;\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER", "SELECT 1"]
+    },
+    {
+      "input": "SELECT 1;\nDELIMITER $$\nCREATE FUNCTION f() RETURNS INT DETERMINISTIC BEGIN RETURN 1; END$$\nDELIMITER ;\nSELECT f();",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "CREATE FUNCTION f() RETURNS INT DETERMINISTIC BEGIN RETURN 1; END",
+          "startLine": 3
+        },
+        {
+          "sql": "SELECT f()",
+          "startLine": 5
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE", "END$$"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "SELECT 1",
+        "DELIMITER $$\nCREATE FUNCTION f() RETURNS INT DETERMINISTIC BEGIN RETURN 1",
+        "END$$\nDELIMITER",
+        "SELECT f()"
+      ]
+    },
+    {
+      "input": "CREATE PROCEDURE p() BEGIN SELECT 1; SELECT 2; END",
+      "splitStatements": [
+        {
+          "sql": "CREATE PROCEDURE p() BEGIN SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        },
+        {
+          "sql": "END",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE", "END"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE PROCEDURE p() BEGIN SELECT 1", "SELECT 2", "END"]
+    },
+    {
+      "input": "-- DELIMITER $$\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "-- DELIMITER $$\nSELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["-- DELIMITER $$\nSELECT 1"]
+    },
+    {
+      "input": "/* x */ DELIMITER $$\nSELECT 1$$",
+      "splitStatements": [
+        {
+          "sql": "/* x */ DELIMITER $$\nSELECT 1$$",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* x */ DELIMITER $$\nSELECT 1$$"]
+    },
+    {
+      "input": "select 1;\ndelimiter $$\nselect 2$$\ndelimiter ;",
+      "splitStatements": [
+        {
+          "sql": "select 1",
+          "startLine": 1
+        },
+        {
+          "sql": "select 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["select 1", "delimiter $$\nselect 2$$\ndelimiter"]
+    },
+    {
+      "input": "\n\n\nSELECT 1;\n\n\nSELECT\n2;\n",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 4
+        },
+        {
+          "sql": "SELECT\n2",
+          "startLine": 7
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT\n2"]
+    },
+    {
+      "input": "SELECT\n  a,\n  b\nFROM t;\nSELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT\n  a,\n  b\nFROM t",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 5
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT\n  a,\n  b\nFROM t", "SELECT 2"]
+    },
+    {
+      "input": "\tSELECT 1\t;\tSELECT 2\t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1\f;\u000bSELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "SELECT 2"]
+    },
+    {
+      "input": "/* a\nb */\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "/* a\nb */\nSELECT 1",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* a\nb */\nSELECT 1"]
+    },
+    {
+      "input": "SELECT 'a\nb\nc';\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a\nb\nc'",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'a\nb\nc'", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 'a\\\nb';\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a\\\nb'",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'a\\\nb'", "SELECT 2"]
+    },
+    {
+      "input": "SELECT \"a\nb\", `c\nd`;\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"a\nb\", `c\nd`",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT \"a\nb\", `c\nd`", "SELECT 2"]
+    },
+    {
+      "input": "# a\n# b\nSELECT 1;\n# c",
+      "splitStatements": [
+        {
+          "sql": "# a\n# b\nSELECT 1",
+          "startLine": 3
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["# a\n# b\nSELECT 1", "# c"]
+    },
+    {
+      "input": "SELECT 1;\n-- tail",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "-- tail"]
+    },
+    {
+      "input": "SELECT 1 -- tail",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 -- tail",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 -- tail"]
+    },
+    {
+      "input": "SELECT 1 #tail;\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 #tail;\nSELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 #tail", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1;-- tail\nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "-- tail\nSELECT 2",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "-- tail\nSELECT 2"]
+    },
+    {
+      "input": "SELECT '\\\\'; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT '\\\\'",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT '\\\\'", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT '\\''; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT '\\''",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT '\\''", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 'a''b'; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a''b'",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT 'a''b'", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT \"a\"\"b\"; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"a\"\"b\"",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT \"a\"\"b\"", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 'a\\",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a\\",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 'a\\"]
+    },
+    {
+      "input": "SELECT `a\\` FROM t; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT `a\\` FROM t",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT `a\\` FROM t; DELETE FROM t"]
+    },
+    {
+      "input": "SELECT N'x', _utf8mb4'y', X'41', B'1', 0x41; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT N'x', _utf8mb4'y', X'41', B'1', 0x41",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT N'x', _utf8mb4'y', X'41', B'1', 0x41", "DELETE FROM t"]
+    },
+    {
+      "input": "SELECT 'emoji 😀; ñ'; DELETE FROM `tabla_ñ`",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'emoji 😀; ñ'",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM `tabla_ñ`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT 'emoji 😀; ñ'", "DELETE FROM `tabla_ñ`"]
+    },
+    {
+      "input": "SELECT 1-- 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1-- 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1-- 2"]
+    },
+    {
+      "input": "SELECT 1--2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1--2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1--2"]
+    },
+    {
+      "input": "SELECT 1 - -2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 - -2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 - -2"]
+    },
+    {
+      "input": "SELECT a#b FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT a#b FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT a#b FROM t"]
+    },
+    {
+      "input": "SELECT $$ FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT $$ FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT $$ FROM t"]
+    },
+    {
+      "input": "DELETE FROM t WHERE 1",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t WHERE 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE"]
+      },
+      "splitSimple": ["DELETE FROM t WHERE 1"]
+    },
+    {
+      "input": "delete from t where (a = 1)",
+      "splitStatements": [
+        {
+          "sql": "delete from t where (a = 1)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE"]
+      },
+      "splitSimple": ["delete from t where (a = 1)"]
+    },
+    {
+      "input": "UPDATE t SET a = 1 -- WHERE a = 2",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = 1 -- WHERE a = 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t SET a = 1 -- WHERE a = 2"]
+    },
+    {
+      "input": "UPDATE t SET a = 'x WHERE y'",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = 'x WHERE y'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t SET a = 'x WHERE y'"]
+    },
+    {
+      "input": "UPDATE t SET a = 1 /* WHERE b */",
+      "splitStatements": [
+        {
+          "sql": "UPDATE t SET a = 1 /* WHERE b */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE"]
+      },
+      "splitSimple": ["UPDATE t SET a = 1 /* WHERE b */"]
+    },
+    {
+      "input": "DELETE FROM t # WHERE id = 1",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM t # WHERE id = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["DELETE FROM t # WHERE id = 1"]
+    },
+    {
+      "input": "TRUNCATE   t",
+      "splitStatements": [
+        {
+          "sql": "TRUNCATE   t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "TRUNCATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["TRUNCATE T", "TRUNCATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["TRUNCATE T"]
+      },
+      "splitSimple": ["TRUNCATE   t"]
+    },
+    {
+      "input": "DROP",
+      "splitStatements": [
+        {
+          "sql": "DROP",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP"]
+      },
+      "splitSimple": ["DROP"]
+    },
+    {
+      "input": "ALTER",
+      "splitStatements": [
+        {
+          "sql": "ALTER",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "ALTER",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["ALTER"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["ALTER"]
+      },
+      "splitSimple": ["ALTER"]
+    },
+    {
+      "input": "SET PASSWORD",
+      "splitStatements": [
+        {
+          "sql": "SET PASSWORD",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET", "SET PASSWORD"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["SET"]
+      },
+      "splitSimple": ["SET PASSWORD"]
+    },
+    {
+      "input": "SET PASSWORD FOR 'u'@'%' = 'x'",
+      "splitStatements": [
+        {
+          "sql": "SET PASSWORD FOR 'u'@'%' = 'x'",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SET", "SET PASSWORD"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["SET"]
+      },
+      "splitSimple": ["SET PASSWORD FOR 'u'@'%' = 'x'"]
+    },
+    {
+      "input": "INSERT",
+      "splitStatements": [
+        {
+          "sql": "INSERT",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT"]
+    },
+    {
+      "input": "CREATE",
+      "splitStatements": [
+        {
+          "sql": "CREATE",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "CREATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["CREATE"]
+      },
+      "splitSimple": ["CREATE"]
+    },
+    {
+      "input": "GRANT",
+      "splitStatements": [
+        {
+          "sql": "GRANT",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "GRANT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["GRANT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["GRANT"]
+      },
+      "splitSimple": ["GRANT"]
+    },
+    {
+      "input": "DROP TABLE a; DROP TABLE b; DROP TABLE a",
+      "splitStatements": [
+        {
+          "sql": "DROP TABLE a",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE b",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE a",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DROP",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["DROP TABLE a", "DROP TABLE b", "DROP TABLE a"]
+    },
+    {
+      "input": "DELETE FROM a; DELETE FROM b",
+      "splitStatements": [
+        {
+          "sql": "DELETE FROM a",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM b",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "DELETE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["DELETE FROM a", "DELETE FROM b"]
+    },
+    {
+      "input": "UPDATE a SET x = 1; UPDATE b SET y = 2 WHERE z",
+      "splitStatements": [
+        {
+          "sql": "UPDATE a SET x = 1",
+          "startLine": 1
+        },
+        {
+          "sql": "UPDATE b SET y = 2 WHERE z",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "UPDATE",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE sin WHERE", "UPDATE"]
+      },
+      "splitSimple": ["UPDATE a SET x = 1", "UPDATE b SET y = 2 WHERE z"]
+    },
+    {
+      "input": "SELECT 1; INSERT INTO t VALUES (1); SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "INSERT INTO t VALUES (1)",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["SELECT 1", "INSERT INTO t VALUES (1)", "SELECT 2"]
+    },
+    {
+      "input": "INSERT INTO t VALUES (1); INSERT INTO u VALUES (2)",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES (1)",
+          "startLine": 1
+        },
+        {
+          "sql": "INSERT INTO u VALUES (2)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT INTO t VALUES (1)", "INSERT INTO u VALUES (2)"]
+    },
+    {
+      "input": "INSERT INTO t VALUES ('/* not a comment */'); DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES ('/* not a comment */')",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT", "DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT", "DROP TABLE"]
+      },
+      "splitSimple": ["INSERT INTO t VALUES ('/* not a comment */')", "DROP TABLE t"]
+    },
+    {
+      "input": "INSERT INTO t VALUES ('-- x'); DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "INSERT INTO t VALUES ('-- x')",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "INSERT",
+      "isObviousWrite": true,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["INSERT", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["INSERT"]
+      },
+      "splitSimple": ["INSERT INTO t VALUES ('-- x')", "DROP TABLE t"]
+    },
+    {
+      "input": "SELECT \"x\" -- \"unbalanced\n; DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"x\" -- \"unbalanced",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["SELECT \"x\" -- \"unbalanced\n; DROP TABLE t"]
+    },
+    {
+      "input": "SELECT /* ; */ 1; DROP TABLE t",
+      "splitStatements": [
+        {
+          "sql": "SELECT /* ; */ 1",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["SELECT /*", "*/ 1", "DROP TABLE t"]
+    },
+    {
+      "input": "SELECT 1 /*; DROP TABLE t */",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 /*; DROP TABLE t */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 /*", "DROP TABLE t */"]
+    },
+    {
+      "input": "USE shop;\nSELECT * FROM t;\nUPDATE t SET a = 1 WHERE id = 2;\nCOMMIT;",
+      "splitStatements": [
+        {
+          "sql": "USE shop",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT * FROM t",
+          "startLine": 2
+        },
+        {
+          "sql": "UPDATE t SET a = 1 WHERE id = 2",
+          "startLine": 3
+        },
+        {
+          "sql": "COMMIT",
+          "startLine": 4
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "USE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["UPDATE", "COMMIT"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["UPDATE"]
+      },
+      "splitSimple": ["USE shop", "SELECT * FROM t", "UPDATE t SET a = 1 WHERE id = 2", "COMMIT"]
+    },
+    {
+      "input": "START TRANSACTION; DELETE FROM t WHERE id = 1; ROLLBACK;",
+      "splitStatements": [
+        {
+          "sql": "START TRANSACTION",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t WHERE id = 1",
+          "startLine": 1
+        },
+        {
+          "sql": "ROLLBACK",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "START",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE", "START", "ROLLBACK"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE"]
+      },
+      "splitSimple": ["START TRANSACTION", "DELETE FROM t WHERE id = 1", "ROLLBACK"]
+    },
+    {
+      "input": "SET @x = (SELECT COUNT(*) FROM t); SELECT @x",
+      "splitStatements": [
+        {
+          "sql": "SET @x = (SELECT COUNT(*) FROM t)",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT @x",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @x = (SELECT COUNT(*) FROM t)", "SELECT @x"]
+    },
+    {
+      "input": "SET @x = 1, @@SESSION.sql_mode = \"\"",
+      "splitStatements": [
+        {
+          "sql": "SET @x = 1, @@SESSION.sql_mode = \"\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @x = 1, @@SESSION.sql_mode = \"\""]
+    },
+    {
+      "input": "SET @x = 1, GLOBAL read_only = 1",
+      "splitStatements": [
+        {
+          "sql": "SET @x = 1, GLOBAL read_only = 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SET",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SET @x = 1, GLOBAL read_only = 1"]
+    },
+    {
+      "input": "SHOW TABLES; DROP TABLE t; SHOW TABLES",
+      "splitStatements": [
+        {
+          "sql": "SHOW TABLES",
+          "startLine": 1
+        },
+        {
+          "sql": "DROP TABLE t",
+          "startLine": 1
+        },
+        {
+          "sql": "SHOW TABLES",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SHOW",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP TABLE", "DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DROP TABLE"]
+      },
+      "splitSimple": ["SHOW TABLES", "DROP TABLE t", "SHOW TABLES"]
+    },
+    {
+      "input": "  \n  select 1  \n;  \n  ",
+      "splitStatements": [
+        {
+          "sql": "select 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["select 1"]
+    },
+    {
+      "input": "select\n*\nfrom\nt\nfor\nupdate",
+      "splitStatements": [
+        {
+          "sql": "select\n*\nfrom\nt\nfor\nupdate",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["select\n*\nfrom\nt\nfor\nupdate"]
+    },
+    {
+      "input": "SELECT * FROM t WHERE a IN (SELECT b FROM u FOR UPDATE)",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t WHERE a IN (SELECT b FROM u FOR UPDATE)",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t WHERE a IN (SELECT b FROM u FOR UPDATE)"]
+    },
+    {
+      "input": "SELECT * FROM t WHERE note = \"for update\"",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t WHERE note = \"for update\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t WHERE note = \"for update\""]
+    },
+    {
+      "input": "SELECT * FROM `insert`",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM `insert`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM `insert`"]
+    },
+    {
+      "input": "SELECT * FROM t AS `update`",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t AS `update`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t AS `update`"]
+    },
+    {
+      "input": "SELECT insert_id FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT insert_id FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT insert_id FROM t"]
+    },
+    {
+      "input": "SELECT * FROM t UNION SELECT * FROM u INTO OUTFILE \"/tmp/x\"",
+      "splitStatements": [
+        {
+          "sql": "SELECT * FROM t UNION SELECT * FROM u INTO OUTFILE \"/tmp/x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT * FROM t UNION SELECT * FROM u INTO OUTFILE \"/tmp/x\""]
+    },
+    {
+      "input": "VALUES ROW(1) INTO OUTFILE \"/x\"",
+      "splitStatements": [
+        {
+          "sql": "VALUES ROW(1) INTO OUTFILE \"/x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "VALUES",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["VALUES ROW(1) INTO OUTFILE \"/x\""]
+    },
+    {
+      "input": "TABLE t INTO OUTFILE \"/x\"",
+      "splitStatements": [
+        {
+          "sql": "TABLE t INTO OUTFILE \"/x\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "TABLE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["SELECT con efectos"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["TABLE t INTO OUTFILE \"/x\""]
+    },
+    {
+      "input": "SHOW TABLES LIKE \"%delete%\"",
+      "splitStatements": [
+        {
+          "sql": "SHOW TABLES LIKE \"%delete%\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SHOW",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SHOW TABLES LIKE \"%delete%\""]
+    },
+    {
+      "input": "DESCRIBE DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "DESCRIBE DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DESCRIBE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DESCRIBE DELETE FROM t"]
+    },
+    {
+      "input": "USE `delete`",
+      "splitStatements": [
+        {
+          "sql": "USE `delete`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "USE",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["USE `delete`"]
+    },
+    {
+      "input": "HELP \"DELETE\"",
+      "splitStatements": [
+        {
+          "sql": "HELP \"DELETE\"",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "HELP",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["HELP \"DELETE\""]
+    },
+    {
+      "input": "/*+ hint */",
+      "splitStatements": [
+        {
+          "sql": "/*+ hint */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*+ hint */"]
+    },
+    {
+      "input": "/*+ x */\nSELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/*+ x */\nSELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*+ x */\nSELECT 1"]
+    },
+    {
+      "input": "/*!40101 SET NAMES utf8 */",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 SET NAMES utf8 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 SET NAMES utf8 */"]
+    },
+    {
+      "input": "\n/*!40101 SET NAMES utf8 */",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 SET NAMES utf8 */",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 SET NAMES utf8 */"]
+    },
+    {
+      "input": "/*!40101 x */\n\nSELECT 1;",
+      "splitStatements": [
+        {
+          "sql": "/*!40101 x */\n\nSELECT 1",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["X"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40101 x */\n\nSELECT 1"]
+    },
+    {
+      "input": "/* plain */\nSELECT 1",
+      "splitStatements": [
+        {
+          "sql": "/* plain */\nSELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* plain */\nSELECT 1"]
+    },
+    {
+      "input": "/* plain */",
+      "splitStatements": [],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/* plain */"]
+    },
+    {
+      "input": "SELECT 1;/*+ x */;SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "/*+ x */",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "/*+ x */", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1;/* x */;SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1", "/* x */", "SELECT 2"]
+    },
+    {
+      "input": "#!\nSELECT 1",
+      "splitStatements": [
+        {
+          "sql": "#!\nSELECT 1",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["#!\nSELECT 1"]
+    },
+    {
+      "input": "DELIMITER $$\nSELECT 1; SELECT 2$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1; SELECT 2",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nSELECT 1", "SELECT 2$$"]
+    },
+    {
+      "input": "DELIMITER $$\nSELECT \"$$\"$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"$$\"",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nSELECT \"$$\"$$"]
+    },
+    {
+      "input": "DELIMITER $$\nSELECT '$$' $$ SELECT 2 $$",
+      "splitStatements": [
+        {
+          "sql": "SELECT '$$'",
+          "startLine": 2
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER $$\nSELECT '$$' $$ SELECT 2 $$"]
+    },
+    {
+      "input": "SELECT 1 --",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 --",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 --"]
+    },
+    {
+      "input": "SELECT 1 --;SELECT 2",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 --",
+          "startLine": 1
+        },
+        {
+          "sql": "SELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 --", "SELECT 2"]
+    },
+    {
+      "input": "SELECT 1 -- \nSELECT 2;",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 -- \nSELECT 2",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT 1 -- \nSELECT 2"]
+    },
+    {
+      "input": "/*!50001 x */",
+      "splitStatements": [
+        {
+          "sql": "/*!50001 x */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["X"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!50001 x */"]
+    },
+    {
+      "input": "SELECT 1 /*!*/ ; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1 /*!*/",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT 1 /*!*/", "DELETE FROM t"]
+    },
+    {
+      "input": "/*!12345DELETE FROM t*/",
+      "splitStatements": [
+        {
+          "sql": "/*!12345DELETE FROM t*/",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!12345DELETE FROM t*/"]
+    },
+    {
+      "input": "/*!50003 CREATE*/ /*!50020 DEFINER=`u`@`%`*/ /*!50003 PROCEDURE p() SELECT 1 */",
+      "splitStatements": [
+        {
+          "sql": "/*!50003 CREATE*/ /*!50020 DEFINER=`u`@`%`*/ /*!50003 PROCEDURE p() SELECT 1 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["CREATE"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": [
+        "/*!50003 CREATE*/ /*!50020 DEFINER=`u`@`%`*/ /*!50003 PROCEDURE p() SELECT 1 */"
+      ]
+    },
+    {
+      "input": "SELECT /*! STRAIGHT_JOIN */ * FROM a, b",
+      "splitStatements": [
+        {
+          "sql": "SELECT /*! STRAIGHT_JOIN */ * FROM a, b",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["SELECT /*! STRAIGHT_JOIN */ * FROM a, b"]
+    },
+    {
+      "input": "/*!40000 DROP TABLE t */ ; /*!40000 SELECT 1 */",
+      "splitStatements": [
+        {
+          "sql": "/*!40000 DROP TABLE t */",
+          "startLine": 1
+        },
+        {
+          "sql": "/*!40000 SELECT 1 */",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DROP"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["/*!40000 DROP TABLE t */", "/*!40000 SELECT 1 */"]
+    },
+    {
+      "input": "SELECT 'a' /* ' */ ; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT 'a' /* ' */",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT 'a' /* ' */ ; DELETE FROM t"]
+    },
+    {
+      "input": "SELECT \"a\" # \"\n; DELETE FROM t",
+      "splitStatements": [
+        {
+          "sql": "SELECT \"a\" # \"",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM t",
+          "startLine": 2
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT \"a\" # \"\n; DELETE FROM t"]
+    },
+    {
+      "input": "SELECT `a;b` FROM t; DELETE FROM `x;y`",
+      "splitStatements": [
+        {
+          "sql": "SELECT `a;b` FROM t",
+          "startLine": 1
+        },
+        {
+          "sql": "DELETE FROM `x;y`",
+          "startLine": 1
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["SELECT `a;b` FROM t", "DELETE FROM `x;y`"]
+    },
+    {
+      "input": "select 1;\nDELIMITER //\nselect 2 //\nDELIMITER ;\ndelete from t;",
+      "splitStatements": [
+        {
+          "sql": "select 1",
+          "startLine": 1
+        },
+        {
+          "sql": "select 2",
+          "startLine": 3
+        },
+        {
+          "sql": "delete from t",
+          "startLine": 5
+        }
+      ],
+      "scriptObviouslyWrites": true,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["DELETE sin WHERE", "DELETE"]
+      },
+      "analyzeDestructive": {
+        "destructive": true,
+        "reasons": ["DELETE sin WHERE"]
+      },
+      "splitSimple": ["select 1", "DELIMITER //\nselect 2 //\nDELIMITER", "delete from t"]
+    },
+    {
+      "input": "DELIMITER ;\n\nDELIMITER $$\nSELECT 1$$\nSELECT 2;$$",
+      "splitStatements": [
+        {
+          "sql": "SELECT 1",
+          "startLine": 4
+        },
+        {
+          "sql": "SELECT 2;",
+          "startLine": 5
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "DELIMITER",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": true,
+        "reasons": ["$$"]
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["DELIMITER", "DELIMITER $$\nSELECT 1$$\nSELECT 2", "$$"]
+    },
+    {
+      "input": "\n\n-- c\n\nSELECT 1;\n\n/* c\n*/\nSELECT 2;\n# c\nSELECT 3",
+      "splitStatements": [
+        {
+          "sql": "-- c\n\nSELECT 1",
+          "startLine": 5
+        },
+        {
+          "sql": "/* c\n*/\nSELECT 2",
+          "startLine": 9
+        },
+        {
+          "sql": "# c\nSELECT 3",
+          "startLine": 11
+        }
+      ],
+      "scriptObviouslyWrites": false,
+      "leadingKeyword": "SELECT",
+      "isObviousWrite": false,
+      "analyzeWrites": {
+        "writes": false,
+        "reasons": []
+      },
+      "analyzeDestructive": {
+        "destructive": false,
+        "reasons": []
+      },
+      "splitSimple": ["-- c\n\nSELECT 1", "/* c\n*/\nSELECT 2", "# c\nSELECT 3"]
+    }
+  ],
+  "quoteIdent": [
+    {
+      "input": "",
+      "output": "``"
+    },
+    {
+      "input": "t",
+      "output": "`t`"
+    },
+    {
+      "input": "my table",
+      "output": "`my table`"
+    },
+    {
+      "input": "a`b",
+      "output": "`a``b`"
+    },
+    {
+      "input": "``",
+      "output": "``````"
+    },
+    {
+      "input": "it's",
+      "output": "`it's`"
+    },
+    {
+      "input": "a\"b",
+      "output": "`a\"b`"
+    },
+    {
+      "input": "back\\slash",
+      "output": "`back\\slash`"
+    },
+    {
+      "input": "tabla_ñ",
+      "output": "`tabla_ñ`"
+    },
+    {
+      "input": "😀",
+      "output": "`😀`"
+    },
+    {
+      "input": "a.b",
+      "output": "`a.b`"
+    },
+    {
+      "input": "Mixed_Case",
+      "output": "`Mixed_Case`"
+    },
+    {
+      "input": "select",
+      "output": "`select`"
+    },
+    {
+      "input": " leading",
+      "output": "` leading`"
+    },
+    {
+      "input": "trailing ",
+      "output": "`trailing `"
+    },
+    {
+      "input": "new\nline",
+      "output": "`new\nline`"
+    },
+    {
+      "input": "tab\tname",
+      "output": "`tab\tname`"
+    },
+    {
+      "input": "\u0000nul",
+      "output": "`\u0000nul`"
+    }
+  ],
+  "quoteString": [
+    {
+      "input": "",
+      "output": "''"
+    },
+    {
+      "input": "x",
+      "output": "'x'"
+    },
+    {
+      "input": "it's",
+      "output": "'it\\'s'"
+    },
+    {
+      "input": "''",
+      "output": "'\\'\\''"
+    },
+    {
+      "input": "back\\slash",
+      "output": "'back\\\\slash'"
+    },
+    {
+      "input": "\\'",
+      "output": "'\\\\\\''"
+    },
+    {
+      "input": "\\",
+      "output": "'\\\\'"
+    },
+    {
+      "input": "a\"b",
+      "output": "'a\"b'"
+    },
+    {
+      "input": "a`b",
+      "output": "'a`b'"
+    },
+    {
+      "input": "ñandú 😀",
+      "output": "'ñandú 😀'"
+    },
+    {
+      "input": "new\nline",
+      "output": "'new\nline'"
+    },
+    {
+      "input": "cr\rlf\r\n",
+      "output": "'cr\rlf\r\n'"
+    },
+    {
+      "input": "tab\t",
+      "output": "'tab\t'"
+    },
+    {
+      "input": "\u0000nul",
+      "output": "'\u0000nul'"
+    },
+    {
+      "input": "%_",
+      "output": "'%_'"
+    },
+    {
+      "input": "\u001a",
+      "output": "'\u001a'"
+    },
+    {
+      "input": "'; DROP TABLE t; --",
+      "output": "'\\'; DROP TABLE t; --'"
+    }
+  ],
+  "qualified": [
+    {
+      "schema": "shop",
+      "name": "t",
+      "output": "`shop`.`t`"
+    },
+    {
+      "schema": null,
+      "name": "t",
+      "output": "`t`"
+    },
+    {
+      "name": "t",
+      "output": "`t`"
+    },
+    {
+      "schema": "",
+      "name": "t",
+      "output": "`t`"
+    },
+    {
+      "schema": "a`b",
+      "name": "c`d",
+      "output": "`a``b`.`c``d`"
+    },
+    {
+      "schema": "my db",
+      "name": "my table",
+      "output": "`my db`.`my table`"
+    },
+    {
+      "schema": "shop",
+      "name": "",
+      "output": "`shop`.``"
+    },
+    {
+      "schema": "tabla_ñ",
+      "name": "😀",
+      "output": "`tabla_ñ`.`😀`"
+    }
+  ]
+}

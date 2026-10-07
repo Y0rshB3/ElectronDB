@@ -1,6 +1,7 @@
 import { restoreTaskProblem } from '@shared/restoreTask'
 import type { ConnectionConfig, Environment, JobInput } from '@shared/types'
 import { cronToCalendarIntervals, validateCron } from '../automation/cron'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 
 /** jobs:save / jobs:run validation; free of electron so it is unit tested. */
 
@@ -10,7 +11,10 @@ const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema'])
  * Boundary validation for jobs:save; throws actionable Spanish messages.
  * `lookup` resolves connections for the restore rules (a restore step may
  * never target production, nor an environment in `typedEnvironments`: nobody
- * types the connection name in scheduled or launchd runs).
+ * types the connection name in scheduled or launchd runs). A step whose
+ * connection exists but whose engine has no automation (anything but MySQL,
+ * docs/multi-engine-design.md section 11) is refused; a missing connection is
+ * left to the run, as before.
  */
 export function validateJobInput(
   input: JobInput,
@@ -31,6 +35,9 @@ export function validateJobInput(
     }
     if (task.type === 'runquery' && !task.sql?.trim())
       throw new Error(`El ${label} necesita al menos una sentencia SQL.`)
+    const connection = lookup(task.connectionId)
+    if (connection)
+      requireConnectionCapability(connection, 'supportsAutomation', CAPABILITY_MESSAGES.automation)
     if (task.type === 'restoreschema') {
       const problem = restoreTaskProblem(task, input.tasks, lookup, label, { typedEnvironments })
       if (problem) throw new Error(problem)

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { utils } from 'ssh2'
 import type { SshConfig } from '@shared/types'
-import { MysqlUserError } from './errors'
+import { MysqlUserError } from '../mysql/errors'
 import { buildConnectConfig, checkPrivateKey, openSshTunnel, type SshTunnelOptions } from './tunnel'
 
 let dir: string

@@ -1,0 +1,36 @@
+/**
+ * Engine → driver registry. Drivers are imported lazily so an engine nobody
+ * opens never loads its client library. Only MySQL ships a driver in P1a.
+ */
+import { engineAvailabilityError } from '@shared/connectionValidation'
+import { engineOf } from '@shared/engines'
+import type { EngineId } from '@shared/types'
+import type { Driver } from './driver'
+import { DbUserError } from './errors'
+
+type DriverLoader = () => Promise<Driver>
+
+const LOADERS: Partial<Record<EngineId, DriverLoader>> = {
+  mysql: () => import('../mysql/driver').then((m) => m.mysqlDriver)
+}
+
+/** True when this build has a driver for the engine. */
+export function hasDriver(engine: EngineId): boolean {
+  return LOADERS[engine] !== undefined && engineOf({ engine }).available
+}
+
+/**
+ * The driver of an engine. Throws the same Spanish message as the connection
+ * dialog for an engine that this build cannot open.
+ */
+export async function getDriver(engine: EngineId): Promise<Driver> {
+  const problem = engineAvailabilityError({ engine })
+  const load = LOADERS[engine]
+  if (problem || !load) {
+    throw new DbUserError(
+      problem ?? `${engineOf({ engine }).label} todavía no está disponible en esta versión.`,
+      'E_ENGINE_UNAVAILABLE'
+    )
+  }
+  return load()
+}

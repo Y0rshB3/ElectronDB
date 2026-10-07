@@ -1,7 +1,7 @@
 import type { AppContext } from '../context'
 import { envVar } from '../env'
 import { getLogger } from '../log'
-import { getConnectionManager } from '../mysql/manager'
+import { getConnectionManager } from '../db/manager'
 import type { FetchFn } from './adapter'
 import { FixtureAdapter } from './fixture'
 import { AiService } from './service'

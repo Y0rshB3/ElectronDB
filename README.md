@@ -1006,54 +1006,82 @@ el registro es más detallado y se copia también en la terminal.
 
 ## Desarrollo
 
-| Comando                          | Qué hace                                                                    |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| `npm run dev`                    | App en modo desarrollo con recarga en caliente                              |
-| `npm run check`                  | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio) |
-| `npm test`                       | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
-| `npm run test:watch`             | Tests en modo observación                                                   |
-| `npm run test:integration`       | Tests contra un MySQL real (se omiten sin `ELECTRONDB_TEST_MYSQL_URL`)      |
-| `npm run lint`                   | ESLint                                                                      |
-| `npm run format`                 | Prettier                                                                    |
-| `npm run build`                  | Compila a `out/`                                                            |
-| `npm run dist[:mac/:win/:linux]` | Instaladores en `release/`                                                  |
-| `npm run screenshots`            | Capturas de todas las pantallas con un perfil y un MySQL desechables        |
+| Comando                             | Qué hace                                                                    |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `npm run dev`                       | App en modo desarrollo con recarga en caliente                              |
+| `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio) |
+| `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
+| `npm run test:watch`                | Tests en modo observación                                                   |
+| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `ELECTRONDB_TEST_MYSQL_URL`)      |
+| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, y falla si falta alguna URL              |
+| `npm run lint`                      | ESLint                                                                      |
+| `npm run format`                    | Prettier                                                                    |
+| `npm run build`                     | Compila a `out/`                                                            |
+| `npm run dist[:mac/:win/:linux]`    | Instaladores en `release/`                                                  |
+| `npm run screenshots`               | Capturas de todas las pantallas con un perfil y un MySQL desechables        |
 
 ### Tests de integración
 
-Necesitan un MySQL desechable. Con Docker (los comandos valen igual en macOS, Linux y PowerShell):
+Necesitan dos MySQL desechables: 8.4 en el puerto 33306 y 5.7 en el 33357 (siempre en `127.0.0.1`, nunca en
+3306/3307). `tests/docker-compose.yml` los declara; los comandos valen igual en macOS, Linux y PowerShell:
+
+```sh
+docker compose -f tests/docker-compose.yml up -d --wait
+# Si ya tienes el contenedor 8.4 antiguo (electrondb-test-mysql o navidog-test-mysql) en el 33306,
+# arranca solo el 5.7:
+docker compose -f tests/docker-compose.yml up -d --wait mysql57
+# Para borrarlos (contenedores y datos):
+docker compose -f tests/docker-compose.yml down -v
+```
+
+`mysql:5.7` solo existe para amd64: en Apple Silicon corre emulado y el primer arranque tarda más.
+Sin Compose, el equivalente es:
 
 ```sh
 docker run -d --name electrondb-test-mysql -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33306:3306 mysql:8.4.7
-# Espera a que MySQL termine de arrancar (unos 20-30 s la primera vez) hasta ver "mysqld is alive":
+docker run -d --name electrondb-test-mysql57 --platform linux/amd64 -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33357:3306 mysql:5.7
+# Espera a que cada uno termine de arrancar hasta ver "mysqld is alive":
 docker exec electrondb-test-mysql mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=30
+docker exec electrondb-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=60
 ```
 
-Las siguientes veces basta con `docker start electrondb-test-mysql` (y el mismo `mysqladmin ping`). Para
-borrarlo: `docker rm -f electrondb-test-mysql`.
+`npm run test:integration:required` es la puerta de calidad: ejecuta las suites de MySQL y de backups contra
+los dos servidores y **falla** (en vez de omitirlas) si falta `ELECTRONDB_TEST_MYSQL_URL` o
+`ELECTRONDB_TEST_MYSQL57_URL`. `npm run test:integration` omite en silencio el servidor que no tenga URL.
 
 ```sh
 # macOS / Linux
-ELECTRONDB_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' npm run test:integration
+ELECTRONDB_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
+ELECTRONDB_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
+npm run test:integration:required
 ```
 
 ```powershell
 # Windows (PowerShell)
 $env:ELECTRONDB_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
-npm run test:integration
+$env:ELECTRONDB_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
+npm run test:integration:required
 ```
 
-Los tests de «Restaurar todo en Local» entre versiones (copia en MySQL 5.7, restauración en 8.4) necesitan
-además un MySQL 5.7 desechable:
+Usa siempre bases de datos desechables: los tests crean y borran bases y tablas. La contraseña `navidog` y la
+base `navidog_test` son los valores con los que se crean estos contenedores de prueba; no tienen relación con
+tus datos. Los tests de «Restaurar todo en Local» entre versiones (copia en MySQL 5.7, restauración en 8.4)
+usan los dos servidores.
 
-```sh
-docker run -d --name electrondb-test-mysql57 --platform linux/amd64 -e MYSQL_ROOT_PASSWORD=navidog -e MYSQL_DATABASE=navidog_test -p 127.0.0.1:33357:3306 mysql:5.7
-ELECTRONDB_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
-ELECTRONDB_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' npm run test:integration
-```
+Las expectativas son las mismas en las dos versiones salvo donde 5.7 se comporta de verdad distinto; cada
+diferencia está comentada junto al test (`5.7 split`):
 
-Usa siempre una base de datos desechable: los tests crean y borran tablas. La contraseña `navidog` y la base
-`navidog_test` son los valores con los que se creó este contenedor de pruebas; no tienen relación con tus datos.
+- sin `DEFAULT (expr)` (8.0.13+): la clave de `ed_ai` la rellena un trigger;
+- sin CTE (`WITH`, 8.0): 5.7 devuelve un error de sintaxis y no hay resultado que editar;
+- `COLUMN_TYPE` conserva el ancho de visualización (`int(10) unsigned`);
+- `SHOW CREATE TRIGGER` devuelve el texto tal como se escribió (nombre sin comillas);
+- un `ON UPDATE` omitido se informa como `RESTRICT` (8.x: `NO ACTION`);
+- en vistas materializadas (`ALGORITHM=TEMPTABLE`, `GROUP BY`) las columnas no traen esquema, así que
+  `SELECT * FROM vista` queda de solo lectura como "columnas calculadas" en lugar de "el origen es una vista";
+- sin `utf8mb4_0900_ai_ci` ni el atributo de columna `SRID` (8.0): los backups usan `utf8mb4_unicode_ci` y el
+  SRID va en cada valor;
+- sin `information_schema_stats_expiry`: el test de backups hace `ANALYZE TABLE` tras la carga masiva para
+  que la estimación de filas no sea la estadística antigua de InnoDB.
 
 En macOS, el test de la migración de contraseñas contra un llavero real se activa aparte: crea un llavero
 desechable en la carpeta que indiques (nunca usa el llavero de inicio de sesión) y lo borra al terminar.
@@ -1101,8 +1129,8 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `ELECTRONDB_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                                              |
 | `ELECTRONDB_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                                                           |
 | `ELECTRONDB_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                      |
-| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL desechable para `npm run test:integration`.                                                                                                                                                             |
-| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para los tests de restauración entre versiones (5.7 → 8.4) de `npm run test:integration`.                                                                                                |
+| `ELECTRONDB_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                              |
+| `ELECTRONDB_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                          |
 | `ELECTRONDB_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                           |
 | `ELECTRONDB_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `ELECTRONDB_USER_DATA`.                                                                                                                                                              |
 | `ELECTRONDB_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `ELECTRONDB_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |

@@ -9,6 +9,7 @@ import {
 } from '@shared/jobLog'
 import { SAFETY_BACKUP_LABEL, isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
 import type { BackupCreateResult, BackupMeta, ConnectionConfig, RestoreResult } from '@shared/types'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { BackupService, ProgressReporter } from './index'
@@ -261,6 +262,7 @@ export async function replaceSchemaFromBackup(
   const cancelled = (): boolean => signal?.aborted === true
   const connection = deps.connections.get(request.connectionId)
   if (!connection) throw new Error('La conexión de destino ya no existe.')
+  requireConnectionCapability(connection, 'supportsBackupsNb3', CAPABILITY_MESSAGES.backups)
   if (connection.environment === 'production' && request.confirmProduction !== true)
     throw new Error(REPLACE_PRODUCTION_MESSAGE)
   const target = request.targetSchema.trim()

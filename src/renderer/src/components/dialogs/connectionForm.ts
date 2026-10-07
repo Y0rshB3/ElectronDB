@@ -1,3 +1,4 @@
+import { connectionFormErrors } from '@shared/connectionValidation'
 import type { ConnectionConfig, ConnectionInput } from '@shared/types'
 
 /** Navicat-like marker colours (Local green, Staging yellow, Production red, ...). */
@@ -14,6 +15,7 @@ export const COLOR_PRESETS: { value: string | null; label: string }[] = [
 
 export function emptyConnectionInput(): ConnectionInput {
   return {
+    engine: 'mysql',
     name: '',
     color: null,
     environment: 'local',
@@ -57,19 +59,9 @@ export function inputFromConnection(c: ConnectionConfig): ConnectionInput {
   }
 }
 
+/** Problems to show in the dialog (shared rules: src/shared/connectionValidation.ts). */
 export function validateConnectionInput(input: ConnectionInput): string[] {
-  const errors: string[] = []
-  if (!input.name.trim()) errors.push('El nombre de la conexión es obligatorio.')
-  if (!input.host.trim()) errors.push('El host es obligatorio.')
-  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535)
-    errors.push('El puerto debe estar entre 1 y 65535.')
-  if (input.ssh.enabled) {
-    if (!input.ssh.host.trim()) errors.push('SSH: el host es obligatorio.')
-    if (!input.ssh.username.trim()) errors.push('SSH: el usuario es obligatorio.')
-    if (input.ssh.authType === 'key' && !input.ssh.privateKeyPath?.trim())
-      errors.push('SSH: selecciona el archivo de clave privada.')
-  }
-  return errors
+  return connectionFormErrors(input)
 }
 
 /** Normalises the form before sending it to the main process. */

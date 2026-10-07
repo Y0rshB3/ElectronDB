@@ -1,12 +1,14 @@
+import { connectionSaveError, engineAvailabilityError } from '@shared/connectionValidation'
 import type { ConnectionConfig, ConnectionInput } from '@shared/types'
 import type { AppContext } from '../context'
-import { getConnectionManager } from '../mysql/manager'
+import { DB_PASSWORD } from '../credentials/store'
+import { getConnectionManager } from '../db/manager'
 import { getAiService } from '../ai'
 import { handle } from './typed'
 
 /** Fields whose change invalidates an open pool. */
 function endpointSignature(c: ConnectionInput | ConnectionConfig): string {
-  return JSON.stringify([
+  const base = [
     c.host,
     c.port,
     c.username,
@@ -14,16 +16,21 @@ function endpointSignature(c: ConnectionInput | ConnectionConfig): string {
     c.ssh,
     c.ssl,
     c.initialQueries
-  ])
+  ]
+  // MySQL keeps exactly the fields it always compared; other engines add theirs.
+  if ((c.engine ?? 'mysql') === 'mysql') return JSON.stringify(base)
+  return JSON.stringify([...base, c.engine, c.network, c.postgres, c.sqlite, c.mongo])
 }
 
 function validateInput(input: ConnectionInput): void {
-  if (!input.name?.trim()) throw new Error('El nombre de la conexión es obligatorio')
-  if (!input.host?.trim()) throw new Error('El host de la conexión es obligatorio')
-  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535) {
-    throw new Error('El puerto debe ser un número entre 1 y 65535')
-  }
-  if (!input.username?.trim()) throw new Error('El usuario de la conexión es obligatorio')
+  const problem = connectionSaveError(input, { platform: process.platform })
+  if (problem) throw new Error(problem)
+}
+
+/** Refuses engines without a driver in this build (e.g. a hand-edited record). */
+function assertEngineAvailable(input: Pick<ConnectionInput, 'engine'> | null): void {
+  const problem = input ? engineAvailabilityError(input) : null
+  if (problem) throw new Error(problem)
 }
 
 export function registerConnectionsHandlers(ctx: AppContext): void {
@@ -57,16 +64,22 @@ export function registerConnectionsHandlers(ctx: AppContext): void {
     ai.memory.deleteConnection(id)
   })
 
-  handle('connections:test', (input, password, sshPassword) =>
-    manager.test(input, password, sshPassword)
-  )
+  handle('connections:test', (input, password, sshPassword) => {
+    assertEngineAvailable(input)
+    return manager.test(input, password, sshPassword)
+  })
 
-  handle('connections:setPassword', (id, password) => ctx.credentials.set('mysql', id, password))
-  handle('connections:hasPassword', (id) => ctx.credentials.has('mysql', id))
+  handle('connections:setPassword', (id, password) =>
+    ctx.credentials.set(DB_PASSWORD, id, password)
+  )
+  handle('connections:hasPassword', (id) => ctx.credentials.has(DB_PASSWORD, id))
   handle('connections:setSshPassword', (id, password) => ctx.credentials.set('ssh', id, password))
   handle('connections:hasSshPassword', (id) => ctx.credentials.has('ssh', id))
 
-  handle('connections:open', (id) => manager.open(id))
+  handle('connections:open', (id) => {
+    assertEngineAvailable(ctx.connections.get(id))
+    return manager.open(id)
+  })
   handle('connections:close', (id) => manager.close(id))
   handle('connections:isOpen', (id) => manager.isOpen(id))
 }

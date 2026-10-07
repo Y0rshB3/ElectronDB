@@ -46,46 +46,7 @@ export function guardedRiskSignature(
 }
 
 /**
- * Leading keywords that always change data, structure or privileges. This is
- * deliberately a small denylist: the renderer asks for anything that is not
- * provably read-only, so main must never flag a statement the renderer would
- * let through without asking.
+ * Statement classification moved to the MySQL dialect
+ * (src/shared/dialects/mysql.ts) in P1a; re-exported here for one phase.
  */
-const WRITE_KEYWORDS = new Set([
-  'INSERT',
-  'UPDATE',
-  'DELETE',
-  'REPLACE',
-  'DROP',
-  'CREATE',
-  'ALTER',
-  'TRUNCATE',
-  'RENAME',
-  'GRANT',
-  'REVOKE',
-  'LOAD',
-  'CALL',
-  'IMPORT'
-])
-
-/** First keyword of a statement, skipping leading comments and whitespace. */
-export function leadingKeyword(statement: string): string {
-  let s = statement
-  for (;;) {
-    s = s.replace(/^\s+/, '')
-    if (s.startsWith('/*') && !s.startsWith('/*!')) {
-      const end = s.indexOf('*/', 2)
-      s = end < 0 ? '' : s.slice(end + 2)
-    } else if (s.startsWith('#') || /^--(\s|$)/.test(s)) {
-      const end = s.indexOf('\n')
-      s = end < 0 ? '' : s.slice(end + 1)
-    } else break
-  }
-  const m = /^[A-Za-z]+/.exec(s)
-  return m ? m[0].toUpperCase() : ''
-}
-
-/** True when the statement obviously writes (see WRITE_KEYWORDS). */
-export function isObviousWrite(statement: string): boolean {
-  return WRITE_KEYWORDS.has(leadingKeyword(statement))
-}
+export { isObviousWrite, leadingKeyword } from './dialects/mysql'

@@ -24,6 +24,7 @@ import RunLogPanel from '@renderer/components/automation/RunLogPanel.vue'
 import type { RollbackDialogSource } from '@renderer/components/automation/rollback'
 import {
   NAVICAT_DELETE_TOOLTIP,
+  backupConnections,
   canDeleteBackup,
   findLocalConnection
 } from '@renderer/components/backups/backupHelpers'
@@ -65,7 +66,7 @@ const schemaOptions = computed(() => {
 const selected = computed<BackupFile | null>(
   () => files.value.find((f) => f.path === selectedPath.value) ?? null
 )
-const localConnection = computed(() => findLocalConnection(connections.sorted))
+const localConnection = computed(() => findLocalConnection(backupConnections(connections.sorted)))
 
 /* ---------- Packages (files one batch produced together) ---------- */
 

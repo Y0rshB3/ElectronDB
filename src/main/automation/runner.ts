@@ -39,6 +39,7 @@ import {
 } from '../backup/replace'
 import type { AppContext } from '../context'
 import { needsTypedConfirm, typedConfirmEnvironments } from '../ipc/productionGuard'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import type { SessionFactory } from '../mysql/types'
 import { newId, nowIso } from '../storage/ids'
 import { findLatestJobBackup } from './latestBackup'
@@ -191,6 +192,8 @@ function requireConnectionName(ctx: AppContext, task: JobTask): string {
       `La conexión del paso "${task.referenceName}" no existe (id ${task.connectionId}).`
     )
   }
+  // Jobs stay MySQL-only (section 11): a stored job can still point at another engine.
+  requireConnectionCapability(conn, 'supportsAutomation', CAPABILITY_MESSAGES.automation)
   return conn.name
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isObviousWrite, leadingKeyword } from './productionGuard'
+import { isObviousWrite, leadingKeyword } from './mysql'
 
 describe('leadingKeyword', () => {
   it('skips whitespace and comments', () => {

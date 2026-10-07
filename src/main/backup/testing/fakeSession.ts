@@ -199,7 +199,7 @@ export function connectionFixture(overrides: Partial<ConnectionConfig> = {}): Co
     backupDir: '/tmp/electrondb-unused',
     extraBackupDirs: []
   }
-  return { ...base, id: 'conn-1', createdAt: '', updatedAt: '', ...overrides }
+  return { ...base, engine: 'mysql', id: 'conn-1', createdAt: '', updatedAt: '', ...overrides }
 }
 
 /** Minimal connections lookup for create/restore deps. */

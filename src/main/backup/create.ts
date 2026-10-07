@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { describeObjectCounts } from '@shared/jobLog'
 import type { BackupCreateOptions, BackupCreateResult, ConnectionConfig } from '@shared/types'
+import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
@@ -246,6 +247,7 @@ export async function createBackup(
   const started = performance.now()
   const connection = deps.connections.get(options.connectionId)
   if (!connection) throw new Error('La conexión del backup ya no existe.')
+  requireConnectionCapability(connection, 'supportsBackupsNb3', CAPABILITY_MESSAGES.backups)
   const schema = options.schema
   const targetDir =
     options.targetDir?.trim() || (connection.backupDir ? join(connection.backupDir, schema) : '')
