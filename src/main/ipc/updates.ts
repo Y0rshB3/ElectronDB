@@ -1,6 +1,7 @@
 import { shell } from 'electron'
 import type { AppContext } from '../context'
 import {
+  getUpdateInstaller,
   getUpdateService,
   isAllowedReleaseUrl,
   rememberProfileState,
@@ -16,6 +17,10 @@ export function registerUpdatesHandlers(ctx: AppContext): void {
   handle('updates:snooze', () => getUpdateService(ctx).snooze())
   handle('updates:whatsNew', () => whatsNewFor(ctx))
   handle('updates:markSeen', (version) => getUpdateService(ctx).markSeen(version))
+  handle('updates:installState', () => getUpdateInstaller(ctx).state())
+  handle('updates:download', (version) => getUpdateInstaller(ctx).download(String(version)))
+  handle('updates:cancelDownload', () => getUpdateInstaller(ctx).cancel())
+  handle('updates:install', () => getUpdateInstaller(ctx).install())
   handle('app:openExternal', async (url) => {
     // Only this repository's release pages/downloads: the renderer never opens arbitrary URLs.
     if (!isAllowedReleaseUrl(url))

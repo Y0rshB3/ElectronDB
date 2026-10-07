@@ -200,20 +200,36 @@ Para usarla a diario sin la terminal abierta, genera un instalador (siguiente se
 
 Compila **en el mismo sistema operativo** al que va destinado el instalador. Los archivos quedan en `release/`.
 
-| Sistema | Comando              | Resultado en `release/`                                                         |
-| ------- | -------------------- | ------------------------------------------------------------------------------- |
-| macOS   | `npm run dist:mac`   | `.dmg` y `.zip` para la arquitectura del Mac que compila                        |
-| Windows | `npm run dist:win`   | `* Setup <versión>.exe` (instalador) y `<nombre> <versión>.exe` (portable), x64 |
-| Linux   | `npm run dist:linux` | `.AppImage` y `.deb`, x64                                                       |
-| Actual  | `npm run dist`       | Los formatos del sistema en el que lo ejecutas                                  |
+| Sistema | Comando              | Resultado en `release/`                                                                          |
+| ------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| macOS   | `npm run dist:mac`   | `ElectronDB-<versión>-<arch>.dmg` y `ElectronDB-<versión>-<arch>-mac.zip` (arquitectura del Mac) |
+| Windows | `npm run dist:win`   | `ElectronDB-<versión>-x64-setup.exe` (instalador) y `ElectronDB-<versión>-x64-portable.exe`      |
+| Linux   | `npm run dist:linux` | `ElectronDB-<versión>-x86_64.AppImage` y `electrondb_<versión>_amd64.deb`                        |
+| Actual  | `npm run dist`       | Los formatos del sistema en el que lo ejecutas                                                   |
 
 Notas:
 
 - Para un Mac con otro procesador: `npm run dist:mac -- --x64` (Intel) o `npm run dist:mac -- --universal`.
-- Desde un Mac se pueden generar las carpetas sin instalador de Windows/Linux
-  (`npx electron-builder --win dir --x64`, `--linux dir --x64`). Los instaladores NSIS y AppImage desde un Mac
-  con Apple Silicon necesitan Rosetta 2; lo más sencillo es compilarlos en Windows o Linux.
+- Desde un Mac (también Apple Silicon sin Rosetta) se generan los instaladores de Windows y Linux:
+  `electron-builder.yml` elige las herramientas NSIS y AppImage nativas (`toolsets`).
+- Los nombres de los archivos los fija `electron-builder.yml` (`artifactName`). **No los renombres**: los
+  archivos `latest*.yml` que usa la actualización integrada apuntan a esos nombres.
+- Ningún comando `dist` publica nada (`--publish never`).
 - La app usa el icono genérico de Electron hasta que se añada uno en `build/`.
+
+### Preparar una versión para GitHub
+
+`npm run release:build` compila la app y todos los instaladores en `release/v<versión>/`, comprueba los
+archivos de actualización y escribe `SHA256SUMS.txt`. **No publica nada**: sube a mano a la versión de GitHub
+todos los archivos que lista al terminar, sin renombrarlos:
+
+- los instaladores (`.dmg`, `-mac.zip`, `-setup.exe`, `-portable.exe`, `.AppImage`, `.deb`);
+- `latest.yml`, `latest-linux.yml` y `latest-mac.yml` (sin ellos la app no puede actualizarse sola);
+- los `.blockmap` (descargas parciales en Windows);
+- `SHA256SUMS.txt` (la descarga del `.dmg` desde la app en Mac lo exige).
+
+Opciones: `--platforms win,linux` (solo algunos sistemas), `--out <carpeta>`, `--skip-build` (usa `out/` ya
+compilado), `--clean` (vacía antes la carpeta de salida). Ejemplo: `npm run release:build -- --platforms win`.
 
 ### Aplicación sin firmar: primer arranque
 
@@ -809,13 +825,16 @@ sus agentes y esos trabajos se ejecutarían dos veces.
 
 ElectronDB comprueba si hay una versión nueva en las
 [versiones publicadas en GitHub](https://github.com/Y0rshB3/ElectronDB/releases). Solo hace una consulta
-anónima a la API pública de GitHub (sin cuenta ni datos tuyos) y **nunca descarga ni instala nada por su
-cuenta**: las versiones no están firmadas, así que la actualización la haces tú.
+anónima a la API pública de GitHub (sin cuenta ni datos tuyos). **No descarga nada hasta que pulsas
+Descargar y actualizar** (salvo que actives **Descargar actualizaciones automáticamente**) y nunca instala sin
+que lo pidas o cierres la app. Cómo se instala depende del sistema: ver
+[Si instalaste la app](#si-instalaste-la-app-instalador-de-github).
 
 - **Al iniciar**: unos segundos después de abrir la app, si hay una versión nueva aparece la ventana **Hay una
   nueva actualización** con lo más destacado (como mucho 5 puntos: la sección «Destacado» de la versión o, si no
-  la tiene, los títulos de «Novedades») y los botones **Descargar** (o **Cómo actualizar**, que muestra los
-  comandos con **Copiar comandos**), **Ver todas las novedades**, **Más tarde** y **Omitir esta versión**. Sale
+  la tiene, los títulos de «Novedades») y los botones **Descargar y actualizar** (en Mac **Descargar
+  instalador**; con el `.exe` portable o el `.deb`, **Descargar**; desde el código, **Cómo actualizar**, que
+  muestra los comandos con **Copiar comandos**), **Ver todas las novedades**, **Más tarde** y **Omitir esta versión**. Sale
   como mucho una vez por arranque y espera a que se cierre cualquier otra ventana. **Más tarde** la oculta hasta
   un arranque pasadas 6 horas. Se consulta GitHub como mucho una vez cada 6 horas; si no hay conexión, no avisa
   de nada. Se desactiva en **Ajustes → Actualizaciones → Buscar actualizaciones al iniciar**.
@@ -834,10 +853,84 @@ cuenta**: las versiones no están firmadas, así que la actualización la haces 
 
 ### Si instalaste la app (instalador de GitHub)
 
-**Descargar** abre en el navegador el archivo de tu sistema (`.dmg` de tu Mac, Apple Silicon o Intel; el
-instalador `-setup.exe` de Windows, o el portable; el `AppImage` de Linux, o el `.deb`). Cierra ElectronDB e
-instala la versión nueva igual que la primera vez (ver [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque)).
 Tus conexiones, trabajos y ajustes están en el perfil y no se tocan al actualizar ni al reinstalar.
+
+**Windows (instalador `-setup.exe`) y Linux (AppImage)**: actualización integrada, como en Navicat.
+
+1. **Descargar y actualizar** descarga la versión nueva dentro de la app. La ventana muestra el progreso
+   (descargado / total y velocidad) y un botón **Cancelar**.
+2. Antes de usar el archivo se comprueba su suma **sha512** con la publicada en la versión de GitHub
+   (`latest.yml` / `latest-linux.yml`). Solo se descarga de las versiones de este repositorio; nunca se pasa a
+   una versión anterior ni a una preliminar.
+3. Cuando termina: **Reiniciar y actualizar** cierra la app, instala sin preguntas y abre la versión nueva. Con
+   **Más tarde** se instala sola la próxima vez que cierres ElectronDB. Si hay una restauración en curso, la app
+   no se reinicia hasta que termine.
+4. Si algo falla verás el motivo en español, **Reintentar** y **Descargar manualmente** (abre el instalador en
+   el navegador).
+
+Las versiones publicadas antes de la 0.1.9 no traen `latest.yml`: desde ellas hay que actualizar una vez a mano
+(descarga el instalador de la 0.1.9 o posterior). En **Ajustes → Actualizaciones → Descargar actualizaciones
+automáticamente** (desactivado por defecto) la descarga empieza sola al encontrar una versión nueva que no
+hayas omitido ni pospuesto; instalarla sigue siendo decisión tuya.
+
+**macOS**: **Descargar instalador** guarda en **Descargas** el `.dmg` de tu Mac (Apple Silicon o Intel),
+comprueba su suma **SHA-256** con `SHA256SUMS.txt` de la versión (si la versión no la publica, no lo abre y te
+ofrece **Descargar manualmente**) y lo abre. Después cierra ElectronDB y **arrastra ElectronDB a Aplicaciones y
+reemplaza** la anterior. En Mac la app no puede reemplazarse sola: macOS solo permite la actualización
+automática (Squirrel.Mac) en apps firmadas con un certificado _Developer ID_ de Apple, y ElectronDB todavía no
+lo tiene.
+
+**`.exe` portable y `.deb`**: **Descargar** abre el archivo en el navegador; cierra ElectronDB e instálalo como
+la primera vez (`sudo apt install ./electrondb_*_amd64.deb`). Ver
+[Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque).
+
+### Windows: reparar una instalación rota
+
+Si al actualizar el instalador dijo **"Failed to uninstall old application files"** (o se cerró a medias) y
+ahora no puedes desinstalar ElectronDB desde **Configuración → Aplicaciones**, la instalación anterior quedó
+a medio borrar: la entrada de "Aplicaciones" sigue en el Registro pero su desinstalador ya no funciona.
+
+**Primero prueba lo sencillo**: cierra ElectronDB y ejecuta el instalador de la 0.1.9 o posterior. Desde esa
+versión el instalador cierra la app si está abierta, ignora un desinstalador antiguo roto e instala encima,
+reparando la entrada de "Aplicaciones".
+
+Si aun así falla, límpialo a mano. **Tus datos no se tocan**: están en `%APPDATA%\ElectronDB`, una carpeta
+distinta que no debes borrar. En PowerShell (sin administrador):
+
+```powershell
+# 0. (Opcional) copia de seguridad de tus datos
+Copy-Item -Recurse "$env:APPDATA\ElectronDB" "$env:USERPROFILE\ElectronDB-copia-perfil"
+
+# 1. Cierra ElectronDB y cualquier proceso suyo que haya quedado
+Get-Process ElectronDB -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# 2. Mira dónde estaba instalada (normalmente %LOCALAPPDATA%\Programs\ElectronDB)
+Get-ItemProperty 'HKCU:\Software\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue |
+  Select-Object InstallLocation
+
+# 3. Borra la carpeta del PROGRAMA (usa la ruta del paso 2 si es otra)
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Programs\ElectronDB" -ErrorAction SilentlyContinue
+
+# 4. Borra la entrada de "Aplicaciones" y la del instalador
+Remove-Item -Recurse 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue
+Remove-Item -Recurse 'HKCU:\Software\ed60cf51-f5c8-5d88-9777-022dc431ddb4' -ErrorAction SilentlyContinue
+
+# 5. Accesos directos antiguos y caché de descargas de la actualización
+Remove-Item "$([Environment]::GetFolderPath('Desktop'))\ElectronDB.lnk",
+  "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\ElectronDB.lnk" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electrondb-updater" -ErrorAction SilentlyContinue
+```
+
+Después ejecuta el instalador nuevo (`ElectronDB-<versión>-x64-setup.exe`): al abrir la app verás tus
+conexiones, trabajos y ajustes.
+
+- `ed60cf51-f5c8-5d88-9777-022dc431ddb4` es el identificador fijo de ElectronDB en Windows (electron-builder lo
+  calcula a partir del `appId` `dev.y0rshb3.electrondb`); es el mismo en todas las versiones.
+- Si la habías instalado **"para todos los usuarios"** (los instaladores hasta la 0.1.8 lo permitían), la
+  carpeta es `C:\Program Files\ElectronDB` y las dos claves están en `HKLM:` en vez de `HKCU:`: repite los
+  pasos 3 y 4 con esas rutas en un PowerShell **como administrador**. Desde la 0.1.9 el instalador es solo para
+  tu usuario (sin permisos de administrador, en `%LOCALAPPDATA%\Programs\ElectronDB`) y avisa si encuentra
+  una copia "para todos los usuarios".
 
 ### Si la usas desde la carpeta del código (`npm run dev`)
 
@@ -876,6 +969,7 @@ perfil no se toca al actualizar.
 | macOS: "no se puede usar con esta versión de macOS"                                                     | La app necesita macOS 13 (Ventura) o posterior.                                                                                                                                                                                                                                |
 | `npm warn EBADENGINE` durante `npm ci`                                                                  | Tu Node es demasiado antiguo. Instala Node 24 (mínimo 22.12) como en [Requisitos](#requisitos) y repite `npm ci`.                                                                                                                                                              |
 | Un trabajo programado no se ejecuta en Windows/Linux                                                    | El programador interno solo funciona con la app abierta: déjala abierta o usa el Programador de tareas / cron con `--run-job=<id>` (ver [Automatización](#automatización)).                                                                                                    |
+| Windows: "Failed to uninstall old application files" o no se puede desinstalar ElectronDB               | Ver [Windows: reparar una instalación rota](#windows-reparar-una-instalación-rota). Tus datos (`%APPDATA%\ElectronDB`) no se tocan.                                                                                                                                            |
 
 ### Descargas detrás de un proxy
 
@@ -1054,6 +1148,12 @@ Las convenciones del proyecto están en [`CLAUDE.md`](CLAUDE.md) y los formatos 
 - **Búsqueda de actualizaciones**: lo único que la app envía a Internet por su cuenta es una petición anónima
   (`GET`) a `api.github.com` para leer la última versión publicada; no lleva identificadores ni datos tuyos. Solo
   abre en el navegador enlaces de las versiones de ElectronDB en GitHub. Se desactiva en **Ajustes**.
+- **Actualización integrada**: solo descarga cuando la pides (o con **Descargar actualizaciones
+  automáticamente**), solo de las versiones de este repositorio en GitHub, y comprueba cada archivo antes de
+  usarlo (sha512 de `latest.yml` en Windows/Linux, SHA-256 de `SHA256SUMS.txt` en Mac). No acepta versiones
+  anteriores ni preliminares. Las copias desde el código y las ejecuciones con un perfil de prueba
+  (`ELECTRONDB_USER_DATA`) nunca descargan ni instalan nada. El registro anota versiones, nombres de archivo y
+  errores, nunca datos tuyos.
 - **Las copias `.nb3` no van cifradas.** Se escriben con permisos `0600` en tu
   carpeta de usuario, pero cualquiera que copie el archivo puede leer los datos. Trátalas como datos sensibles y
   no las subas a repositorios ni carpetas compartidas.

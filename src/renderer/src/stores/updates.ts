@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { UpdateAsset, UpdateCheckResult } from '@shared/types'
+import type {
+  UpdateAsset,
+  UpdateCheckResult,
+  UpdateInstallMode,
+  UpdateInstallState
+} from '@shared/types'
 import { api } from '@renderer/api'
 import { showWhenFree } from '@renderer/composables/useModalQueue'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -11,8 +16,14 @@ export const STARTUP_CHECK_DELAY_MS = 5000
 
 /**
  * New-version check. Main talks to GitHub; this store keeps the last answer,
- * the startup popup and the «Buscar actualizaciones» dialog state. Nothing is
- * downloaded or run: «Descargar» opens the browser on the release asset.
+ * the startup popup and the «Buscar actualizaciones» dialog state.
+ *
+ * Installing: where the app can update itself (installMode 'auto': Windows
+ * installer, Linux AppImage; 'mac-dmg': verified .dmg) «Descargar y actualizar»
+ * downloads inside the app with progress (event:updateInstall) and then offers
+ * «Reiniciar y actualizar». Elsewhere «Descargar» opens the browser on the
+ * release asset. Nothing is downloaded without a click unless the user turned
+ * on «Descargar actualizaciones automáticamente».
  *
  * The automatic popup («Hay una nueva actualización») appears at most once per
  * app start and waits until no other modal is open.
@@ -30,9 +41,79 @@ export const useUpdatesStore = defineStore('updates', () => {
   let noticeShown = false
   let cancelQueue: (() => void) | null = null
   const appVersion = ref('')
+  /** In-app download state pushed by main (null until known). */
+  const install = ref<UpdateInstallState | null>(null)
 
   const available = computed(() => result.value?.status === 'available')
   const latestVersion = computed(() => result.value?.latestVersion ?? '')
+  const installMode = computed<UpdateInstallMode>(
+    () =>
+      result.value?.installMode ??
+      install.value?.mode ??
+      (result.value?.runMode === 'source' ? 'source' : 'manual')
+  )
+  /** This copy downloads (and on Windows/Linux installs) the update itself. */
+  const selfUpdate = computed(() => installMode.value === 'auto' || installMode.value === 'mac-dmg')
+  const installPhase = computed(() => install.value?.phase ?? 'idle')
+
+  /** Keeps `install` in sync with main. Returns the unsubscribe function. */
+  function listen(): () => void {
+    return api.on('event:updateInstall', (state) => {
+      install.value = state
+    })
+  }
+
+  async function loadInstallState(): Promise<void> {
+    try {
+      install.value = await api.updates.installState()
+    } catch {
+      /* the dialog just starts from «Descargar y actualizar» */
+    }
+  }
+
+  /** «Descargar y actualizar» / «Descargar instalador». */
+  async function startDownload(): Promise<void> {
+    const version = result.value?.latestVersion
+    if (!version || !selfUpdate.value) return
+    if (installPhase.value === 'downloading') return
+    try {
+      install.value = await api.updates.download(version)
+    } catch (err) {
+      install.value = {
+        mode: installMode.value,
+        phase: 'error',
+        version,
+        error: errorMessage(err),
+        ...(result.value?.download?.url || result.value?.releaseUrl
+          ? { manualUrl: result.value?.download?.url ?? result.value?.releaseUrl }
+          : {})
+      }
+    }
+  }
+
+  async function cancelDownload(): Promise<void> {
+    try {
+      install.value = await api.updates.cancelDownload()
+    } catch {
+      /* the next progress event tells the real state */
+    }
+  }
+
+  /** «Reiniciar y actualizar» (the app quits) or, on macOS, «Abrir el instalador». */
+  async function installNow(): Promise<void> {
+    try {
+      await api.updates.install()
+    } catch {
+      /* already reported by api.invoke (e.g. a restore is running) */
+    }
+  }
+
+  /** «Descargar manualmente»: the browser, as before the integrated update. */
+  async function downloadManually(): Promise<void> {
+    await openUrl(
+      install.value?.manualUrl ?? result.value?.download?.url ?? result.value?.releaseUrl
+    )
+  }
 
   async function loadAppVersion(): Promise<string> {
     if (appVersion.value) return appVersion.value
@@ -83,8 +164,11 @@ export const useUpdatesStore = defineStore('updates', () => {
     if (checking.value) return
     if (!next || next.status === 'error') return
     remember(next)
-    if (next.status === 'available' && !next.dismissed && !next.snoozed && !dialogOpen.value)
-      queueNotice()
+    if (next.status !== 'available' || next.dismissed || next.snoozed) return
+    // Opt-in only («Descargar actualizaciones automáticamente», off by default).
+    if (useSettingsStore().settings.autoDownloadUpdates === true && installMode.value === 'auto')
+      void startDownload()
+    if (!dialogOpen.value) queueNotice()
   }
 
   /**
@@ -125,6 +209,7 @@ export const useUpdatesStore = defineStore('updates', () => {
     cancelPending()
     dialogOpen.value = true
     void loadAppVersion()
+    void loadInstallState()
     void checkNow()
   }
 
@@ -133,6 +218,12 @@ export const useUpdatesStore = defineStore('updates', () => {
     noticeOpen.value = false
     cancelPending()
     dialogOpen.value = true
+  }
+
+  /** The notice's «Descargar y actualizar»: starts the download and shows its progress. */
+  async function downloadFromNotice(): Promise<void> {
+    showDetails()
+    await startDownload()
   }
 
   function hideNotice(): void {
@@ -200,8 +291,19 @@ export const useUpdatesStore = defineStore('updates', () => {
     noticeOpen,
     noticePending,
     appVersion,
+    install,
     available,
     latestVersion,
+    installMode,
+    selfUpdate,
+    installPhase,
+    listen,
+    loadInstallState,
+    startDownload,
+    cancelDownload,
+    installNow,
+    downloadManually,
+    downloadFromNotice,
     loadAppVersion,
     runStartupCheck,
     scheduleStartupCheck,

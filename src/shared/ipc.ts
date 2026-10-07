@@ -45,6 +45,7 @@ import type {
   TableStructure,
   TriggerInfo,
   UpdateCheckResult,
+  UpdateInstallState,
   WhatsNewInfo,
   UserInfo,
   ViewInfo,
@@ -100,6 +101,20 @@ export interface IpcInvokeMap {
   'updates:whatsNew': { args: []; result: WhatsNewInfo | null }
   /** The «novedades» popup of `version` was closed. */
   'updates:markSeen': { args: [version: string]; result: void }
+  /** Current in-app download/installation state (also pushed as event:updateInstall). */
+  'updates:installState': { args: []; result: UpdateInstallState }
+  /**
+   * «Descargar y actualizar»: starts downloading `version` (or the newer one the update feed
+   * offers) inside the app. Resolves when the download starts; progress arrives as events.
+   */
+  'updates:download': { args: [version: string]; result: UpdateInstallState }
+  /** Cancels the running download (the partial file is discarded). */
+  'updates:cancelDownload': { args: []; result: UpdateInstallState }
+  /**
+   * «Reiniciar y actualizar»: Windows/Linux quit, install silently and start the new version;
+   * macOS opens the downloaded .dmg again.
+   */
+  'updates:install': { args: []; result: void }
 
   'settings:get': { args: []; result: AppSettings }
   'settings:update': { args: [patch: Partial<AppSettings>]; result: AppSettings }
@@ -308,6 +323,8 @@ export interface IpcEventMap {
   'event:jobLog': JobLogEvent
   /** App menu «Buscar actualizaciones…»: the renderer opens its updates dialog. */
   'event:checkUpdates': null
+  /** Progress and result of the in-app update download. */
+  'event:updateInstall': UpdateInstallState
   /** Streamed text of an AI answer. */
   'event:aiDelta': AiDeltaEvent
   /** Progress note of an AI request (fetching more structure…). */
@@ -332,6 +349,10 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'updates:snooze',
   'updates:whatsNew',
   'updates:markSeen',
+  'updates:installState',
+  'updates:download',
+  'updates:cancelDownload',
+  'updates:install',
   'settings:get',
   'settings:update',
   'connections:list',
@@ -418,6 +439,7 @@ export const IPC_EVENT_CHANNELS: readonly IpcEventChannel[] = [
   'event:connectionClosed',
   'event:jobLog',
   'event:checkUpdates',
+  'event:updateInstall',
   'event:aiDelta',
   'event:aiStatus',
   'event:aiDone'

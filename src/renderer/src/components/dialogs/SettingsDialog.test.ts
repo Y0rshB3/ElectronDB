@@ -15,6 +15,7 @@ const base: AppSettings = {
   typedConfirmEnvironments: ['production'],
   confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true,
+  autoDownloadUpdates: false,
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',

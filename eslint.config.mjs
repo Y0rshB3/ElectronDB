@@ -19,6 +19,7 @@ export default tseslint.config(
       'src/preload/**/*.ts',
       'src/shared/**/*.ts',
       'tests/**/*.ts',
+      'scripts/**/*.{ts,mts}',
       '*.ts',
       '*.mjs'
     ],

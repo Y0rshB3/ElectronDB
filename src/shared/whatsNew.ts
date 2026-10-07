@@ -25,6 +25,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.1.9',
+    date: '2026-10-07',
+    highlights: [
+      'Actualización integrada: descarga e instala la nueva versión desde la app (Windows y Linux; en Mac descarga el instalador)',
+      'Instalador de Windows más robusto al actualizar'
+    ]
+  },
+  {
     version: '0.1.8',
     date: '2026-10-07',
     highlights: [

@@ -33,6 +33,8 @@ export function subscribeToMainEvents(): () => void {
     api.on('event:connectionClosed', ({ connectionId }) => tree.forget(connectionId)),
     // App menu «Buscar actualizaciones…».
     api.on('event:checkUpdates', () => useUpdatesStore().openDialog()),
+    // In-app update download progress (event:updateInstall).
+    useUpdatesStore().listen(),
     // Streamed AI answers (event:aiDelta / aiStatus / aiDone).
     useAiStore().listen()
   ]

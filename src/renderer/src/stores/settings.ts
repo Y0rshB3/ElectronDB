@@ -16,6 +16,7 @@ const DEFAULTS: AppSettings = {
   typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true,
+  autoDownloadUpdates: false,
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',

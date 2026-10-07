@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { UpdateCheckResult, WhatsNewInfo } from '@shared/types'
+import type { UpdateCheckResult, UpdateInstallMode, WhatsNewInfo } from '@shared/types'
 import { whatsNewBetween, whatsNewFor } from '@shared/whatsNew'
 import { UPDATE_REPO } from '../brand'
 import { JsonStore } from '../storage/jsonStore'
@@ -12,7 +12,8 @@ import { compareVersions, isNewer, parseVersion } from './semver'
  * "latest release" endpoint is made: no token, no identifiers, nothing about
  * the user's data. The last answer is cached in <profile>/updates.json so the
  * automatic check hits the API at most once every 6 hours; a manual check
- * always asks GitHub. Nothing is ever downloaded or run.
+ * always asks GitHub. This class never downloads anything: the in-app
+ * download is UpdateInstaller (installer.ts), started only by the user.
  * Network access is injected (`fetch`) so it is unit tested without electron.
  */
 
@@ -139,6 +140,8 @@ export interface UpdateServiceOptions {
   arch: string
   /** Resolved lazily: only needed when a check runs. */
   runMode: () => RunModeInfo
+  /** How this copy installs updates (see installMode.ts); reported to the UI. */
+  installMode?: () => UpdateInstallMode
   fetch: FetchLike
   now?: () => number
   timeoutMs?: number
@@ -315,11 +318,18 @@ export class UpdateService {
     return this.mode
   }
 
-  private base(): Pick<UpdateCheckResult, 'currentVersion' | 'runMode' | 'source'> {
+  /** The cached release of the last answer (used for the .dmg download and manual links). */
+  latestRelease(): ParsedRelease | null {
+    return this.store.get().release
+  }
+
+  private base(): Pick<UpdateCheckResult, 'currentVersion' | 'runMode' | 'source' | 'installMode'> {
     const mode = this.runMode()
+    const installMode = this.options.installMode?.()
     return {
       currentVersion: this.options.currentVersion,
       runMode: mode.runMode,
+      ...(installMode ? { installMode } : {}),
       ...(mode.source ? { source: mode.source } : {})
     }
   }

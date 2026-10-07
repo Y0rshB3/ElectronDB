@@ -71,6 +71,14 @@ describe('UpdateService', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
+  it('reports how this copy installs updates and keeps the release for the installer', async () => {
+    const svc = service(okFetch(), { installMode: () => 'mac-dmg' })
+    const result = await svc.check(true)
+    expect(result.installMode).toBe('mac-dmg')
+    expect(svc.latestRelease()?.version).toBe('0.1.3')
+    expect((await service(okFetch()).check(true)).installMode).toBeUndefined()
+  })
+
   it('reports an available version with the download for this machine', async () => {
     const result = await service(okFetch()).check(true)
     expect(result).toMatchObject({

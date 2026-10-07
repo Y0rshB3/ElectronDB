@@ -4,12 +4,14 @@ import { useUpdatesStore } from '@renderer/stores/updates'
 import { formatBytes } from '@renderer/utils/format'
 import DialogHeader from '@renderer/components/dialogs/DialogHeader.vue'
 import ReleaseNotes from './ReleaseNotes.vue'
+import UpdateInstallPanel from './UpdateInstallPanel.vue'
 import { formatReleaseDate } from './updateFormat'
 
 /**
  * «Buscar actualizaciones»: installed vs latest version, release notes and the
- * way to update this copy (download the installer, or the commands for a
- * folder that runs from source).
+ * way to update this copy: «Descargar y actualizar» inside the app (Windows
+ * installer, Linux AppImage, macOS .dmg), the browser download (portable,
+ * .deb) or the commands for a folder that runs from source.
  */
 const updates = useUpdatesStore()
 
@@ -136,7 +138,8 @@ const subtitle = computed(() => {
             aria-label="Descargar"
             data-test="update-packaged"
           >
-            <template v-if="result.download">
+            <UpdateInstallPanel v-if="updates.selfUpdate" />
+            <template v-else-if="result.download">
               <div class="update-download">
                 <v-icon
                   icon="mdi-package-down"
@@ -182,7 +185,7 @@ const subtitle = computed(() => {
               No hay un instalador para este sistema en esta versión. Descárgalo desde la página de
               la versión en GitHub.
             </p>
-            <p class="update-hint">
+            <p v-if="!updates.selfUpdate" class="update-hint">
               La descarga se abre en el navegador. Cierra ElectronDB antes de instalar la versión
               nueva: tus conexiones, trabajos y ajustes se conservan.
             </p>

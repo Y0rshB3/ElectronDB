@@ -120,7 +120,22 @@ function primary(): void {
           >Ver todas las novedades</v-btn
         >
         <v-btn
-          v-if="packaged"
+          v-if="packaged && updates.selfUpdate"
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-download"
+          data-test="update-notice-update"
+          @click="updates.downloadFromNotice()"
+          >{{
+            updates.installPhase === 'downloaded'
+              ? 'Ver actualización descargada'
+              : updates.installMode === 'mac-dmg'
+                ? 'Descargar instalador'
+                : 'Descargar y actualizar'
+          }}</v-btn
+        >
+        <v-btn
+          v-else-if="packaged"
           color="primary"
           variant="flat"
           prepend-icon="mdi-download"

@@ -196,6 +196,17 @@ async function save(): Promise<void> {
             data-test="settings-check-updates-startup"
             class="settings-dialog__switch"
           />
+          <v-switch
+            v-model="form.autoDownloadUpdates"
+            color="primary"
+            label="Descargar actualizaciones automáticamente"
+            :messages="[
+              'Windows (instalador) y Linux (AppImage): al encontrar una versión nueva la descarga sin esperar a que pulses el botón. Instalarla sigue siendo decisión tuya (o se instala al cerrar la app).'
+            ]"
+            density="compact"
+            data-test="settings-auto-download-updates"
+            class="settings-dialog__switch"
+          />
           <div class="settings-row">
             <span class="settings-row__label">Recorrido por las funciones principales</span>
             <v-btn

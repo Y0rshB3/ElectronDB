@@ -171,6 +171,7 @@ export const DEFAULT_SETTINGS = (
   typedConfirmEnvironments: [...DEFAULT_TYPED_CONFIRM_ENVIRONMENTS],
   confirmDestructiveEverywhere: true,
   checkUpdatesOnStartup: true,
+  autoDownloadUpdates: false,
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',
@@ -203,6 +204,8 @@ export class SettingsRepo {
       // Old profiles (only confirmProductionWrites, true or false), missing or invalid values:
       // ['production'] at least. Production is always added back.
       typedConfirmEnvironments: normalizeTypedConfirmEnvironments(stored.typedConfirmEnvironments),
+      // Only an explicit true downloads updates without a click (profiles before 0.1.9: off).
+      autoDownloadUpdates: stored.autoDownloadUpdates === true,
       // Profiles saved before 0.1.6 have no AI fields: assistant off.
       aiEnabled: stored.aiEnabled === true,
       aiDefaultProviderId:

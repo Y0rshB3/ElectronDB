@@ -786,6 +786,13 @@ export interface AppSettings {
   confirmDestructiveEverywhere: boolean
   /** Look for a new release on GitHub a few seconds after start (at most every 6 hours). */
   checkUpdatesOnStartup: boolean
+  /**
+   * «Descargar actualizaciones automáticamente» (off by default): when the startup check finds
+   * a new version, start the in-app download without waiting for a click. Installing always
+   * needs the user (or happens when the app quits). Only where the app can update itself
+   * (Windows installer, Linux AppImage).
+   */
+  autoDownloadUpdates: boolean
   /** «Activar asistente de IA» (off by default; needs a configured provider). */
   aiEnabled: boolean
   /** Provider profile used by the assistant (null: the first one). */
@@ -800,6 +807,37 @@ export interface AppSettings {
 
 /** How this copy runs: an installer build, or `npm run dev` / `electron .` from a folder. */
 export type UpdateRunMode = 'packaged' | 'source'
+
+/**
+ * How this copy installs a new version:
+ * - 'auto': downloaded and installed from the app (electron-updater; Windows NSIS installer,
+ *   Linux AppImage). The download is checked against the sha512 of latest.yml.
+ * - 'mac-dmg': the app downloads the .dmg and checks its SHA-256, the user drags the app to
+ *   Applications (self-install needs an Apple Developer ID signature, which ElectronDB lacks).
+ * - 'manual': the browser downloads the file (portable .exe, .deb, test profiles).
+ * - 'source': runs from a folder (`npm run dev`): commands to paste in a terminal.
+ */
+export type UpdateInstallMode = 'auto' | 'mac-dmg' | 'manual' | 'source'
+
+/** In-app download/installation of an update (the dialog's progress and buttons). */
+export interface UpdateInstallState {
+  mode: UpdateInstallMode
+  phase: 'idle' | 'downloading' | 'downloaded' | 'error'
+  /** Version being downloaded or ready. */
+  version?: string
+  /** Bytes received so far and expected (0 when unknown). */
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
+  /** 'mac-dmg': the verified .dmg on disk. */
+  filePath?: string
+  /** Spanish, actionable message when phase is 'error'. */
+  error?: string
+  /** «Descargar manualmente»: the asset or release page (allowlisted for app:openExternal). */
+  manualUrl?: string
+  /** The last download was cancelled by the user (phase is back to 'idle'). */
+  cancelled?: boolean
+}
 
 export interface UpdateAsset {
   url: string
@@ -834,6 +872,8 @@ export interface UpdateCheckResult {
   download?: UpdateAsset
   alternatives?: UpdateAsset[]
   runMode: UpdateRunMode
+  /** How this copy can install the new version (see UpdateInstallMode). */
+  installMode?: UpdateInstallMode
   /** Present in source mode: the folder and the commands to update it. */
   source?: SourceUpdateInfo
   /** The user chose «Omitir esta versión» for latestVersion. */

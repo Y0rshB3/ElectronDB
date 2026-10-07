@@ -105,7 +105,13 @@ export const api = {
     dismiss: (version: string) => invoke('updates:dismiss', version),
     snooze: () => invokeSilent('updates:snooze'),
     whatsNew: () => invokeSilent('updates:whatsNew'),
-    markSeen: (version: string) => invokeSilent('updates:markSeen', version)
+    markSeen: (version: string) => invokeSilent('updates:markSeen', version),
+    installState: () => invokeSilent('updates:installState'),
+    /** Failures are shown inside the updates dialog (with «Descargar manualmente»). */
+    download: (version: string) => invokeSilent('updates:download', version),
+    cancelDownload: () => invokeSilent('updates:cancelDownload'),
+    /** «Reiniciar y actualizar» (Windows/Linux) or «Abrir el instalador» (macOS). */
+    install: () => invoke('updates:install')
   },
   settings: {
     get: () => invoke('settings:get'),
