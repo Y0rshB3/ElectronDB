@@ -193,6 +193,11 @@ const actions = computed<ToolbarAction[]>(() => {
           icon: 'mdi-cog-outline',
           dividerBefore: true,
           action: () => ui.openSettingsDialog()
+        },
+        {
+          label: 'Acerca de Vortaq',
+          icon: 'mdi-information-outline',
+          action: () => ui.openAboutDialog()
         }
       ]
     }

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join } from 'node:path'
 import { LOG_FILE_NAME } from '../brand'
 import type { AppContext } from '../context'
+import { readLicenses, REPOSITORY_URL } from '../licenses'
 import { dismissStartupNotice, startupNotices } from '../migration'
 import { dismissRaisedNotice, raisedNotices } from '../notices'
 import { titleBarOverlayFor, usesTitleBarOverlay } from '../windowOptions'
@@ -22,6 +23,14 @@ export function registerAppHandlers(ctx: AppContext): void {
     if (err) throw new Error(err)
   })
   handle('app:showInFolder', (path) => shell.showItemInFolder(path))
+  handle('app:licenses', () =>
+    readLicenses({
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath()
+    })
+  )
+  handle('app:openRepository', () => shell.openExternal(REPOSITORY_URL))
   handle('app:pickDirectory', async (title) => {
     const res = await dialog.showOpenDialog({
       title,

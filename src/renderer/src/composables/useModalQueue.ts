@@ -16,6 +16,7 @@ export function otherModalOpen(): boolean {
     ui.connectionDialog.open ||
     ui.importDialog ||
     ui.settingsDialog ||
+    ui.aboutDialog ||
     ui.newDatabaseDialog.open ||
     ui.backupDialog.open ||
     ui.restoreDialog.open

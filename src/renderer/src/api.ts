@@ -93,7 +93,9 @@ export const api = {
     startupNotices: () => invokeSilent('app:startupNotices'),
     dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id),
     /** Only GitHub release pages/downloads of Vortaq (main rejects anything else). */
-    openExternal: (url: string) => invoke('app:openExternal', url)
+    openExternal: (url: string) => invoke('app:openExternal', url),
+    licenses: () => invoke('app:licenses'),
+    openRepository: () => invoke('app:openRepository')
   },
   tour: {
     state: () => invokeSilent('tour:state'),

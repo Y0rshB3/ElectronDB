@@ -213,6 +213,7 @@ exports[`MySQL main toolbar (golden) > is unchanged with an open MySQL database 
       "Ver tour de bienvenida",
       "Registro",
       "Ajustes…",
+      "Acerca de Vortaq",
     ],
     "toolbar-objects": [
       "Tablas",
@@ -289,6 +290,7 @@ exports[`MySQL main toolbar (golden) > is unchanged without a selection 1`] = `
       "Ver tour de bienvenida",
       "Registro",
       "Ajustes…",
+      "Acerca de Vortaq",
     ],
   },
 }

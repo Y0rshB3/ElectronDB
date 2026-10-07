@@ -5,6 +5,8 @@ import { getLogger } from './log'
 import { registerAllHandlers } from './ipc/register'
 import { buildAppMenuTemplate } from './menu'
 import { createMainWindow, watchSmoke } from './window'
+import { aboutPanelOptions } from './licenses'
+import { windowIconPath } from './windowOptions'
 import { quitVetoed, restoreQuitPrompt, vetoQuit } from './quitGuard'
 import { runProfileMigration, runSecretMigration } from './migration'
 import {
@@ -69,6 +71,18 @@ app.whenReady().then(async () => {
     return
   }
 
+  app.setAboutPanelOptions(
+    aboutPanelOptions({
+      version: app.getVersion(),
+      electron: process.versions.electron ?? '',
+      iconPath: windowIconPath({
+        platform: process.platform,
+        packaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        appPath: app.getAppPath()
+      })
+    })
+  )
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       buildAppMenuTemplate({

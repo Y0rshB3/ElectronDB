@@ -973,6 +973,17 @@ export interface StartupNotice {
   message: string
 }
 
+/** «Acerca de Vortaq»: licence texts shipped with the app. */
+export interface AppLicenses {
+  /** The project's LICENSE (MIT); null if the file is missing. */
+  license: string | null
+  /** THIRD_PARTY_LICENSES.txt; null when it was not generated (development without a build). */
+  thirdParty: string | null
+  thirdPartyPath: string | null
+  /** Public repository of the project. */
+  repositoryUrl: string
+}
+
 export interface AppInfo {
   name: string
   version: string

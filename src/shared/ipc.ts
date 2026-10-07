@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  AppLicenses,
   AppSettings,
   ApplyRowChangesResult,
   BackupCreateOptions,
@@ -89,6 +90,10 @@ export interface IpcInvokeMap {
    * GitHub release pages and downloads (https://github.com/<owner>/<repo>/releases/...).
    */
   'app:openExternal': { args: [url: string]; result: void }
+  /** «Acerca de Vortaq»: LICENSE and the third-party notices shipped with the app. */
+  'app:licenses': { args: []; result: AppLicenses }
+  /** Opens the project's repository page (fixed URL; the renderer passes nothing). */
+  'app:openRepository': { args: []; result: void }
 
   /** Looks for a newer GitHub release. Automatic checks (manual=false) use a 6-hour cache. */
   'updates:check': { args: [manual: boolean]; result: UpdateCheckResult }
@@ -342,6 +347,8 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'app:startupNotices',
   'app:dismissStartupNotice',
   'app:openExternal',
+  'app:licenses',
+  'app:openRepository',
   'updates:check',
   'updates:dismiss',
   'updates:snooze',

@@ -19,6 +19,7 @@ import NotifyHost from '@renderer/components/common/NotifyHost.vue'
 import ConnectionDialog from '@renderer/components/dialogs/ConnectionDialog.vue'
 import ImportNavicatDialog from '@renderer/components/dialogs/ImportNavicatDialog.vue'
 import SettingsDialog from '@renderer/components/dialogs/SettingsDialog.vue'
+import AboutDialog from '@renderer/components/dialogs/AboutDialog.vue'
 import NewDatabaseDialog from '@renderer/components/dialogs/NewDatabaseDialog.vue'
 import BackupDialog from '@renderer/components/dialogs/BackupDialog.vue'
 import RestoreDialog from '@renderer/components/dialogs/RestoreDialog.vue'
@@ -127,6 +128,7 @@ onBeforeUnmount(() => {
     <ConnectionDialog />
     <ImportNavicatDialog />
     <SettingsDialog />
+    <AboutDialog />
     <NewDatabaseDialog />
     <BackupDialog />
     <RestoreDialog />

@@ -70,6 +70,8 @@ export const useUiStore = defineStore('ui', () => {
   /** A guided tour is on screen: queued popups wait for it like for any modal. */
   const tourActive = ref(false)
   const settingsDialog = ref(false)
+  /** «Acerca de Vortaq». */
+  const aboutDialog = ref(false)
   const newDatabaseDialog = ref<{ open: boolean; connectionId: string | null }>({
     open: false,
     connectionId: null
@@ -116,6 +118,9 @@ export const useUiStore = defineStore('ui', () => {
   function openSettingsDialog(): void {
     settingsDialog.value = true
   }
+  function openAboutDialog(): void {
+    aboutDialog.value = true
+  }
   function toggleLogDrawer(value?: boolean): void {
     logDrawerVisible.value = value ?? !logDrawerVisible.value
   }
@@ -153,6 +158,7 @@ export const useUiStore = defineStore('ui', () => {
     importDialogRequest,
     tourActive,
     settingsDialog,
+    aboutDialog,
     newDatabaseDialog,
     backupDialog,
     restoreDialog,
@@ -161,6 +167,7 @@ export const useUiStore = defineStore('ui', () => {
     openConnectionDialog,
     openImportDialog,
     openSettingsDialog,
+    openAboutDialog,
     toggleLogDrawer,
     toggleInfoPanel,
     toggleAiPanel,

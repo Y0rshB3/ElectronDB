@@ -20,7 +20,8 @@
   },
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && node scripts/third-party-licenses.mjs",
+    "licenses": "node scripts/third-party-licenses.mjs",
     "preview": "electron-vite preview",
     "dist": "npm run build && electron-builder --config electron-builder.yml --publish never",
     "dist:mac": "npm run build && electron-builder --mac --config electron-builder.yml --publish never",

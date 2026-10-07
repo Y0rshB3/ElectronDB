@@ -22,10 +22,18 @@ files:
   - '!**/node_modules/ssh2/lib/protocol/crypto/build/**'
 asarUnpack:
   - node_modules/ssh2/**
-# Window icon for Windows/Linux (BrowserWindow `icon`, see src/main/windowOptions.ts).
+# Shipped next to app.asar (process.resourcesPath):
+# - icon.png: window icon on Windows/Linux (BrowserWindow `icon`, src/main/windowOptions.ts);
+# - LICENSE and THIRD_PARTY_LICENSES.txt: shown in «Acerca de Vortaq» (src/main/licenses.ts). The
+#   notices are generated from the production dependencies by scripts/third-party-licenses.mjs,
+#   which `npm run build` runs (release.mjs --skip-build reuses the out/ of an earlier build).
 extraResources:
   - from: build/icons/512x512.png
     to: icon.png
+  - from: LICENSE
+    to: LICENSE
+  - from: out/THIRD_PARTY_LICENSES.txt
+    to: THIRD_PARTY_LICENSES.txt
 # Do not rebuild native modules for Electron: the only ones (ssh2 accelerators) are optional,
 # and rebuilding them would require compilers (Visual Studio Build Tools, Xcode CLT, make).
 npmRebuild: false
