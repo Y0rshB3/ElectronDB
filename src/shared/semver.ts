@@ -41,6 +41,12 @@ function compareIdentifiers(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+/** "1.2.3" for "1.2.3-beta.1" (the release a pre-release leads to); null when invalid. */
+export function releaseOf(raw: string): string | null {
+  const v = parseVersion(raw)
+  return v ? `${v.major}.${v.minor}.${v.patch}` : null
+}
+
 /** -1, 0 or 1. */
 export function compareParsed(a: ParsedVersion, b: ParsedVersion): number {
   for (const key of ['major', 'minor', 'patch'] as const) {

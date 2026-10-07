@@ -1,4 +1,4 @@
-import { compareVersions, parseVersion } from './semver'
+import { compareVersions, parseVersion, releaseOf } from './semver'
 import type { TourStep } from './tour'
 
 /**
@@ -24,6 +24,28 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    version: '0.2.0',
+    date: '2026-10-07',
+    highlights: [
+      'ElectronDB ahora se llama Vortaq',
+      'Nuevo icono',
+      'Barra de herramientas reorganizada'
+    ],
+    important: ['Tus datos se trasladan automáticamente a Vortaq'],
+    tour: [
+      {
+        target: 'toolbar-objects',
+        title: 'Objetos',
+        text: 'Tablas, vistas, funciones, eventos y consultas guardadas de la base de datos seleccionada, y los botones para crear tablas, vistas y rutinas, ahora están juntos en «Objetos».'
+      },
+      {
+        target: 'toolbar-more',
+        title: 'Más',
+        text: 'Importar, buscar actualizaciones, el tour de bienvenida, el registro, los ajustes y «Acerca de Vortaq» (con las licencias de terceros) están en «Más».'
+      }
+    ]
+  },
   {
     version: '0.1.9',
     date: '2026-10-07',
@@ -138,8 +160,10 @@ export const WHATS_NEW: WhatsNewEntry[] = [
 
 /**
  * Entries newer than `previous` (exclusive) up to `current` (inclusive), newest
- * first. Empty for a fresh profile (no previous version), the same version, a
- * downgrade or invalid versions.
+ * first. A pre-release of `current` (0.2.0-alpha.1) includes the entry of the
+ * release it leads to (0.2.0), which is written before tagging. Empty for a
+ * fresh profile (no previous version), the same version, a downgrade or
+ * invalid versions.
  */
 export function whatsNewBetween(
   previous: string | null | undefined,
@@ -148,11 +172,12 @@ export function whatsNewBetween(
 ): WhatsNewEntry[] {
   if (!previous || !parseVersion(previous) || !parseVersion(current)) return []
   if ((compareVersions(current, previous) ?? 0) <= 0) return []
+  const upTo = releaseOf(current) ?? current
   return entries
     .filter(
       (e) =>
         (compareVersions(e.version, previous) ?? 0) > 0 &&
-        (compareVersions(e.version, current) ?? 1) <= 0
+        (compareVersions(e.version, upTo) ?? 1) <= 0
     )
     .sort((a, b) => compareVersions(b.version, a.version) ?? 0)
 }
@@ -164,10 +189,11 @@ export function tourStepsOf(entries: readonly WhatsNewEntry[]): TourStep[] {
     .flatMap((e) => e.tour ?? [])
 }
 
-/** Entry of exactly `version`, if any. */
+/** Entry of `version` (of the release it leads to, for a pre-release), if any. */
 export function whatsNewFor(
   version: string,
   entries: WhatsNewEntry[] = WHATS_NEW
 ): WhatsNewEntry | null {
-  return entries.find((e) => compareVersions(e.version, version) === 0) ?? null
+  const release = releaseOf(version) ?? version
+  return entries.find((e) => compareVersions(e.version, release) === 0) ?? null
 }

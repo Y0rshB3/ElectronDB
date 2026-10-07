@@ -33,8 +33,15 @@ describe('whatsNewBetween', () => {
 
   it('skips versions without entries (unknown versions)', () => {
     expect(whatsNewBetween('0.1.4', '0.2.0', entries)).toEqual([])
-    expect(versions(whatsNewBetween('0.0.1', '0.1.1-beta.1', entries))).toEqual([])
     expect(versions(whatsNewBetween('0.1.3', '1.0.0', entries))).toEqual(['0.1.4'])
+  })
+
+  it('a pre-release shows the notes of the release it leads to', () => {
+    expect(versions(whatsNewBetween('0.0.1', '0.1.1-beta.1', entries))).toEqual(['0.1.1'])
+    expect(versions(whatsNewBetween('0.1.2', '0.1.4-alpha.1', entries))).toEqual(['0.1.4', '0.1.3'])
+    // from the pre-release to the final release, the notes show again (they may have grown)
+    expect(versions(whatsNewBetween('0.1.4-alpha.1', '0.1.4', entries))).toEqual(['0.1.4'])
+    expect(whatsNewFor('0.1.3-rc.2', entries)?.highlights).toEqual(['0.1.3'])
   })
 
   it('finds the entry of one version', () => {
@@ -79,6 +86,18 @@ describe('WHATS_NEW (curated list)', () => {
       'Detección automática de Navicat',
       'El brillo de los campos ya no cruza la etiqueta ni se ve cuadrado'
     ])
+  })
+
+  it('0.2.0 announces the Vortaq name and that the data moves on its own', () => {
+    const entry = whatsNewFor('0.2.0-alpha.1')
+    expect(entry?.highlights).toEqual([
+      'ElectronDB ahora se llama Vortaq',
+      'Nuevo icono',
+      'Barra de herramientas reorganizada'
+    ])
+    expect(entry?.important).toEqual(['Tus datos se trasladan automáticamente a Vortaq'])
+    expect(entry?.tour?.map((s) => s.target)).toEqual(['toolbar-objects', 'toolbar-more'])
+    expect(versions(whatsNewBetween('0.1.9', '0.2.0-alpha.1'))).toEqual(['0.2.0'])
   })
 
   it('0.1.8 announces connections without a password', () => {
