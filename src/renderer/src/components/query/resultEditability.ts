@@ -2,6 +2,7 @@ import type { CellValue, QueryColumn, TableStructure } from '@shared/types'
 // Relative (not @renderer): the node typecheck and integration tests compile this file too.
 import { isAutoIncrementColumn, isViewLike } from '../../utils/columnMeta'
 import { singleTableSelect } from './selectSource'
+import { pgSingleTableSelect } from './selectSourcePg'
 
 /**
  * Decides whether a query result set can be edited in place
@@ -56,9 +57,14 @@ const same = (a: string | undefined, b: string): boolean => a !== undefined && n
  * Statement stage, no server round trip: does the SELECT read exactly one
  * table reference? The schema falls back to the one the result reports.
  */
-export function resultSource(columns: QueryColumn[], sql: string): SourceCheck {
+export function resultSource(
+  columns: QueryColumn[],
+  sql: string,
+  /** 'postgresql' parses with the PostgreSQL lexer; anything else keeps the MySQL parser. */
+  dialect: 'mysql' | 'postgresql' = 'mysql'
+): SourceCheck {
   if (!columns.length) return fail('el resultado no tiene columnas')
-  const parsed = singleTableSelect(sql)
+  const parsed = dialect === 'postgresql' ? pgSingleTableSelect(sql) : singleTableSelect(sql)
   if (!parsed.ok) return fail(parsed.reason)
   const { ref } = parsed
   const schema = ref.schema ?? columns.find((c) => c.schema)?.schema
@@ -98,17 +104,33 @@ export function decideEditability(
     | (Pick<TableStructure, 'indexes' | 'tableType'> &
         Partial<Pick<TableStructure, 'columns' | 'kind'>>)
     | null,
-  rows: CellValue[][] = []
+  rows: CellValue[][] = [],
+  /**
+   * The driver reports the table alias of each column (MySQL). Without it
+   * (PostgreSQL: RowDescription has no alias) the alias check is skipped;
+   * the statement parse already refused self-joins.
+   */
+  options: { aliasMetadata?: boolean } = {}
 ): Editability {
   const where = { schema: source.schema, table: source.table }
   if (!structure) return { editable: false, reason: 'no se pudo comprobar la tabla', ...where }
   if (isViewLike(structure)) return { editable: false, reason: 'el origen es una vista', ...where }
+  const readOnly = columns.find((c) => c.readOnlyReason)?.readOnlyReason
+  if (readOnly)
+    return {
+      editable: false,
+      reason: readOnly === 'vista' ? 'el origen es una vista' : readOnly,
+      ...where
+    }
 
   if (columns.some((c) => !c.table || !c.schema || !c.sourceName))
     return { editable: false, reason: REASON_COMPUTED, ...where }
+  const aliasMetadata = options.aliasMetadata !== false
   // Defence in depth: every column must come from the table reference the statement names.
   const matches = (c: QueryColumn): boolean =>
-    same(c.schema, source.schema) && same(c.table, source.table) && same(c.tableAlias, source.alias)
+    same(c.schema, source.schema) &&
+    same(c.table, source.table) &&
+    (!aliasMetadata || same(c.tableAlias, source.alias))
   if (!columns.every(matches)) return { editable: false, reason: REASON_MISMATCH, ...where }
 
   const seen = new Set<string>()

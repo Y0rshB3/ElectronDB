@@ -9,7 +9,11 @@ defineProps<{
   /** Show «Explicar error» on failed statements (AI assistant enabled). */
   canExplain?: boolean
 }>()
-const emit = defineEmits<{ 'explain-error': [result: QueryStatementResult] }>()
+const emit = defineEmits<{
+  'explain-error': [result: QueryStatementResult]
+  /** «Ir al error»: the server gave the position of the error inside the statement. */
+  'locate-error': [result: QueryStatementResult]
+}>()
 
 function summary(r: QueryStatementResult): string {
   if (r.error) return r.error
@@ -44,6 +48,20 @@ function summary(r: QueryStatementResult): string {
       <div class="query-messages__body">
         <code class="query-messages__sql" :title="r.sql">{{ r.sql }}</code>
         <div class="query-messages__summary">{{ summary(r) }}</div>
+        <ul v-if="r.notices?.length" class="query-messages__notices" :data-test="`notices-${i}`">
+          <li v-for="(n, k) in r.notices" :key="k">{{ n }}</li>
+        </ul>
+        <v-btn
+          v-if="r.error && r.errorPosition !== undefined && r.errorPosition !== null"
+          size="x-small"
+          variant="text"
+          prepend-icon="mdi-crosshairs-gps"
+          class="query-messages__explain"
+          title="Coloca el cursor del editor donde el servidor señala el error"
+          :data-test="`locate-error-${i}`"
+          @click="emit('locate-error', r)"
+          >Ir al error</v-btn
+        >
         <v-btn
           v-if="r.error && canExplain"
           size="x-small"
@@ -63,6 +81,13 @@ function summary(r: QueryStatementResult): string {
 </template>
 
 <style scoped>
+.query-messages__notices {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-info);
+}
 .query-messages {
   overflow: auto;
   height: 100%;

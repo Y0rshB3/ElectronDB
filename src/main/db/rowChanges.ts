@@ -14,7 +14,7 @@ import type { ApplyRowChangesResult, RowChange } from '@shared/types'
 
 export interface RowChangeRunner<S> {
   begin(): Promise<void>
-  execute(statement: S): Promise<{ affectedRows: number; insertId: number | null }>
+  execute(statement: S): Promise<{ affectedRows: number; insertId: number | string | null }>
   commit(): Promise<void>
   rollback(): Promise<void>
   /** Text of a statement for the result list (literals inlined, display only). */
@@ -38,12 +38,12 @@ export async function applyRowChangesAtomically<S>(
     runner.toError(formatRowChangeFailure(i, changes.length, changes[i].kind, reason), cause)
 
   const applied: string[] = []
-  const insertIds: (number | null)[] = []
+  const insertIds: (number | string | null)[] = []
   await runner.begin()
   try {
     for (let i = 0; i < statements.length; i++) {
       const stmt = statements[i]
-      let res: { affectedRows: number; insertId: number | null }
+      let res: { affectedRows: number; insertId: number | string | null }
       try {
         res = await runner.execute(stmt)
       } catch (err) {

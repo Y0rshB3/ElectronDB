@@ -29,6 +29,7 @@ import {
 import { CAPABILITY_MESSAGES, DbUserError, requireCapability } from './errors'
 import { getDriver } from './registry'
 import { openSshTunnel, type SshTunnel } from './tunnel'
+import { needsTypedConfirm } from '../ipc/productionGuard'
 
 // Log scope kept from v0.1.0 so existing log lines read the same.
 const log = getLogger('mysql.manager')
@@ -124,6 +125,14 @@ export class ConnectionManager implements SessionFactory {
   }
 
   /**
+   * The open driver connection of any engine (opening it on first use). The
+   * engine-specific db:* handlers (PostgreSQL) work on it directly.
+   */
+  async connection(id: string): Promise<DriverConnection> {
+    return (await this.ensureOpen(id)).connection
+  }
+
+  /**
    * The mysql2 pool of a MySQL connection (v0.1.x API, used by tests and
    * diagnostics). Other engines have no pool to hand out.
    */
@@ -169,12 +178,13 @@ export class ConnectionManager implements SessionFactory {
           : (password ?? (input.id ? this.ctx.credentials.get(DB_PASSWORD, input.id) : null))
       )
       const sshSecret = sshPassword ?? (input.id ? this.ctx.credentials.get('ssh', input.id) : null)
+      const sslKeyPassword = input.id ? this.ctx.credentials.get('sslKey', input.id) : null
       resolved = await this.resolveEndpoint(input, sshSecret)
       let result: ConnectionTestResult
       try {
         result = await driver.test(
           input,
-          { password: plan.password ?? null, sshPassword: sshSecret },
+          { password: plan.password ?? null, sshPassword: sshSecret, sslKeyPassword },
           resolved.endpoint,
           started
         )
@@ -226,9 +236,15 @@ export class ConnectionManager implements SessionFactory {
     try {
       const sshPassword = this.ctx.credentials.get('ssh', id)
       resolved = await this.resolveEndpoint(config, sshPassword)
-      const secrets: DriverSecrets = { password: plan.password ?? null, sshPassword }
+      const secrets: DriverSecrets = {
+        password: plan.password ?? null,
+        sshPassword,
+        sslKeyPassword: this.ctx.credentials.get('sslKey', id)
+      }
       const connection = await driver.open(config, secrets, resolved.endpoint, {
-        onFatal: (reason) => this.handleFatal(id, reason)
+        onFatal: (reason) => this.handleFatal(id, reason),
+        // Read the stored config each time: the environment can change while it is open.
+        isGuarded: () => needsTypedConfirm(this.ctx, this.ctx.connections.get(id) ?? config)
       })
       const entry: OpenEntry = { config, driver, connection, tunnel: resolved.tunnel }
       resolved.tunnel?.onClose((reason) => this.handleFatal(id, reason))
@@ -265,7 +281,11 @@ export class ConnectionManager implements SessionFactory {
       targetPort: config.port,
       readyTimeout: TUNNEL_READY_TIMEOUT_MS
     })
-    return { endpoint: { host: tunnel.localHost, port: tunnel.localPort }, tunnel }
+    // tlsServername: engines that verify TLS (PostgreSQL) check the real host, not 127.0.0.1.
+    return {
+      endpoint: { host: tunnel.localHost, port: tunnel.localPort, tlsServername: config.host },
+      tunnel
+    }
   }
 
   private handleFatal(id: string, reason: string): void {

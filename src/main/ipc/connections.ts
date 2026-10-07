@@ -75,6 +75,10 @@ export function registerConnectionsHandlers(ctx: AppContext): void {
   handle('connections:hasPassword', (id) => ctx.credentials.has(DB_PASSWORD, id))
   handle('connections:setSshPassword', (id, password) => ctx.credentials.set('ssh', id, password))
   handle('connections:hasSshPassword', (id) => ctx.credentials.has('ssh', id))
+  handle('connections:setSslKeyPassword', (id, password) =>
+    ctx.credentials.set('sslKey', id, password)
+  )
+  handle('connections:hasSslKeyPassword', (id) => ctx.credentials.has('sslKey', id))
 
   handle('connections:open', (id) => {
     assertEngineAvailable(ctx.connections.get(id))

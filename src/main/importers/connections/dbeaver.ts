@@ -2,11 +2,14 @@ import type { Environment, SshConfig, SslConfig } from '@shared/types'
 import { inferEnvironment } from '../../navicat/connPlist'
 import { NO_SSH, type ParsedConnection, type ParsedConnectionFile } from './types'
 import {
+  applySslMode,
   checkForeignPaths,
+  firstHost,
   isLoopback,
   mysqlFamily,
   normalizeColor,
   positiveInt,
+  postgresFamily,
   stripBom,
   uniqueKey,
   unsupported,
@@ -49,6 +52,23 @@ export function parseJdbcUrl(
   }
 }
 
+/**
+ * host list, database and sslmode of a `jdbc:postgresql://h[:p][,h2[:p]]/db?sslmode=…` URL.
+ * `hosts` keeps the raw list (firstHost picks the first one).
+ */
+export function parsePostgresJdbcUrl(
+  url: string
+): { hosts: string; database: string; sslMode: string } | null {
+  const m = /^jdbc:postgresql:\/\/([^/?#]*)(?:\/([^?#;]*))?(?:\?([^#]*))?/i.exec(url.trim())
+  if (!m) return null
+  const params = new URLSearchParams(m[3] ?? '')
+  return {
+    hosts: m[1],
+    database: m[2] ? decodeURIComponent(m[2]) : '',
+    sslMode: params.get('sslmode') ?? ''
+  }
+}
+
 const LABELS: Record<string, string> = {
   postgresql: 'PostgreSQL',
   postgres: 'PostgreSQL',
@@ -60,8 +80,12 @@ const LABELS: Record<string, string> = {
   db2: 'Db2',
   clickhouse: 'ClickHouse',
   redis: 'Redis',
-  snowflake: 'Snowflake'
+  snowflake: 'Snowflake',
+  redshift: 'Amazon Redshift'
 }
+
+const isPostgres = (p: string, d: string): boolean =>
+  p === 'postgresql' || (/postgre/.test(d) && !/redshift/.test(`${p} ${d}`))
 
 function engineFor(provider: string, driver: string): { choice: EngineChoice; label: string } {
   const p = provider.toLowerCase()
@@ -69,6 +93,7 @@ function engineFor(provider: string, driver: string): { choice: EngineChoice; la
   const maria = p === 'mariadb' || d.includes('maria')
   if (p === 'mysql' || p === 'mariadb' || (p === 'generic' && /^(mysql|maria)/.test(d)))
     return { choice: mysqlFamily(maria), label: maria ? 'MariaDB' : 'MySQL' }
+  if (isPostgres(p, d)) return { choice: postgresFamily(`${p} ${d}`), label: 'PostgreSQL' }
   const known = Object.keys(LABELS).find((k) => p.includes(k) || d.includes(k))
   const label = known ? LABELS[known] : driver || provider || 'Desconocido'
   return { choice: unsupported(label), label }
@@ -113,7 +138,7 @@ function parseSsh(handlers: Json, warnings: string[]): SshConfig {
 }
 
 /** DBeaver's SSL handler (id varies by driver); tolerant of its property names. */
-function parseSsl(handlers: Json): SslConfig {
+function parseSsl(handlers: Json, postgres: boolean, warnings: string[]): SslConfig {
   const handler = Object.entries(handlers).find(
     ([id, h]) => isObj(h) && /ssl/i.test(id) && bool(h.enabled)
   )?.[1]
@@ -123,16 +148,18 @@ function parseSsl(handlers: Json): SslConfig {
     const entry = Object.entries(p).find(([k]) => re.test(k))
     return entry ? str(entry[1]) : ''
   }
-  const ssl: SslConfig = {
+  let ssl: SslConfig = {
     enabled: true,
     verifyServer: ['true', '1'].includes(find(/verify/i).toLowerCase())
   }
-  const ca = find(/ca[._-]?cert/i)
-  const cert = find(/client[._-]?cert/i)
-  const key = find(/client[._-]?key/i)
+  // PostgreSQL drivers name them sslRootCert/sslCert/sslKey (or ssl.ca.cert…).
+  const ca = find(/ca[._-]?cert|root[._-]?cert/i)
+  const cert = find(/client[._-]?cert|^ssl[._-]?cert$/i)
+  const key = find(/client[._-]?key|^ssl[._-]?key$/i)
   if (ca) ssl.caCertPath = ca
   if (cert) ssl.clientCertPath = cert
   if (key) ssl.clientKeyPath = key
+  if (postgres) ssl = applySslMode(ssl, find(/ssl[._-]?mode/i), warnings)
   return ssl
 }
 
@@ -172,13 +199,28 @@ export function parseDbeaverDataSources(
     const warnings: string[] = []
     if (choice.warning) warnings.push(choice.warning)
 
-    const fromUrl = parseJdbcUrl(str(cfg.url))
-    const host = str(cfg.host) || fromUrl?.host || ''
-    const port = positiveInt(cfg.port, fromUrl?.port ?? 3306)
-    const database = str(cfg.database) || fromUrl?.database || ''
+    const postgres = label === 'PostgreSQL'
+    let host: string
+    let port: number
+    let database: string
+    let urlSslMode = ''
+    if (postgres) {
+      const fromUrl = parsePostgresJdbcUrl(str(cfg.url))
+      const first = firstHost(str(cfg.host) || fromUrl?.hosts || '', warnings)
+      host = first.host
+      port = positiveInt(cfg.port, first.port ?? 5432)
+      database = str(cfg.database) || fromUrl?.database || ''
+      urlSslMode = fromUrl?.sslMode ?? ''
+    } else {
+      const fromUrl = parseJdbcUrl(str(cfg.url))
+      host = str(cfg.host) || fromUrl?.host || ''
+      port = positiveInt(cfg.port, fromUrl?.port ?? 3306)
+      database = str(cfg.database) || fromUrl?.database || ''
+    }
     const username = str(cfg.user)
     const ssh = parseSsh(handlers, warnings)
-    const ssl = parseSsl(handlers)
+    let ssl = parseSsl(handlers, postgres, warnings)
+    if (postgres && urlSslMode && !ssl.mode) ssl = applySslMode(ssl, urlSslMode, warnings)
     if (choice.engine && !username) warnings.push(DBEAVER_USER_WARNING)
     checkForeignPaths(
       [ssh.privateKeyPath, ssl.caCertPath, ssl.clientCertPath, ssl.clientKeyPath],

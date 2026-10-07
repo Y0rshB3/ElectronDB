@@ -1,8 +1,11 @@
 import type {
   BackupFile,
   DatabaseInfo,
+  EngineId,
   EventInfo,
+  ObjectSummary,
   RoutineInfo,
+  SchemaInfo,
   TableInfo,
   ViewInfo
 } from '@shared/types'
@@ -15,7 +18,8 @@ import type { GroupKind } from './objectTypes'
  * Pure functions only: no store access, so they are trivially testable.
  */
 
-export type ObjectItem = TableInfo | ViewInfo | RoutineInfo | EventInfo | SavedQuery | BackupFile
+export type ObjectItem =
+  TableInfo | ViewInfo | RoutineInfo | EventInfo | SavedQuery | BackupFile | ObjectSummary
 
 export interface ObjectColumn<T = unknown> {
   key: string
@@ -44,6 +48,13 @@ export const DATABASE_COLUMNS: ObjectColumn<unknown>[] = [
   col<DatabaseInfo>({ key: 'name', title: 'Nombre', value: (d) => d.name }),
   col<DatabaseInfo>({ key: 'charset', title: 'Juego de caracteres', value: (d) => d.characterSet }),
   col<DatabaseInfo>({ key: 'collation', title: 'Intercalación', value: (d) => d.collation })
+]
+
+/** PostgreSQL: schemas of a database (db:schemas). */
+export const SCHEMA_COLUMNS: ObjectColumn<unknown>[] = [
+  col<SchemaInfo>({ key: 'name', title: 'Nombre', value: (s) => s.name }),
+  col<SchemaInfo>({ key: 'owner', title: 'Propietario', value: (s) => s.owner }),
+  col<SchemaInfo>({ key: 'comment', title: 'Comentario', value: (s) => s.comment })
 ]
 
 export const GROUP_COLUMNS: Record<GroupKind, ObjectColumn<unknown>[]> = {
@@ -166,7 +177,128 @@ export const GROUP_COLUMNS: Record<GroupKind, ObjectColumn<unknown>[]> = {
       value: (b) => b.source,
       display: (b) => BACKUP_SOURCE_LABELS[b.source] ?? b.source
     })
+  ],
+  materializedViews: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({
+      key: 'rows',
+      title: 'Filas (estimadas)',
+      align: 'end',
+      value: (o) => o.rows ?? null,
+      display: (o) => (o.rows === null || o.rows === undefined ? '—' : formatNumber(o.rows))
+    }),
+    col<ObjectSummary>({
+      key: 'size',
+      title: 'Tamaño',
+      align: 'end',
+      value: (o) => o.sizeBytes ?? null,
+      display: (o) => formatBytes(o.sizeBytes ?? null)
+    }),
+    col<ObjectSummary>({ key: 'owner', title: 'Propietario', value: (o) => o.owner ?? '' }),
+    col<ObjectSummary>({ key: 'detail', title: 'Estado', value: (o) => o.detail ?? '' }),
+    col<ObjectSummary>({ key: 'comment', title: 'Comentario', value: (o) => o.comment ?? '' })
+  ],
+  sequences: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({ key: 'kind', title: 'Tipo', value: (o) => o.kind ?? '' }),
+    col<ObjectSummary>({
+      key: 'detail',
+      title: 'Valor actual',
+      align: 'end',
+      value: (o) => o.detail ?? ''
+    }),
+    col<ObjectSummary>({ key: 'table', title: 'Pertenece a', value: (o) => o.table ?? '' }),
+    col<ObjectSummary>({ key: 'owner', title: 'Propietario', value: (o) => o.owner ?? '' }),
+    col<ObjectSummary>({ key: 'comment', title: 'Comentario', value: (o) => o.comment ?? '' })
+  ],
+  types: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({
+      key: 'kind',
+      title: 'Clase',
+      value: (o) => o.kind ?? '',
+      display: (o) => TYPE_KIND_LABELS[o.kind ?? ''] ?? o.kind ?? ''
+    }),
+    col<ObjectSummary>({ key: 'detail', title: 'Definición', value: (o) => o.detail ?? '' }),
+    col<ObjectSummary>({ key: 'owner', title: 'Propietario', value: (o) => o.owner ?? '' }),
+    col<ObjectSummary>({ key: 'comment', title: 'Comentario', value: (o) => o.comment ?? '' })
   ]
+}
+
+const TYPE_KIND_LABELS: Record<string, string> = {
+  enum: 'Enumerado',
+  domain: 'Dominio',
+  composite: 'Compuesto',
+  range: 'Rango'
+}
+
+const ROUTINE_KIND_LABELS: Record<string, string> = {
+  function: 'Función',
+  procedure: 'Procedimiento',
+  'trigger function': 'Función de trigger'
+}
+
+/**
+ * PostgreSQL columns for the groups whose MySQL columns do not apply (no
+ * storage engine, collation or creation dates); MySQL keeps GROUP_COLUMNS.
+ */
+const PG_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
+  tables: [
+    col<TableInfo>({ key: 'name', title: 'Nombre', value: (t) => t.name }),
+    col<TableInfo>({
+      key: 'rows',
+      title: 'Filas (estimadas)',
+      align: 'end',
+      value: (t) => t.rows,
+      display: (t) => (t.rows === null ? '—' : formatNumber(t.rows))
+    }),
+    col<TableInfo>({
+      key: 'dataLength',
+      title: 'Tamaño',
+      align: 'end',
+      value: (t) => t.dataLength,
+      display: (t) => formatBytes(t.dataLength)
+    }),
+    col<TableInfo>({
+      key: 'indexLength',
+      title: 'Índices',
+      align: 'end',
+      value: (t) => t.indexLength,
+      display: (t) => formatBytes(t.indexLength)
+    }),
+    col<TableInfo>({ key: 'engine', title: 'Tipo', value: (t) => t.engine }),
+    col<TableInfo>({ key: 'comment', title: 'Comentario', value: (t) => t.comment })
+  ],
+  views: [
+    col<ViewInfo>({ key: 'name', title: 'Nombre', value: (v) => v.name }),
+    col<ViewInfo>({ key: 'definer', title: 'Propietario', value: (v) => v.definer }),
+    col<ViewInfo>({ key: 'security', title: 'Seguridad', value: (v) => v.security }),
+    col<ViewInfo>({
+      key: 'updatable',
+      title: 'Actualizable',
+      value: (v) => (v.updatable ? 1 : 0),
+      display: (v) => (v.updatable ? 'Sí' : 'No')
+    })
+  ],
+  functions: [
+    col<RoutineInfo>({ key: 'name', title: 'Nombre', value: (r) => r.name }),
+    col<RoutineInfo>({ key: 'signature', title: 'Argumentos', value: (r) => r.signature ?? '' }),
+    col<RoutineInfo>({
+      key: 'type',
+      title: 'Tipo',
+      value: (r) => r.kind ?? r.type,
+      display: (r) => ROUTINE_KIND_LABELS[r.kind ?? ''] ?? r.type
+    }),
+    col<RoutineInfo>({ key: 'returns', title: 'Devuelve', value: (r) => r.returns }),
+    col<RoutineInfo>({ key: 'definer', title: 'Propietario', value: (r) => r.definer }),
+    col<RoutineInfo>({ key: 'comment', title: 'Comentario', value: (r) => r.comment })
+  ]
+}
+
+/** Columns of a group for a connection's engine (MySQL: GROUP_COLUMNS unchanged). */
+export function columnsFor(group: GroupKind, engine?: EngineId | null): ObjectColumn<unknown>[] {
+  if (engine === 'postgresql') return PG_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
+  return GROUP_COLUMNS[group]
 }
 
 const BACKUP_SOURCE_LABELS: Record<string, string> = {
@@ -187,19 +319,36 @@ export function cellText(column: ObjectColumn<unknown>, item: unknown): string {
   return v === null || v === undefined ? '' : String(v)
 }
 
-/** Identifier used in tree node ids (saved query id, backup path or object name). */
+/**
+ * Identifier used in tree node ids (saved query id, backup path or object name).
+ * PostgreSQL routines are `name(identity args)`: overloads share a name.
+ */
 export function itemName(group: GroupKind, item: unknown): string {
-  const raw = item as { name?: string; id?: string; path?: string }
+  const raw = item as { name?: string; id?: string; path?: string; signature?: string }
   if (group === 'queries') return raw.id ?? ''
   if (group === 'backups') return raw.path ?? ''
+  if (group === 'functions' && raw.signature !== undefined)
+    return `${raw.name ?? ''}(${raw.signature})`
   return raw.name ?? ''
 }
 
 /** Human label for an item. */
 export function itemLabel(group: GroupKind, item: unknown): string {
-  const raw = item as { name?: string; fileName?: string }
+  const raw = item as { name?: string; fileName?: string; signature?: string }
   if (group === 'backups') return raw.fileName ?? ''
+  if (group === 'functions' && raw.signature !== undefined)
+    return `${raw.name ?? ''}(${raw.signature})`
   return raw.name ?? ''
+}
+
+/**
+ * Splits a PostgreSQL routine node name `name(args)` back into its parts;
+ * a name without arguments (MySQL) has no signature.
+ */
+export function splitRoutineName(nodeName: string): { name: string; signature?: string } {
+  const open = nodeName.indexOf('(')
+  if (open <= 0 || !nodeName.endsWith(')')) return { name: nodeName }
+  return { name: nodeName.slice(0, open), signature: nodeName.slice(open + 1, -1) }
 }
 
 export function compareCells(a: string | number | null, b: string | number | null): number {
@@ -262,6 +411,14 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
     }
     case 'functions': {
       const r = item as RoutineInfo
+      if (r.signature !== undefined)
+        return [
+          row('Tipo', ROUTINE_KIND_LABELS[r.kind ?? ''] ?? r.type),
+          row('Argumentos', r.signature || '(ninguno)'),
+          row('Devuelve', r.returns),
+          row('Propietario', r.definer),
+          row('Comentario', r.comment)
+        ]
       return [
         row('Tipo', r.type === 'PROCEDURE' ? 'Procedimiento' : 'Función'),
         row('Devuelve', r.returns),
@@ -299,6 +456,38 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
         row('Ruta', b.path)
       ]
     }
+    case 'materializedViews': {
+      const o = item as ObjectSummary
+      return [
+        row(
+          'Filas (estimadas)',
+          o.rows === null || o.rows === undefined ? '—' : formatNumber(o.rows)
+        ),
+        row('Tamaño', formatBytes(o.sizeBytes ?? null)),
+        row('Propietario', o.owner),
+        row('Estado', o.detail),
+        row('Comentario', o.comment)
+      ]
+    }
+    case 'sequences': {
+      const o = item as ObjectSummary
+      return [
+        row('Tipo', o.kind),
+        row('Valor actual', o.detail),
+        row('Pertenece a', o.table),
+        row('Propietario', o.owner),
+        row('Comentario', o.comment)
+      ]
+    }
+    case 'types': {
+      const o = item as ObjectSummary
+      return [
+        row('Clase', TYPE_KIND_LABELS[o.kind ?? ''] ?? o.kind),
+        row('Definición', o.detail),
+        row('Propietario', o.owner),
+        row('Comentario', o.comment)
+      ]
+    }
   }
 }
 
@@ -309,5 +498,8 @@ export const GROUP_SINGULAR: Record<GroupKind, string> = {
   functions: 'función',
   events: 'evento',
   queries: 'consulta',
-  backups: 'copia de seguridad'
+  backups: 'copia de seguridad',
+  materializedViews: 'vista materializada',
+  sequences: 'secuencia',
+  types: 'tipo'
 }

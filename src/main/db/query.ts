@@ -43,7 +43,11 @@ export async function executeScript<Raw>(
 ): Promise<QueryStatementResult[]> {
   const maxRows = resolveMaxRows(options.maxRows, defaultMaxRows)
   const stopOnError = options.stopOnError !== false
-  if (options.schema) await target.useSchema(options.schema)
+  // MySQL passes the database name; the object form (PostgreSQL) never reaches this loop.
+  if (options.schema)
+    await target.useSchema(
+      typeof options.schema === 'string' ? options.schema : options.schema.schema
+    )
 
   const results: QueryStatementResult[] = []
   for (const stmt of dialect.splitStatements(script)) {

@@ -6,13 +6,23 @@
 import { engineOf } from '../engines'
 import type { EngineId } from '../types'
 import { mysqlDialect } from './mysql'
+import { postgresqlDialect } from './postgresql'
 import type { SqlDialect, SqlDialectId } from './types'
 
-export type { LexRules, SqlDialect, SqlDialectId, SqlStatement, WriteCheck } from './types'
+export type {
+  DestructiveStatementInfo,
+  LexRules,
+  SqlDialect,
+  SqlDialectId,
+  SqlStatement,
+  WriteCheck
+} from './types'
 export { mysqlDialect } from './mysql'
+export { postgresqlDialect } from './postgresql'
 
 const DIALECTS: Partial<Record<SqlDialectId, SqlDialect>> = {
-  mysql: mysqlDialect
+  mysql: mysqlDialect,
+  postgresql: postgresqlDialect
 }
 
 /** The dialect with this id; throws when this build does not include it. */

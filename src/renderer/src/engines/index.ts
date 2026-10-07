@@ -1,7 +1,7 @@
 /**
- * Engine UI registry (docs/multi-engine-design.md, section 8.1). Only MySQL
- * has a renderer module in P1a; the other engines register theirs in their
- * own phases. Capability checks read the shared descriptors
+ * Engine UI registry (docs/multi-engine-design.md, section 8.1). MySQL and
+ * PostgreSQL (preview) have renderer modules; the other engines register
+ * theirs in their own phases. Capability checks read the shared descriptors
  * (`@shared/engines`), so they work for every engine, with or without a UI.
  */
 import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from 'vue'
@@ -15,14 +15,17 @@ import type { EngineId, ServerRuntime } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { descriptorOf } from './capabilities'
 import { mysqlUi } from './mysql'
+import { postgresqlUi } from './postgresql'
 import type { EngineUi } from './types'
 
 export type { DdlSupport, EngineUi, TablePlanner, TypeCatalog, UserSqlBuilder } from './types'
 export { mysqlUi } from './mysql'
+export { postgresqlUi } from './postgresql'
 export { can, descriptorOf, groupsFor } from './capabilities'
 
 const UIS: Partial<Record<EngineId, EngineUi>> = {
-  mysql: mysqlUi
+  mysql: mysqlUi,
+  postgresql: postgresqlUi
 }
 
 /** Renderer module of an engine; throws when this build does not include it. */

@@ -6,7 +6,8 @@ import {
   DBEAVER_INVALID_MESSAGE,
   DBEAVER_USER_WARNING,
   parseDbeaverDataSources,
-  parseJdbcUrl
+  parseJdbcUrl,
+  parsePostgresJdbcUrl
 } from './dbeaver'
 import {
   HTTP_TUNNEL_WARNING,
@@ -18,7 +19,13 @@ import {
 } from './ncx'
 import { IMPORT_FIXTURES } from './testing'
 import { FOREIGN_PATH_WARNING, MARIADB_AS_MYSQL_WARNING } from './types'
-import { isForeignPath, normalizeColor } from './util'
+import {
+  isForeignPath,
+  multiHostWarning,
+  normalizeColor,
+  postgresForkReason,
+  unknownSslModeWarning
+} from './util'
 import {
   WORKBENCH_INVALID_MESSAGE,
   WORKBENCH_PASSWORDS_NOTE,
@@ -72,9 +79,11 @@ describe('parseNcx', () => {
     expect(bastion.port).toBe(3307)
     expect(bastion.environment).toBe('staging')
     expect(pg).toMatchObject({
-      engine: null,
+      engine: 'postgresql',
       engineLabel: 'PostgreSQL',
-      unsupportedReason: 'Motor no soportado en esta versión: PostgreSQL',
+      navicatType: 'PostgreSQL',
+      unsupportedReason: null,
+      port: 5432,
       database: 'reports'
     })
   })
@@ -206,14 +215,17 @@ describe('parseDbeaverDataSources', () => {
     expect(maria.warnings).toContain(MARIADB_AS_MYSQL_WARNING)
   })
 
-  it('lists other engines as not importable', () => {
+  it('maps PostgreSQL and lists other engines as not importable', () => {
     expect(byName.get('Warehouse')).toMatchObject({
-      engine: null,
+      engine: 'postgresql',
       engineLabel: 'PostgreSQL',
-      unsupportedReason: 'Motor no soportado en esta versión: PostgreSQL'
+      unsupportedReason: null,
+      host: 'pg.example.test',
+      port: 5432,
+      database: 'warehouse'
     })
     expect(byName.get('Local notes')).toMatchObject({ engine: null, engineLabel: 'SQLite' })
-    expect(byName.get('Warehouse')!.warnings).toEqual([])
+    expect(byName.get('Warehouse')!.warnings).toEqual([DBEAVER_USER_WARNING])
   })
 
   it('parses JDBC URLs and refuses other files', () => {
@@ -316,5 +328,157 @@ describe('helpers', () => {
     expect(normalizeColor('0,128,255')).toBe('#0080ff')
     expect(normalizeColor('red')).toBeNull()
     expect(normalizeColor('300,0,0')).toBeNull()
+  })
+})
+
+describe('PostgreSQL entries', () => {
+  const dbeaver = (connections: Record<string, unknown>): string => JSON.stringify({ connections })
+
+  it('maps a DBeaver PostgreSQL connection with sslmode verify-full and SSH', () => {
+    const file = parseDbeaverDataSources(
+      dbeaver({
+        'postgres-jdbc-1': {
+          provider: 'postgresql',
+          driver: 'postgres-jdbc',
+          name: 'Orders PG',
+          configuration: {
+            host: 'pg.example.test',
+            port: '6432',
+            database: 'orders',
+            url: 'jdbc:postgresql://pg.example.test:6432/orders',
+            user: 'orders_app',
+            type: 'dev',
+            handlers: {
+              ssh_tunnel: {
+                type: 'TUNNEL',
+                enabled: true,
+                properties: {
+                  host: 'jump.example.test',
+                  port: 22,
+                  authType: 'PASSWORD',
+                  user: 'ops'
+                }
+              },
+              postgre_ssl: {
+                enabled: true,
+                properties: {
+                  sslMode: 'verify-full',
+                  sslRootCert: '/home/tester/pg/root.crt',
+                  sslCert: '/home/tester/pg/client.crt',
+                  sslKey: '/home/tester/pg/client.key'
+                }
+              }
+            }
+          }
+        }
+      }),
+      'linux'
+    )
+    const pg = file.connections[0]
+    expect(pg).toMatchObject({
+      engine: 'postgresql',
+      engineLabel: 'PostgreSQL',
+      unsupportedReason: null,
+      host: 'pg.example.test',
+      port: 6432,
+      username: 'orders_app',
+      database: 'orders',
+      ssh: { enabled: true, host: 'jump.example.test', username: 'ops', authType: 'password' }
+    })
+    expect(pg.ssl).toEqual({
+      enabled: true,
+      verifyServer: true,
+      mode: 'verify-full',
+      caCertPath: '/home/tester/pg/root.crt',
+      clientCertPath: '/home/tester/pg/client.crt',
+      clientKeyPath: '/home/tester/pg/client.key'
+    })
+    expect(pg.warnings).toEqual([])
+  })
+
+  it('reads host, database and sslmode from the JDBC URL; keeps only the first host', () => {
+    const file = parseDbeaverDataSources(
+      dbeaver({
+        a: {
+          provider: 'postgresql',
+          driver: 'postgres-jdbc',
+          name: 'Cluster',
+          configuration: {
+            url: 'jdbc:postgresql://pg1.example.test:5433,pg2.example.test:5434/app?sslmode=require',
+            user: 'u'
+          }
+        },
+        b: {
+          provider: 'postgresql',
+          driver: 'postgres-jdbc',
+          name: 'Odd ssl',
+          configuration: {
+            host: 'h.example.test',
+            url: 'jdbc:postgresql://h.example.test/x?sslmode=sometimes',
+            user: 'u'
+          }
+        }
+      }),
+      'linux'
+    )
+    const [cluster, odd] = file.connections
+    expect(cluster).toMatchObject({
+      host: 'pg1.example.test',
+      port: 5433,
+      database: 'app',
+      ssl: { enabled: true, verifyServer: false, mode: 'require' }
+    })
+    expect(cluster.warnings).toEqual([multiHostWarning('pg1.example.test')])
+    expect(odd.ssl).toEqual({ enabled: false, verifyServer: false })
+    expect(odd.warnings).toEqual([unknownSslModeWarning('sometimes')])
+    expect(parsePostgresJdbcUrl('jdbc:mysql://h/x')).toBeNull()
+  })
+
+  it('keeps Redshift and other forks unsupported', () => {
+    const file = parseDbeaverDataSources(
+      dbeaver({
+        r: { provider: 'redshift', driver: 'redshift-jdbc', name: 'RS', configuration: {} }
+      })
+    )
+    expect(file.connections[0]).toMatchObject({ engine: null, engineLabel: 'Amazon Redshift' })
+    const ncx = parseNcx(
+      `<?xml version="1.0"?><Connections Ver="1.5">
+        <Connection ConnectionName="RS" ConnType="POSTGRESQL" ServiceProvider="AmazonRedshift" Host="rs.example.test"/>
+        <Connection ConnectionName="Gauss" ConnType="POSTGRESQL" ServiceProvider="GaussDB" Host="g.example.test"/>
+      </Connections>`
+    )
+    expect(ncx.connections.map((c) => [c.engine, c.unsupportedReason])).toEqual([
+      [null, postgresForkReason('Amazon Redshift')],
+      [null, postgresForkReason('GaussDB')]
+    ])
+  })
+
+  it('maps an .ncx PostgreSQL connection with its password, initial database and SSL mode', () => {
+    const file = parseNcx(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<Connections Ver="1.5">
+  <Connection ConnectionName="Ledger" ConnType="POSTGRESQL" ServiceProvider="Default" Host="ledger.example.test"
+    UserName="ledger" Password="${encryptNcxAes('pg-secret')}" InitialDatabase="ledger_db"
+    SSL="true" SSL_Mode="verify-ca" SSL_CACert="/certs/ca.pem"
+    SSH="true" SSH_Host="jump.example.test" SSH_UserName="ops" SSH_Password="${encryptNcxAes('ssh-pw')}" />
+  <Connection ConnectionName="Pair" ConnType="POSTGRESQL" Host="a.example.test:5440,b.example.test:5441" UserName="u" />
+</Connections>`,
+      'darwin'
+    )
+    const [ledger, pair] = file.connections
+    expect(ledger).toMatchObject({
+      key: 'PostgreSQL:Ledger',
+      engine: 'postgresql',
+      navicatType: 'PostgreSQL',
+      host: 'ledger.example.test',
+      port: 5432,
+      username: 'ledger',
+      database: 'ledger_db',
+      ssl: { enabled: true, verifyServer: true, mode: 'verify-ca', caCertPath: '/certs/ca.pem' },
+      ssh: { enabled: true, host: 'jump.example.test', savePassword: true }
+    })
+    expect(ledger.secrets).toEqual({ mysql: 'pg-secret', ssh: 'ssh-pw' })
+    expect(pair).toMatchObject({ host: 'a.example.test', port: 5440 })
+    expect(pair.warnings).toEqual([multiHostWarning('a.example.test')])
   })
 })

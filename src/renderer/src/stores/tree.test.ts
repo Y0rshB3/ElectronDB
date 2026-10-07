@@ -202,10 +202,137 @@ describe('tree groups follow the engine', () => {
       'queries',
       'backups'
     ])
-    expect(tree.groupsOf('pg')).toEqual(['tables', 'views', 'functions', 'queries'])
+    expect(tree.groupsOf('pg')).toEqual([
+      'tables',
+      'views',
+      'materializedViews',
+      'functions',
+      'sequences',
+      'types',
+      'queries'
+    ])
     expect(tree.groupsOf('lite')).toEqual(['tables', 'views', 'queries'])
     expect(tree.groupsOf('odd')).toEqual([])
     const schema = tree.parse(nodeIds.schema('pg', 'app'))!
     expect(tree.childrenOf(schema).map((n) => n.group)).toEqual(tree.groupsOf('pg'))
+  })
+})
+
+describe('PostgreSQL database level', () => {
+  const calls: unknown[][] = []
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    calls.length = 0
+    installBridge({
+      'connections:list': [
+        makeConnection({
+          id: 'pg',
+          engine: 'postgresql',
+          postgres: {
+            initialDatabase: 'app',
+            showSystemSchemas: false,
+            timeZone: '',
+            searchPath: ''
+          }
+        })
+      ],
+      'connections:open': () => makeServerInfo(),
+      'db:databases': () => [
+        { name: 'app', characterSet: 'UTF8', collation: 'C' },
+        { name: 'shop:eu', characterSet: 'UTF8', collation: 'C' }
+      ],
+      'db:schemas': (...args: unknown[]) => {
+        calls.push(['db:schemas', ...args])
+        return [{ name: 'public', owner: 'postgres', comment: '', system: false }]
+      },
+      'db:tables': (...args: unknown[]) => {
+        calls.push(['db:tables', ...args])
+        return [
+          {
+            name: 'users',
+            engine: null,
+            rows: null,
+            dataLength: null,
+            indexLength: null,
+            autoIncrement: null,
+            createTime: null,
+            updateTime: null,
+            collation: null,
+            comment: ''
+          }
+        ]
+      },
+      'db:routines': () => [
+        {
+          name: 'add',
+          type: 'FUNCTION',
+          definer: 'postgres',
+          returns: 'integer',
+          created: null,
+          modified: null,
+          comment: '',
+          signature: 'a integer, b integer'
+        },
+        {
+          name: 'add',
+          type: 'FUNCTION',
+          definer: 'postgres',
+          returns: 'text',
+          created: null,
+          modified: null,
+          comment: '',
+          signature: 'a text, b text'
+        }
+      ]
+    })
+    await useConnectionsStore().load()
+  })
+
+  it('keeps MySQL ids and adds the database as one trailing segment for PostgreSQL', () => {
+    expect(nodeIds.schema('c', 's')).toBe('s:c:s')
+    expect(nodeIds.schema('c', 's', 'db')).toBe('s:c:s:db')
+    expect(nodeIds.object('c', 's', 'tables', 't', 'shop:eu')).toBe('o:c:s:tables:t:shop%3Aeu')
+    const tree = useTreeStore()
+    const node = tree.parse(nodeIds.object('pg', 'public', 'tables', 'users', 'shop:eu'))!
+    expect(node).toMatchObject({
+      kind: 'object',
+      database: 'shop:eu',
+      schema: 'public',
+      name: 'users'
+    })
+    expect(tree.parse(node.parentId!)).toMatchObject({ kind: 'group', database: 'shop:eu' })
+    const schema = tree.parse(nodeIds.schema('pg', 'public', 'shop:eu'))!
+    expect(tree.parse(schema.parentId!)).toMatchObject({ kind: 'database', database: 'shop:eu' })
+    expect(tree.parse(nodeIds.schema('c', 's'))).not.toHaveProperty('database')
+  })
+
+  it('lists databases, then schemas, then groups, sending { database, schema }', async () => {
+    const tree = useTreeStore()
+    await tree.expand(tree.parse(nodeIds.connection('pg'))!)
+    const dbs = tree.childrenOf(tree.parse(nodeIds.connection('pg'))!)
+    expect(dbs.map((n) => [n.kind, n.label])).toEqual([
+      ['database', 'app'],
+      ['database', 'shop:eu']
+    ])
+    await tree.expand(dbs[1])
+    expect(calls).toContainEqual(['db:schemas', 'pg', 'shop:eu'])
+    const [schema] = tree.childrenOf(dbs[1])
+    expect(schema).toMatchObject({ kind: 'schema', database: 'shop:eu', schema: 'public' })
+    const tables = tree.parse(nodeIds.group('pg', 'public', 'tables', 'shop:eu'))!
+    await tree.expand(tables)
+    expect(calls).toContainEqual(['db:tables', 'pg', { database: 'shop:eu', schema: 'public' }])
+    expect(tree.childrenOf(tables).map((n) => n.name)).toEqual(['users'])
+    // The same schema in another database has its own cache.
+    expect(tree.hasItems('pg', 'public', 'tables', 'app')).toBe(false)
+  })
+
+  it('names routine nodes with their signature so overloads stay apart', async () => {
+    const tree = useTreeStore()
+    const group = tree.parse(nodeIds.group('pg', 'public', 'functions', 'app'))!
+    await tree.expand(group)
+    expect(tree.childrenOf(group).map((n) => n.label)).toEqual([
+      'add(a integer, b integer)',
+      'add(a text, b text)'
+    ])
   })
 })

@@ -185,6 +185,8 @@ export type AiStopReason =
 export interface AiTarget {
   connectionId: string
   schema: string | null
+  /** PostgreSQL: database that holds `schema` (absent/null = the connection's initial one). */
+  database?: string | null
 }
 
 export interface AiChatRequest extends AiTarget {

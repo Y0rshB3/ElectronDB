@@ -12,7 +12,7 @@ import {
   type EngineDescriptor
 } from '@shared/engines'
 import type { EngineId } from '@shared/types'
-import { GROUPS, type GroupKind } from '@renderer/utils/objectTypes'
+import { ALL_GROUPS, type GroupKind } from '@renderer/utils/objectTypes'
 
 type EngineHolder = { engine?: EngineId | null } | undefined | null
 
@@ -35,7 +35,7 @@ export function can(connection: EngineHolder, capability: BooleanCapability): bo
   return !!descriptorOf(connection)?.capabilities[capability]
 }
 
-const RENDERER_GROUPS: ReadonlySet<string> = new Set(GROUPS)
+const RENDERER_GROUPS: ReadonlySet<string> = new Set(ALL_GROUPS)
 
 /**
  * Tree groups under a database, in the engine's order, limited to the groups
@@ -50,6 +50,8 @@ export function groupsFor(connection: EngineHolder): GroupKind[] {
     if (g === 'backups') return caps.supportsBackupsNb3
     if (g === 'events') return caps.events
     if (g === 'functions') return caps.routines
+    if (g === 'sequences') return caps.sequences
+    if (g === 'materializedViews') return caps.materializedViews
     return true
   })
 }

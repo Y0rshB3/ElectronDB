@@ -3,8 +3,9 @@
  * section 3). Pure data plus small helpers: no driver, Node or browser imports,
  * so main and renderer read the same flags.
  *
- * Only `mysql` ships a driver today (`available`). The other engines are
- * declared so the model is complete, stay `preview`, and are never offered.
+ * `mysql` and `postgresql` ship drivers (`available`); PostgreSQL stays
+ * `preview` (offered only with Ajustes › Motores en vista previa). The other
+ * engines are declared so the model is complete and are never offered.
  */
 import type {
   ConnectionConfig,
@@ -182,7 +183,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     defaultPort: 5432,
     defaultUser: 'postgres',
     groups: ['tables', 'views', 'materializedViews', 'functions', 'sequences', 'types', 'queries'],
-    available: false,
+    available: true,
     capabilities: {
       family: 'sql',
       hierarchy: 'database>schema',
@@ -361,7 +362,8 @@ export const DEFAULT_NETWORK: Readonly<NetworkOptions> = {
 export const defaultPostgresOptions = (): PostgresOptions => ({
   initialDatabase: 'postgres',
   showSystemSchemas: false,
-  timeZone: ''
+  timeZone: '',
+  searchPath: ''
 })
 
 export const defaultSqliteOptions = (production: boolean): SqliteOptions => ({

@@ -6,6 +6,15 @@ import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { firstError, friendlyError } from '@renderer/components/data/privileges'
 import type { DdlObjectType } from '@renderer/components/designer/ddl'
 import {
+  pgBuildDdlScript,
+  pgDdlTemplate,
+  pgIsRename,
+  pgParseObjectName,
+  type PgDdlObjectType
+} from '@renderer/components/designer/pg/ddl'
+import { postgresqlDialect } from '@shared/dialects/postgresql'
+import { schemaRef } from '@renderer/utils/schemaRef'
+import {
   analyzeDestructiveScript,
   destructiveItems,
   destructiveTitle
@@ -24,6 +33,12 @@ const props = defineProps<{ tab: WorkspaceTab }>()
 /** Templates and apply script of the connection's engine (MySQL: designer/ddl.ts). */
 const engineUi = useEngineUi(() => props.tab.connectionId)
 const ddl = computed(() => engineUi.value.ddl!)
+/** PostgreSQL: materialized views, routine signatures, trigger tables, no DEFINER. */
+const isPg = computed(() => engineUi.value.id === 'postgresql')
+const canStripDefiner = computed(() => engineUi.value.descriptor.capabilities.definer)
+
+/** Every object type this editor opens (PostgreSQL adds materialized views). */
+type EditorObjectType = DdlObjectType | 'materialized_view'
 
 const tabs = useTabsStore()
 const tree = useTreeStore()
@@ -31,8 +46,17 @@ const connections = useConnectionsStore()
 const notify = useNotify()
 const { confirmDestructive } = useConfirm()
 
-const objectType = computed<DdlObjectType>(() =>
-  props.tab.objectType && props.tab.objectType !== 'table' ? props.tab.objectType : 'view'
+const objectType = computed<EditorObjectType>(() => {
+  // Tabs type objectType as the MySQL ObjectType; PostgreSQL also opens 'materialized_view'.
+  const type = props.tab.objectType as string | undefined
+  return type && type !== 'table' ? (type as EditorObjectType) : 'view'
+})
+/** PostgreSQL routines: identity arguments (overloads); triggers: owning table. */
+const signature = computed(() =>
+  typeof props.tab.payload?.signature === 'string' ? props.tab.payload.signature : undefined
+)
+const triggerTable = computed(() =>
+  typeof props.tab.payload?.table === 'string' ? props.tab.payload.table : undefined
 )
 const objectName = ref<string | null>(props.tab.objectName || null)
 const sql = ref('')
@@ -45,24 +69,54 @@ const showScript = ref(false)
 
 const connectionId = computed(() => props.tab.connectionId ?? '')
 const schema = computed(() => props.tab.schema ?? '')
-const typeLabel = computed(() => OBJECT_TYPE_LABELS[objectType.value])
-const dirty = computed(() => sql.value !== loadedSql.value)
-const script = computed(() =>
-  sql.value.trim()
-    ? ddl.value.buildScript(sql.value, {
-        type: objectType.value,
-        schema: schema.value,
-        originalName: objectName.value,
-        removeDefiner: removeDefiner.value
-      })
-    : ''
+/** PostgreSQL: database of the tab (undefined for MySQL). */
+const database = computed(() => props.tab.database)
+const typeLabel = computed(() =>
+  objectType.value === 'materialized_view'
+    ? 'vista materializada'
+    : OBJECT_TYPE_LABELS[objectType.value]
 )
+const typeWithArticle = computed(() =>
+  objectType.value === 'materialized_view'
+    ? 'la vista materializada'
+    : OBJECT_TYPE_WITH_ARTICLE[objectType.value]
+)
+const dirty = computed(() => sql.value !== loadedSql.value)
+const script = computed(() => {
+  if (!sql.value.trim()) return ''
+  if (isPg.value)
+    return pgBuildDdlScript(sql.value, {
+      type: objectType.value as PgDdlObjectType,
+      schema: schema.value,
+      originalName: objectName.value,
+      removeDefiner: false,
+      signature: signature.value,
+      table: triggerTable.value
+    })
+  return ddl.value.buildScript(sql.value, {
+    type: objectType.value as DdlObjectType,
+    schema: schema.value,
+    originalName: objectName.value,
+    removeDefiner: removeDefiner.value
+  })
+})
+
+/* Engine helpers: PostgreSQL also knows materialized views. */
+const parseName = (source: string): string | null =>
+  isPg.value
+    ? pgParseObjectName(source, objectType.value as PgDdlObjectType)
+    : ddl.value.parseObjectName(source, objectType.value as DdlObjectType)
+const isRename = (source: string): boolean =>
+  isPg.value
+    ? pgIsRename(source, objectType.value as PgDdlObjectType, objectName.value)
+    : ddl.value.isRename(source, objectType.value as DdlObjectType, objectName.value)
 const hasDefiner = computed(() => /\bDEFINER\s*=/i.test(sql.value))
 
 watch(dirty, (value) => tabs.setDirty(props.tab.id, value), { immediate: true })
 
-const GROUP: Record<DdlObjectType, GroupKind | null> = {
+const GROUP: Record<EditorObjectType, GroupKind | null> = {
   view: 'views',
+  materialized_view: 'materializedViews' as GroupKind,
   function: 'functions',
   procedure: 'functions',
   event: 'events',
@@ -77,18 +131,30 @@ async function load(): Promise<void> {
   }
   loadError.value = null
   if (!objectName.value) {
-    sql.value = ddl.value.template(objectType.value)
+    sql.value = isPg.value
+      ? pgDdlTemplate(objectType.value as PgDdlObjectType)
+      : ddl.value.template(objectType.value as DdlObjectType)
     loadedSql.value = ''
     return
   }
   loading.value = true
   try {
+    // PostgreSQL routines are identified by name + signature (overloads), triggers by table.
+    const name =
+      isPg.value && (signature.value !== undefined || triggerTable.value !== undefined)
+        ? {
+            type: objectType.value,
+            name: objectName.value,
+            ...(signature.value !== undefined ? { signature: signature.value } : {}),
+            ...(triggerTable.value !== undefined ? { table: triggerTable.value } : {})
+          }
+        : objectName.value
     const ddl = await api.invokeSilent(
       'db:showCreate',
       connectionId.value,
-      schema.value,
+      schemaRef(schema.value, database.value),
       objectType.value,
-      objectName.value
+      name
     )
     sql.value = ddl
     loadedSql.value = ddl
@@ -101,17 +167,25 @@ async function load(): Promise<void> {
 
 async function apply(): Promise<void> {
   if (applying.value || !script.value) return
-  const rename = ddl.value.isRename(sql.value, objectType.value, objectName.value)
-  const newName = ddl.value.parseObjectName(sql.value, objectType.value)
-  const replaces = !!objectName.value && (objectType.value !== 'view' || rename)
+  const rename = isRename(sql.value)
+  const newName = parseName(sql.value)
+  // PostgreSQL views and routines use CREATE OR REPLACE: only renames, materialized
+  // views and triggers drop the original first.
+  const replaces =
+    !!objectName.value &&
+    (isPg.value
+      ? rename || objectType.value === 'materialized_view' || objectType.value === 'trigger'
+      : objectType.value !== 'view' || rename)
   const message = rename
     ? `El nombre cambia: se creará ${typeLabel.value} "${newName}" y se eliminará "${objectName.value}". Lo que dependa del nombre anterior dejará de funcionar.`
     : replaces
       ? `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
       : 'Se ejecutará el siguiente SQL.'
   // DROP + CREATE of routines/events/triggers, renamed views, or DROPs written by the user.
-  const drops = analyzeDestructiveScript(script.value)
-  const article = OBJECT_TYPE_WITH_ARTICLE[objectType.value]
+  const drops = isPg.value
+    ? (postgresqlDialect.analyzeDestructive?.(script.value) ?? [])
+    : analyzeDestructiveScript(script.value)
+  const article = typeWithArticle.value
   const destructive: DestructiveDetails | undefined = drops.length
     ? {
         title: rename
@@ -138,7 +212,7 @@ async function apply(): Promise<void> {
   applying.value = true
   try {
     const results = await api.invokeSilent('db:execute', connectionId.value, script.value, {
-      schema: schema.value,
+      schema: schemaRef(schema.value, database.value),
       confirmProduction: true
     })
     const error = firstError(results)
@@ -146,7 +220,7 @@ async function apply(): Promise<void> {
       notify.error(friendlyError(error))
       return
     }
-    const name = ddl.value.parseObjectName(sql.value, objectType.value) ?? objectName.value
+    const name = parseName(sql.value) ?? objectName.value
     const wasNew = !objectName.value
     const renamed = name !== objectName.value
     objectName.value = name
@@ -154,11 +228,10 @@ async function apply(): Promise<void> {
       if (name)
         tabs.setTitle(
           props.tab.id,
-          tabTitle(name, schema.value, connections.nameOf(connectionId.value))
+          tabTitle(name, schema.value, connections.nameOf(connectionId.value), database.value)
         )
       const group = GROUP[objectType.value]
-      if (group)
-        void tree.loadGroup(connectionId.value, schema.value, group, true).catch(() => undefined)
+      if (group) void refreshGroup(group)
     }
     notify.success(
       `${typeLabel.value.charAt(0).toUpperCase()}${typeLabel.value.slice(1)} "${name ?? ''}" guardado`
@@ -170,6 +243,14 @@ async function apply(): Promise<void> {
   } finally {
     applying.value = false
   }
+}
+
+/** Reloads a tree group (PostgreSQL groups are per database: trailing `database` argument). */
+function refreshGroup(group: GroupKind): Promise<unknown> {
+  if (database.value === undefined)
+    return tree.loadGroup(connectionId.value, schema.value, group, true).catch(() => undefined)
+  const load = tree.loadGroup as (...args: unknown[]) => Promise<unknown>
+  return load(connectionId.value, schema.value, group, true, database.value).catch(() => undefined)
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -221,6 +302,7 @@ defineExpose({ sql, script, apply })
         {{ showScript ? 'Ocultar SQL a ejecutar' : 'Ver SQL a ejecutar' }}
       </v-btn>
       <v-checkbox
+        v-if="canStripDefiner"
         v-model="removeDefiner"
         label="Quitar DEFINER"
         density="compact"

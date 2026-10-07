@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks'
-import type { TableDataPage, TableDataRequest } from '@shared/types'
+import type { TableDataPage, TableDataRequest as SharedTableDataRequest } from '@shared/types'
 import { fetchTablePage } from '../db/tableData'
 import { MysqlUserError } from './errors'
 import { escapeId, listColumns, primaryKeyColumns, type Queryable } from './introspect'
@@ -8,6 +8,9 @@ import { MAX_ROWS_CAP } from './query'
 import type { FullSession } from './session'
 import { buildFilterWhere, filterNeedsColumns } from './tableFilter'
 import { normalizeRow, toQueryColumn } from './values'
+
+/** A table-data request on a MySQL connection: the schema is the database name. */
+export type TableDataRequest = SharedTableDataRequest & { schema: string }
 
 /** Milliseconds the COUNT(*) may run before we give up and report total = null. */
 export const COUNT_TIMEOUT_MS = 3000

@@ -143,7 +143,11 @@ describe('ConnectionManager (engine-neutral)', () => {
     expect(a).toBe(SERVER_INFO)
     expect(b).toBe(SERVER_INFO)
     expect(driver.opens).toHaveLength(1)
-    expect(driver.opens[0].secrets).toEqual({ password: 'pw', sshPassword: 'ssh-pw' })
+    expect(driver.opens[0].secrets).toEqual({
+      password: 'pw',
+      sshPassword: 'ssh-pw',
+      sslKeyPassword: null
+    })
     expect(driver.opens[0].endpoint).toEqual({ host: '127.0.0.1', port: 3306 })
     expect(manager.isOpen(id)).toBe(true)
   })
@@ -156,7 +160,11 @@ describe('ConnectionManager (engine-neutral)', () => {
   it('without a stored password tries an empty one; a rejection becomes the driver message', async () => {
     const id = saved('Sin clave', null)
     await manager.open(id)
-    expect(driver.opens[0].secrets).toEqual({ password: null, sshPassword: null })
+    expect(driver.opens[0].secrets).toEqual({
+      password: null,
+      sshPassword: null,
+      sslKeyPassword: null
+    })
     expect(logs.some((e) => e.message.includes('without a password'))).toBe(true)
     await manager.close(id)
 
@@ -273,18 +281,18 @@ describe('ConnectionManager with the real registry', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('refuses to open or test a PostgreSQL connection in this build', async () => {
-    const { id } = ctx.connections.save(input('PG', 'postgresql'))
+  it('refuses to open or test a MongoDB connection in this build', async () => {
+    const { id } = ctx.connections.save(input('Mongo', 'mongodb'))
     ctx.credentials.set('mysql', id, 'pw')
     const manager = getConnectionManager(ctx)
     await expect(manager.open(id)).rejects.toThrow(
-      'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
+      'MongoDB todavía no está disponible en esta versión de Vortaq.'
     )
     expect(manager.isOpen(id)).toBe(false)
-    const res = await manager.test(input('PG', 'postgresql'), 'pw', null)
+    const res = await manager.test(input('Mongo', 'mongodb'), 'pw', null)
     expect(res).toMatchObject({
       ok: false,
-      error: 'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
+      error: 'MongoDB todavía no está disponible en esta versión de Vortaq.'
     })
   })
 

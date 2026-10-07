@@ -1,8 +1,22 @@
 import type { ObjectType } from '@shared/types'
 
-export type GroupKind = 'tables' | 'views' | 'functions' | 'events' | 'queries' | 'backups'
+export type GroupKind =
+  | 'tables'
+  | 'views'
+  | 'functions'
+  | 'events'
+  | 'queries'
+  | 'backups'
+  // PostgreSQL (preview)
+  | 'materializedViews'
+  | 'sequences'
+  | 'types'
 
+/** MySQL's groups, in order (pinned against ENGINES.mysql.groups). */
 export const GROUPS: GroupKind[] = ['tables', 'views', 'functions', 'events', 'queries', 'backups']
+
+/** Every group this renderer can list (MySQL's plus the PostgreSQL ones). */
+export const ALL_GROUPS: GroupKind[] = [...GROUPS, 'materializedViews', 'sequences', 'types']
 
 export const GROUP_LABELS: Record<GroupKind, string> = {
   tables: 'Tablas',
@@ -10,7 +24,10 @@ export const GROUP_LABELS: Record<GroupKind, string> = {
   functions: 'Funciones',
   events: 'Eventos',
   queries: 'Consultas',
-  backups: 'Copias de seguridad'
+  backups: 'Copias de seguridad',
+  materializedViews: 'Vistas materializadas',
+  sequences: 'Secuencias',
+  types: 'Tipos'
 }
 
 export const GROUP_ICONS: Record<GroupKind, string> = {
@@ -19,7 +36,10 @@ export const GROUP_ICONS: Record<GroupKind, string> = {
   functions: 'mdi-function-variant',
   events: 'mdi-calendar-clock',
   queries: 'mdi-database-search',
-  backups: 'mdi-archive'
+  backups: 'mdi-archive',
+  materializedViews: 'mdi-table-sync',
+  sequences: 'mdi-numeric',
+  types: 'mdi-shape-outline'
 }
 
 export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {

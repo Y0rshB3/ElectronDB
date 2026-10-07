@@ -4,8 +4,12 @@ import type {
   ConnectionConfig,
   ConnectionInput,
   ConnectionTestResult,
-  MysqlAuthMode
+  EngineId,
+  MysqlAuthMode,
+  SslMode
 } from '@shared/types'
+import { DEFAULT_NETWORK, ENGINES, defaultPostgresOptions, pickableEngines } from '@shared/engines'
+import { can } from '@renderer/engines/capabilities'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -18,10 +22,12 @@ import DialogHeader from './DialogHeader.vue'
 import { ENVIRONMENTS, environmentLabel } from '@renderer/components/backups/backupHelpers'
 import {
   COLOR_PRESETS,
+  PG_SSL_MODES,
   emptyConnectionInput,
   inputFromConnection,
   normalizeConnectionInput,
-  validateConnectionInput
+  validateConnectionInput,
+  withSslMode
 } from './connectionForm'
 
 const ui = useUiStore()
@@ -43,6 +49,65 @@ const testing = ref(false)
 const testResult = ref<ConnectionTestResult | null>(null)
 const saving = ref(false)
 const errors = ref<string[]>([])
+// PostgreSQL client-key passphrase (CredentialStore 'sslKey'), like the other secrets.
+const sslKeyPassword = ref('')
+const hasSslKeyPassword = ref(false)
+const clearSslKeyPassword = ref(false)
+
+const engine = computed<EngineId>(() => form.value.engine ?? 'mysql')
+const isPg = computed(() => engine.value === 'postgresql')
+const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
+/** Backups are MySQL-only: the backup folder fields follow the capability. */
+const showBackupDirs = computed(() => can({ engine: engine.value }, 'supportsBackupsNb3'))
+/**
+ * Engines offered for a new connection: only with Ajustes › Motores en vista
+ * previa on (otherwise MySQL, as before, and no picker is shown).
+ */
+const engineChoices = computed(() =>
+  editing.value ? [] : pickableEngines(settingsStore.settings.previewEngines === true)
+)
+
+function selectEngine(id: EngineId): void {
+  if (id === engine.value) return
+  const keep = {
+    name: form.value.name,
+    environment: form.value.environment,
+    color: form.value.color
+  }
+  form.value = { ...emptyConnectionInput(id), ...keep }
+  testResult.value = null
+  errors.value = []
+}
+
+const pgOptions = computed(() => form.value.postgres ?? defaultPostgresOptions())
+function patchPostgres(patch: Partial<NonNullable<ConnectionInput['postgres']>>): void {
+  form.value = { ...form.value, postgres: { ...pgOptions.value, ...patch } }
+}
+const sslMode = computed<SslMode>({
+  get: () => form.value.ssl.mode ?? 'disable',
+  set: (mode) => {
+    form.value = { ...form.value, ssl: withSslMode(form.value.ssl, mode) }
+  }
+})
+const network = computed(() => ({ ...DEFAULT_NETWORK, ...form.value.network }))
+const connectTimeoutSec = computed({
+  get: () => Math.round(network.value.connectTimeoutMs / 1000),
+  set: (v: number) => {
+    form.value = {
+      ...form.value,
+      network: { ...network.value, connectTimeoutMs: Math.max(1, Number(v) || 1) * 1000 }
+    }
+  }
+})
+const keepAliveSec = computed({
+  get: () => network.value.keepAliveSec,
+  set: (v: number) => {
+    form.value = {
+      ...form.value,
+      network: { ...network.value, keepAliveSec: Math.max(0, Number(v) || 0) }
+    }
+  }
+})
 
 const AUTH_MODES: { value: MysqlAuthMode; title: string }[] = [
   { value: 'password', title: 'Contraseña' },
@@ -70,7 +135,12 @@ const environmentHint = computed(() =>
 
 async function reset(): Promise<void> {
   tab.value = 'general'
-  form.value = editing.value ? inputFromConnection(editing.value) : emptyConnectionInput()
+  form.value = editing.value
+    ? inputFromConnection(editing.value)
+    : emptyConnectionInput(ui.connectionDialog.engine ?? 'mysql')
+  sslKeyPassword.value = ''
+  hasSslKeyPassword.value = false
+  clearSslKeyPassword.value = false
   password.value = ''
   sshPassword.value = ''
   clearPassword.value = false
@@ -88,6 +158,8 @@ async function reset(): Promise<void> {
     ])
     hasPassword.value = pw
     hasSshPassword.value = sshPw
+    if (editing.value.engine === 'postgresql')
+      hasSslKeyPassword.value = await api.connections.hasSslKeyPassword(id).catch(() => false)
   }
 }
 
@@ -151,8 +223,15 @@ async function save(): Promise<void> {
     } else if (clearSshPassword.value || (!input.ssh.savePassword && hasSshPassword.value)) {
       await api.connections.setSshPassword(saved.id, null)
     }
+    if (input.engine === 'postgresql') {
+      if (sslKeyPassword.value && input.ssl.clientKeyPath)
+        await api.connections.setSslKeyPassword(saved.id, sslKeyPassword.value)
+      else if (clearSslKeyPassword.value || (hasSslKeyPassword.value && !input.ssl.clientKeyPath))
+        await api.connections.setSslKeyPassword(saved.id, null)
+    }
     password.value = ''
     sshPassword.value = ''
+    sslKeyPassword.value = ''
     notify.success(
       wasEditing ? `Conexión «${saved.name}» actualizada` : `Conexión «${saved.name}» creada`
     )
@@ -172,9 +251,13 @@ async function save(): Promise<void> {
     <v-card data-test="connection-dialog">
       <DialogHeader
         icon="mdi-lan"
-        :title="editing ? `Editar conexión · ${editing.name}` : 'Nueva conexión MySQL'"
+        :title="editing ? `Editar conexión · ${editing.name}` : `Nueva conexión ${engineLabel}`"
         :subtitle="
-          editing ? `${editing.host}:${editing.port}` : 'MySQL / MariaDB, con SSH y SSL opcionales'
+          editing
+            ? `${editing.host}:${editing.port}`
+            : isPg
+              ? 'PostgreSQL (vista previa), con SSH y SSL opcionales'
+              : 'MySQL / MariaDB, con SSH y SSL opcionales'
         "
         :danger="form.environment === 'production'"
       />
@@ -185,6 +268,36 @@ async function save(): Promise<void> {
         <v-tab value="advanced" prepend-icon="mdi-cog-outline">Avanzado</v-tab>
       </v-tabs>
       <v-card-text class="connection-dialog__body">
+        <div
+          v-if="engineChoices.length > 1"
+          class="connection-dialog__engines"
+          role="radiogroup"
+          aria-label="Motor de base de datos"
+          data-test="conn-engine-picker"
+        >
+          <button
+            v-for="e in engineChoices"
+            :key="e.id"
+            type="button"
+            role="radio"
+            class="connection-dialog__engine"
+            :class="{ 'connection-dialog__engine--active': engine === e.id }"
+            :aria-checked="engine === e.id"
+            :data-test="`conn-engine-${e.id}`"
+            @click="selectEngine(e.id)"
+          >
+            <v-icon :icon="e.icon" size="18" aria-hidden="true" />
+            <span>{{ e.label }}</span>
+            <span v-if="e.capabilities.preview" class="connection-dialog__preview"
+              >vista previa</span
+            >
+          </button>
+        </div>
+        <div v-else-if="editing && isPg" class="mb-2">
+          <v-chip size="small" :prepend-icon="ENGINES.postgresql.icon" data-test="conn-engine-chip"
+            >PostgreSQL · vista previa</v-chip
+          >
+        </div>
         <v-window v-model="tab">
           <v-window-item value="general">
             <v-row dense>
@@ -358,6 +471,53 @@ async function save(): Promise<void> {
                   </v-btn>
                 </template>
               </v-col>
+              <template v-if="isPg">
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    :model-value="pgOptions.initialDatabase"
+                    label="Base de datos inicial"
+                    prepend-inner-icon="mdi-database-outline"
+                    class="nd-mono-input"
+                    hint="Se abre al conectar (por defecto postgres)"
+                    persistent-hint
+                    data-test="conn-pg-database"
+                    @update:model-value="patchPostgres({ initialDatabase: $event })"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    :model-value="pgOptions.searchPath"
+                    label="search_path"
+                    class="nd-mono-input"
+                    hint="Vacío = el del servidor; p. ej. app, public"
+                    persistent-hint
+                    data-test="conn-pg-search-path"
+                    @update:model-value="patchPostgres({ searchPath: $event })"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <v-combobox
+                    v-model="form.customDatabases"
+                    label="Mostrar solo estas bases de datos"
+                    hint="Si no está vacía, solo se muestran estas bases de datos. Pulsa Enter para añadir."
+                    persistent-hint
+                    multiple
+                    chips
+                    closable-chips
+                    data-test="conn-pg-custom-databases"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <v-checkbox
+                    :model-value="pgOptions.showSystemSchemas"
+                    label="Mostrar esquemas y bases de datos del sistema"
+                    density="compact"
+                    hide-details
+                    data-test="conn-pg-system"
+                    @update:model-value="patchPostgres({ showSystemSchemas: $event === true })"
+                  />
+                </v-col>
+              </template>
             </v-row>
           </v-window-item>
 
@@ -448,53 +608,119 @@ async function save(): Promise<void> {
           </v-window-item>
 
           <v-window-item value="ssl">
-            <v-switch
-              v-model="form.ssl.enabled"
-              label="Usar SSL"
-              color="primary"
-              density="compact"
-              hide-details
-            />
-            <div class="d-flex flex-column ga-3 mt-2">
-              <PathPicker
-                v-model="form.ssl.caCertPath"
-                v-path-tail="form.ssl.caCertPath"
-                :title="form.ssl.caCertPath || undefined"
-                class="nd-path-field"
-                kind="file"
-                label="Certificado CA"
-                :disabled="!form.ssl.enabled"
+            <template v-if="isPg">
+              <v-select
+                v-model="sslMode"
+                :items="PG_SSL_MODES"
+                label="Modo SSL"
+                prepend-inner-icon="mdi-shield-lock-outline"
+                hint="Con túnel SSH, verify-full comprueba el nombre del servidor real (no 127.0.0.1)."
+                persistent-hint
+                data-test="conn-pg-ssl-mode"
               />
-              <PathPicker
-                v-model="form.ssl.clientCertPath"
-                v-path-tail="form.ssl.clientCertPath"
-                :title="form.ssl.clientCertPath || undefined"
-                class="nd-path-field"
-                kind="file"
-                label="Certificado de cliente"
-                :disabled="!form.ssl.enabled"
-              />
-              <PathPicker
-                v-model="form.ssl.clientKeyPath"
-                v-path-tail="form.ssl.clientKeyPath"
-                :title="form.ssl.clientKeyPath || undefined"
-                class="nd-path-field"
-                kind="file"
-                label="Clave de cliente"
-                :disabled="!form.ssl.enabled"
-              />
-              <v-checkbox
-                v-model="form.ssl.verifyServer"
-                label="Verificar certificado del servidor"
+              <div class="d-flex flex-column ga-3 mt-3">
+                <PathPicker
+                  v-model="form.ssl.caCertPath"
+                  v-path-tail="form.ssl.caCertPath"
+                  :title="form.ssl.caCertPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Certificado CA"
+                  :disabled="sslMode === 'disable'"
+                />
+                <PathPicker
+                  v-model="form.ssl.clientCertPath"
+                  v-path-tail="form.ssl.clientCertPath"
+                  :title="form.ssl.clientCertPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Certificado de cliente"
+                  :disabled="sslMode === 'disable'"
+                />
+                <PathPicker
+                  v-model="form.ssl.clientKeyPath"
+                  v-path-tail="form.ssl.clientKeyPath"
+                  :title="form.ssl.clientKeyPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Clave de cliente"
+                  :disabled="sslMode === 'disable'"
+                />
+                <div class="d-flex align-center flex-wrap ga-2">
+                  <v-text-field
+                    v-model="sslKeyPassword"
+                    label="Contraseña de la clave"
+                    type="password"
+                    autocomplete="new-password"
+                    :placeholder="
+                      hasSslKeyPassword && !clearSslKeyPassword ? '•••••• (guardada)' : ''
+                    "
+                    persistent-placeholder
+                    :disabled="sslMode === 'disable' || !form.ssl.clientKeyPath"
+                    data-test="conn-pg-ssl-key-password"
+                  />
+                  <template v-if="hasSslKeyPassword">
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      @click="clearSslKeyPassword = !clearSslKeyPassword"
+                    >
+                      {{ clearSslKeyPassword ? 'Mantener' : 'Borrar' }}
+                    </v-btn>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <v-switch
+                v-model="form.ssl.enabled"
+                label="Usar SSL"
+                color="primary"
                 density="compact"
                 hide-details
-                :disabled="!form.ssl.enabled"
               />
-            </div>
+              <div class="d-flex flex-column ga-3 mt-2">
+                <PathPicker
+                  v-model="form.ssl.caCertPath"
+                  v-path-tail="form.ssl.caCertPath"
+                  :title="form.ssl.caCertPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Certificado CA"
+                  :disabled="!form.ssl.enabled"
+                />
+                <PathPicker
+                  v-model="form.ssl.clientCertPath"
+                  v-path-tail="form.ssl.clientCertPath"
+                  :title="form.ssl.clientCertPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Certificado de cliente"
+                  :disabled="!form.ssl.enabled"
+                />
+                <PathPicker
+                  v-model="form.ssl.clientKeyPath"
+                  v-path-tail="form.ssl.clientKeyPath"
+                  :title="form.ssl.clientKeyPath || undefined"
+                  class="nd-path-field"
+                  kind="file"
+                  label="Clave de cliente"
+                  :disabled="!form.ssl.enabled"
+                />
+                <v-checkbox
+                  v-model="form.ssl.verifyServer"
+                  label="Verificar certificado del servidor"
+                  density="compact"
+                  hide-details
+                  :disabled="!form.ssl.enabled"
+                />
+              </div>
+            </template>
           </v-window-item>
 
           <v-window-item value="advanced">
             <v-combobox
+              v-if="!isPg"
               v-model="form.customDatabases"
               label="Lista de bases de datos personalizada"
               hint="Si no está vacía, solo se muestran estos esquemas. Pulsa Enter para añadir."
@@ -514,13 +740,47 @@ async function save(): Promise<void> {
               density="compact"
               class="mb-3"
             />
+            <v-row v-if="isPg" dense class="mb-1">
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  :model-value="pgOptions.timeZone"
+                  label="Zona horaria de sesión"
+                  hint="Vacío = la del servidor; p. ej. UTC o Europe/Madrid"
+                  persistent-hint
+                  class="nd-mono-input"
+                  data-test="conn-pg-timezone"
+                  @update:model-value="patchPostgres({ timeZone: $event })"
+                />
+              </v-col>
+              <v-col cols="6" sm="3">
+                <v-text-field
+                  v-model.number="connectTimeoutSec"
+                  label="Tiempo de conexión (s)"
+                  type="number"
+                  min="1"
+                  data-test="conn-pg-timeout"
+                />
+              </v-col>
+              <v-col cols="6" sm="3">
+                <v-text-field
+                  v-model.number="keepAliveSec"
+                  label="Intervalo keepalive (s)"
+                  type="number"
+                  min="0"
+                  hint="0 = desactivado"
+                  persistent-hint
+                  data-test="conn-pg-keepalive"
+                />
+              </v-col>
+            </v-row>
             <PathPicker
+              v-if="showBackupDirs"
               v-model="form.backupDir"
               kind="directory"
               label="Carpeta de copias de seguridad"
               hint="Vacío = carpeta por defecto de Ajustes"
             />
-            <div v-if="form.extraBackupDirs.length" class="mt-3">
+            <div v-if="showBackupDirs && form.extraBackupDirs.length" class="mt-3">
               <div class="text-caption text-medium-emphasis">
                 Carpetas adicionales (solo lectura, p. ej. Navicat)
               </div>
@@ -590,7 +850,14 @@ async function save(): Promise<void> {
         >
           <span class="connection-dialog__result-dot" aria-hidden="true" />
           <span class="nd-ellipsis">
-            <template v-if="testResult.ok"
+            <template v-if="testResult.ok && isPg"
+              >Conectado · {{ testResult.serverVersion }} ({{ testResult.durationMs }} ms)<template
+                v-if="testResult.details?.length"
+              >
+                · {{ testResult.details.join(' · ') }}</template
+              ></template
+            >
+            <template v-else-if="testResult.ok"
               >Conectado · MySQL {{ testResult.serverVersion }} ({{
                 testResult.durationMs
               }}
@@ -610,6 +877,30 @@ async function save(): Promise<void> {
 </template>
 
 <style scoped>
+.connection-dialog__engines {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.connection-dialog__engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--nd-radius-sm);
+  border: 1px solid var(--nd-border);
+  background: var(--nd-bg-sunken);
+  color: var(--nd-text);
+  cursor: pointer;
+}
+.connection-dialog__engine--active {
+  border-color: rgba(var(--nd-accent-rgb), 0.6);
+  box-shadow: var(--nd-glow);
+}
+.connection-dialog__preview {
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-warning);
+}
 .connection-dialog__body {
   min-height: 300px;
   padding-top: 8px !important;

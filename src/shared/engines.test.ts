@@ -45,9 +45,9 @@ describe('engine descriptors', () => {
     for (const id of ENGINE_IDS) expect(ENGINES[id].id).toBe(id)
   })
 
-  it('ships only the MySQL driver; every other engine is a preview', () => {
+  it('ships the MySQL and PostgreSQL drivers; every engine but MySQL is a preview', () => {
     const available = ENGINE_IDS.filter((id) => ENGINES[id].available)
-    expect(available).toEqual(['mysql'])
+    expect(available).toEqual(['mysql', 'postgresql'])
     expect(ENGINES.mysql.capabilities.preview).toBe(false)
     for (const id of ENGINE_IDS.filter((e) => e !== 'mysql')) {
       expect(ENGINES[id].capabilities.preview).toBe(true)
@@ -150,9 +150,9 @@ describe('engine helpers', () => {
     ).toThrow('Sin copias .nb3')
   })
 
-  it('offers only MySQL in the pickers, with or without previews (no other driver yet)', () => {
+  it('offers PostgreSQL in the pickers only with previews on', () => {
     expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql'])
-    expect(pickableEngines(true).map((e) => e.id)).toEqual(['mysql'])
+    expect(pickableEngines(true).map((e) => e.id)).toEqual(['mysql', 'postgresql'])
   })
 })
 
@@ -179,7 +179,12 @@ describe('withEngineDefaults', () => {
       mysqlRecord({ engine: 'postgresql', postgres: { initialDatabase: 'app' } as never })
     )
     expect(pg.network).toEqual(DEFAULT_NETWORK)
-    expect(pg.postgres).toEqual({ initialDatabase: 'app', showSystemSchemas: false, timeZone: '' })
+    expect(pg.postgres).toEqual({
+      initialDatabase: 'app',
+      showSystemSchemas: false,
+      timeZone: '',
+      searchPath: ''
+    })
     expect(withEngineDefaults(pg)).toBe(pg)
   })
 

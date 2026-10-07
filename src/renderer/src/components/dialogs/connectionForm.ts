@@ -1,5 +1,6 @@
 import { connectionFormErrors } from '@shared/connectionValidation'
-import type { ConnectionConfig, ConnectionInput } from '@shared/types'
+import { DEFAULT_NETWORK, ENGINES, defaultPostgresOptions } from '@shared/engines'
+import type { ConnectionConfig, ConnectionInput, EngineId, SslMode } from '@shared/types'
 
 /** Marker colours per environment (Local green, Staging yellow, Production red, ...). */
 export const COLOR_PRESETS: { value: string | null; label: string }[] = [
@@ -13,7 +14,59 @@ export const COLOR_PRESETS: { value: string | null; label: string }[] = [
   { value: '#8e8e93', label: 'Gris' }
 ]
 
-export function emptyConnectionInput(): ConnectionInput {
+/** Empty form of a new connection; MySQL unless another engine is picked. */
+export function emptyConnectionInput(engine: EngineId = 'mysql'): ConnectionInput {
+  return engine === 'postgresql' ? emptyPostgresInput() : emptyMysqlInput()
+}
+
+function emptyPostgresInput(): ConnectionInput {
+  const base = emptyMysqlInput()
+  return {
+    ...base,
+    engine: 'postgresql',
+    port: ENGINES.postgresql.defaultPort,
+    username: ENGINES.postgresql.defaultUser,
+    ssl: { ...base.ssl, enabled: false, verifyServer: false, mode: 'disable' },
+    network: { ...DEFAULT_NETWORK },
+    postgres: defaultPostgresOptions()
+  }
+}
+
+/** libpq SSL modes offered for PostgreSQL. */
+export const PG_SSL_MODES: { value: SslMode; title: string }[] = [
+  { value: 'disable', title: 'disable · sin cifrar' },
+  { value: 'allow', title: 'allow · sin cifrar, con TLS si el servidor lo exige' },
+  { value: 'prefer', title: 'prefer · TLS si el servidor lo admite' },
+  { value: 'require', title: 'require · TLS sin verificar el certificado' },
+  { value: 'verify-ca', title: 'verify-ca · TLS y CA verificada' },
+  { value: 'verify-full', title: 'verify-full · TLS, CA y nombre del servidor verificados' }
+]
+
+/** Keeps the generic SSL switches consistent with the PostgreSQL mode main reads first. */
+export function withSslMode(ssl: ConnectionInput['ssl'], mode: SslMode): ConnectionInput['ssl'] {
+  return {
+    ...ssl,
+    mode,
+    enabled: mode !== 'disable',
+    verifyServer: mode === 'verify-ca' || mode === 'verify-full'
+  }
+}
+
+/**
+ * «Copiar URI»: `postgresql://user@host:port/db?sslmode=…` built from the
+ * config, never with the password. Null for engines without a URI form here.
+ */
+export function connectionUri(c: ConnectionInput | ConnectionConfig): string | null {
+  if (c.engine !== 'postgresql') return null
+  const user = encodeURIComponent(c.username)
+  const db = encodeURIComponent(c.postgres?.initialDatabase || 'postgres')
+  const host = c.host.includes(':') ? `[${c.host}]` : c.host
+  const mode =
+    c.ssl.mode ?? (!c.ssl.enabled ? 'disable' : c.ssl.verifyServer ? 'verify-full' : 'require')
+  return `postgresql://${user ? `${user}@` : ''}${host}:${c.port}/${db}?sslmode=${mode}`
+}
+
+function emptyMysqlInput(): ConnectionInput {
   return {
     engine: 'mysql',
     name: '',
@@ -55,7 +108,9 @@ export function inputFromConnection(c: ConnectionConfig): ConnectionInput {
     customDatabases: [...c.customDatabases],
     extraBackupDirs: [...c.extraBackupDirs],
     ssh: { ...c.ssh },
-    ssl: { ...c.ssl }
+    ssl: { ...c.ssl },
+    ...(c.postgres ? { postgres: { ...defaultPostgresOptions(), ...c.postgres } } : {}),
+    ...(c.network ? { network: { ...c.network } } : {})
   }
 }
 
@@ -79,6 +134,24 @@ export function normalizeConnectionInput(input: ConnectionInput): ConnectionInpu
       host: input.ssh.host.trim(),
       username: input.ssh.username.trim()
     },
-    ssl: { ...input.ssl }
+    ssl: { ...input.ssl },
+    ...(input.postgres
+      ? {
+          postgres: {
+            ...input.postgres,
+            initialDatabase: input.postgres.initialDatabase.trim(),
+            timeZone: input.postgres.timeZone.trim(),
+            searchPath: input.postgres.searchPath.trim()
+          }
+        }
+      : {}),
+    ...(input.network
+      ? {
+          network: {
+            connectTimeoutMs: Number(input.network.connectTimeoutMs),
+            keepAliveSec: Number(input.network.keepAliveSec)
+          }
+        }
+      : {})
   }
 }

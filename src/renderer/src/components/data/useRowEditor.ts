@@ -5,6 +5,7 @@ import { api } from '@renderer/api'
 import { useConfirm, type DestructiveDetails } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import type { ConfirmItem } from '@renderer/stores/ui'
+import { schemaRef } from '@renderer/utils/schemaRef'
 import {
   buildRowChangeBatch,
   newRow,
@@ -19,6 +20,8 @@ export interface ApplyTarget {
   connectionId: string
   schema: string
   table: string
+  /** PostgreSQL: database that holds `schema` (absent for MySQL). */
+  database?: string
 }
 
 export interface AppliedChanges {
@@ -124,7 +127,7 @@ export function useRowEditor(columns: Readonly<Ref<QueryColumn[]>>) {
       const result = await api.invokeSilent(
         'db:applyRowChanges',
         target.connectionId,
-        target.schema,
+        schemaRef(target.schema, target.database),
         target.table,
         changes,
         { confirmProduction: true }

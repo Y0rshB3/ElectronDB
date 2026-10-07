@@ -9,10 +9,13 @@ import {
 } from './types'
 import {
   DEFAULT_PORTS,
+  applySslMode,
   checkForeignPaths,
+  firstHost,
   mysqlFamily,
   normalizeColor,
   positiveInt,
+  postgresFamily,
   uniqueKey,
   unsupported,
   type EngineChoice
@@ -81,10 +84,11 @@ const path = (v: string | undefined): string | undefined => {
   return s ? s : undefined
 }
 
-function engineFor(connType: string): EngineChoice {
+function engineFor(connType: string, serviceProvider: string): EngineChoice {
   const key = connType.trim().toUpperCase()
   if (key === 'MYSQL') return mysqlFamily(false)
   if (key === 'MARIADB') return mysqlFamily(true)
+  if (key === 'POSTGRESQL') return postgresFamily(serviceProvider)
   return unsupported(navicatTypeLabel(connType))
 }
 
@@ -107,11 +111,16 @@ export function parseNcx(
     if (!name) continue
     const connType = get('ConnType') ?? 'MYSQL'
     const navicatType = navicatTypeLabel(connType)
-    const choice = engineFor(connType)
+    const postgres = connType.trim().toUpperCase() === 'POSTGRESQL'
+    const choice = engineFor(connType, (get('ServiceProvider') ?? '').trim())
     const warnings: string[] = []
     if (choice.warning) warnings.push(choice.warning)
-    const host = (get('Host') ?? '').trim()
-    const defaultPort = DEFAULT_PORTS[connType.trim().toLowerCase()] ?? 3306
+    // PostgreSQL may list several hosts (failover): only the first one is used.
+    const hostList = postgres
+      ? firstHost(get('Host') ?? '', warnings)
+      : { host: (get('Host') ?? '').trim(), port: null }
+    const host = hostList.host
+    const defaultPort = hostList.port ?? DEFAULT_PORTS[connType.trim().toLowerCase()] ?? 3306
 
     const sshAuthKey = (get('SSH_AuthenMethod') ?? '').trim().toUpperCase() === 'PUBLICKEY'
     const ssh: SshConfig = bool(get('SSH'))
@@ -127,7 +136,7 @@ export function parseNcx(
     const keyPath = path(get('SSH_PrivateKey'))
     if (ssh.enabled && sshAuthKey && keyPath) ssh.privateKeyPath = keyPath
 
-    const ssl: SslConfig = { enabled: bool(get('SSL')), verifyServer: false }
+    let ssl: SslConfig = { enabled: bool(get('SSL')), verifyServer: false }
     const ca = path(get('SSL_CACert'))
     const cert = path(get('SSL_ClientCert'))
     const key = path(get('SSL_ClientKey'))
@@ -138,6 +147,8 @@ export function parseNcx(
       // Unverified attribute names: verification is on only when the file says so.
       ssl.verifyServer = bool(get('SSL_VerifyCA')) || (bool(get('SSL_Authen')) && !!ca)
     }
+    // PostgreSQL SSL mode (unverified attribute names; tolerant spellings).
+    if (postgres) ssl = applySslMode(ssl, get('SSL_Mode') ?? get('SSLMode') ?? '', warnings)
     checkForeignPaths(
       [
         ssh.enabled ? ssh.privateKeyPath : undefined,
@@ -170,7 +181,8 @@ export function parseNcx(
       host,
       port: positiveInt(get('Port'), defaultPort),
       username: (get('UserName') ?? '').trim(),
-      database: path(get('Database')) ?? null,
+      database:
+        (postgres ? path(get('InitialDatabase')) : undefined) ?? path(get('Database')) ?? null,
       color: normalizeColor(get('Color') ?? get('ConnectionColor')),
       environment: inferEnvironment(name, host, ssh.enabled),
       ssh,

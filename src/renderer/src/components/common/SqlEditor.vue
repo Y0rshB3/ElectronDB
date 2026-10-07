@@ -4,6 +4,7 @@ import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { sql, StandardSQL, type SQLDialect } from '@codemirror/lang-sql'
+import type { CompletionSource } from '@codemirror/autocomplete'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { tabKeymap } from './editor/tabKeymap'
@@ -20,6 +21,11 @@ const props = defineProps<{
   minHeight?: string
   /** Engine whose SQL dialect the editor uses; absent means MySQL. */
   engine?: EngineId
+  /**
+   * Completion source of engines with their own provider (PostgreSQL); it
+   * replaces the MySQL `provider` completion when given.
+   */
+  completionSource?: CompletionSource
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +57,8 @@ function languageExt() {
     schema: props.schema ?? {},
     upperCaseKeywords: true
   })
+  if (props.completionSource)
+    return [lang, lang.language.data.of({ autocomplete: props.completionSource })]
   if (!props.provider) return lang
   return [lang, lang.language.data.of({ autocomplete: schemaCompletionSource(props.provider) })]
 }
@@ -237,7 +245,7 @@ watch(model, (value) => {
 })
 
 watch(
-  () => [props.schema, props.provider, props.engine],
+  () => [props.schema, props.provider, props.engine, props.completionSource],
   () => view?.dispatch({ effects: langCompartment.reconfigure(languageExt()) }),
   { deep: true }
 )
@@ -292,7 +300,15 @@ function focus(): void {
   view?.focus()
 }
 
-defineExpose({ getSelection, replaceSelection, insertAtCursor, focus })
+/** Puts the cursor at `pos` (an offset into the document, clamped) and scrolls to it. */
+function moveCursor(pos: number): void {
+  if (!view) return
+  const at = Math.max(0, Math.min(pos, view.state.doc.length))
+  view.dispatch({ selection: { anchor: at }, scrollIntoView: true })
+  view.focus()
+}
+
+defineExpose({ getSelection, replaceSelection, insertAtCursor, focus, moveCursor })
 </script>
 
 <template>

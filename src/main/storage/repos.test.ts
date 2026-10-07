@@ -261,7 +261,8 @@ describe('ConnectionsRepo engine model', () => {
     expect(pg.postgres).toEqual({
       initialDatabase: 'postgres',
       showSystemSchemas: false,
-      timeZone: ''
+      timeZone: '',
+      searchPath: ''
     })
     expect(new ConnectionsRepo(dir).get(pg.id)?.engine).toBe('postgresql')
   })

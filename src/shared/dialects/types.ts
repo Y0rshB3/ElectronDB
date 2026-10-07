@@ -55,6 +55,16 @@ export interface WriteCheck {
   reasons: string[]
 }
 
+/** A statement that deletes or drops something (renderer «confirmar antes de borrar»). */
+export interface DestructiveStatementInfo {
+  /** Statement as written, leading comments removed. */
+  sql: string
+  /** Short tag such as "DROP TABLE", "TRUNCATE TABLE" or "DELETE sin WHERE". */
+  reason: string
+  /** DELETE / UPDATE without WHERE: every row is affected. */
+  allRows: boolean
+}
+
 export interface SqlDialect {
   id: SqlDialectId
   lex: LexRules
@@ -72,4 +82,14 @@ export interface SqlDialect {
   isObviousWrite(statement: string): boolean
   /** Renderer: allowlist; anything not provably read-only is a write, with Spanish reasons. */
   analyzeWrites(script: string): WriteCheck
+  /**
+   * Destructive statements of a script (DROP, TRUNCATE, DELETE, UPDATE without
+   * WHERE, ALTER TABLE … DROP). Optional: the MySQL renderer keeps its own
+   * destructiveGuard module.
+   */
+  analyzeDestructive?(script: string): DestructiveStatementInfo[]
+  /** Spanish explanation of a server error code (PostgreSQL SQLSTATE), or null. */
+  explainError?(code: string): string | null
+  /** The error code means "not enough privileges". */
+  isPrivilegeError?(code: string): boolean
 }

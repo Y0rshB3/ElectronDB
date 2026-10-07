@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { ENGINES } from '@shared/engines'
 import { CredentialStore, plainCodec } from '../../credentials/store'
 import { importFromNavicat } from '../../navicat/importer'
 import { FIXTURE_ROOT } from '../../navicat/testing'
@@ -9,6 +10,7 @@ import { ConnectionsRepo, JobsRepo, SettingsRepo } from '../../storage/repos'
 import { encryptNcxAes } from '../navicat/ncxCipher'
 import { importConnectionFile, previewConnectionFile, type ConnectionImportContext } from './index'
 import { IMPORT_FIXTURES } from './testing'
+import { previewEngineReason } from './util'
 
 const DBEAVER = join(IMPORT_FIXTURES, 'dbeaver', 'data-sources.json')
 const WORKBENCH = join(IMPORT_FIXTURES, 'workbench', 'connections.xml')
@@ -18,15 +20,23 @@ describe('connection file import', () => {
   let ctx: ConnectionImportContext
   let credentials: CredentialStore
   let settings: SettingsRepo
+  // PostgreSQL ships its driver in this phase; pin the flag so these tests do not depend on it.
+  const pg = ENGINES.postgresql as { available: boolean }
+  let pgAvailable: boolean
 
   beforeEach(() => {
+    pgAvailable = pg.available
+    pg.available = true
     dir = mkdtempSync(join(tmpdir(), 'vortaq-conn-import-'))
     settings = new SettingsRepo(dir, dir)
     settings.update({ navicatRootPath: FIXTURE_ROOT, backupsRootDir: join(dir, 'backups') })
     credentials = new CredentialStore(dir, plainCodec, 'plain')
     ctx = { connections: new ConnectionsRepo(dir), credentials, settings }
   })
-  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+  afterEach(() => {
+    pg.available = pgAvailable
+    rmSync(dir, { recursive: true, force: true })
+  })
 
   function writeNcx(body: string, ver = '1.5'): string {
     const path = join(dir, 'export.ncx')
@@ -58,7 +68,7 @@ describe('connection file import', () => {
     expect(result.updated).toEqual([])
     expect(result.passwordsSaved).toBe(0)
     expect(result.warnings).toEqual([
-      '«Warehouse» no se ha importado: Motor no soportado en esta versión: PostgreSQL',
+      `«Warehouse» no se ha importado: ${previewEngineReason('PostgreSQL')}`,
       '«Local notes» no se ha importado: Motor no soportado en esta versión: SQLite'
     ])
     const prod = result.created.find((c) => c.name === 'Shop production')!
@@ -273,5 +283,129 @@ describe('connection file import', () => {
       existingMode: 'replace'
     })
     expect(r.warnings).toEqual(['La conexión «gone» ya no está en el archivo'])
+  })
+})
+
+describe('PostgreSQL connection import', () => {
+  let dir: string
+  let ctx: ConnectionImportContext
+  let credentials: CredentialStore
+  let settings: SettingsRepo
+  const pg = ENGINES.postgresql as { available: boolean }
+  let pgAvailable: boolean
+
+  beforeEach(() => {
+    pgAvailable = pg.available
+    pg.available = true
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-pg-import-'))
+    settings = new SettingsRepo(dir, dir)
+    settings.update({ backupsRootDir: join(dir, 'backups') })
+    credentials = new CredentialStore(dir, plainCodec, 'plain')
+    ctx = { connections: new ConnectionsRepo(dir), credentials, settings }
+  })
+  afterEach(() => {
+    pg.available = pgAvailable
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  function writeNcx(body: string): string {
+    const path = join(dir, 'pg.ncx')
+    writeFileSync(
+      path,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<Connections Ver="1.5">${body}</Connections>`
+    )
+    return path
+  }
+
+  const LEDGER = `<Connection ConnectionName="Ledger" ConnType="POSTGRESQL" Host="ledger.example.test" UserName="ledger"
+      Password="${encryptNcxAes('pg-secret')}" InitialDatabase="ledger_db" SSL="true" SSL_Mode="verify-full" />`
+
+  it('lists PostgreSQL rows as disabled while previews are off, and main refuses them', async () => {
+    const path = writeNcx(LEDGER)
+    const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
+    expect(preview.items[0]).toMatchObject({
+      engine: 'postgresql',
+      unsupportedReason: previewEngineReason('PostgreSQL')
+    })
+    const result = await importConnectionFile(ctx, {
+      source: 'navicat-ncx',
+      path,
+      keys: ['PostgreSQL:Ledger'],
+      existingMode: 'replace'
+    })
+    expect(result.created).toEqual([])
+    expect(result.warnings).toEqual([
+      `«Ledger» no se ha importado: ${previewEngineReason('PostgreSQL')}`
+    ])
+    expect(ctx.connections.list()).toEqual([])
+  })
+
+  it('imports a PostgreSQL connection with previews on; re-import keeps engine and options', async () => {
+    settings.update({ previewEngines: true })
+    const path = writeNcx(LEDGER)
+    const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
+    expect(preview.items[0].unsupportedReason).toBeNull()
+    expect(JSON.stringify(preview)).not.toContain('pg-secret')
+
+    const first = await importConnectionFile(ctx, {
+      source: 'navicat-ncx',
+      path,
+      keys: ['PostgreSQL:Ledger'],
+      existingMode: 'replace'
+    })
+    const created = first.created[0]
+    expect(created).toMatchObject({
+      engine: 'postgresql',
+      host: 'ledger.example.test',
+      port: 5432,
+      username: 'ledger',
+      ssl: { enabled: true, verifyServer: true, mode: 'verify-full' },
+      postgres: {
+        initialDatabase: 'ledger_db',
+        showSystemSchemas: false,
+        timeZone: '',
+        searchPath: ''
+      },
+      source: { app: 'navicat', name: 'Ledger', navicatType: 'PostgreSQL', format: 'ncx' }
+    })
+    expect(credentials.get('mysql', created.id)).toBe('pg-secret')
+    expect(first.passwordsSaved).toBe(1)
+
+    // The user tunes the connection; a re-import (replace) keeps engine, id and their options.
+    ctx.connections.save({
+      ...created,
+      postgres: { ...created.postgres!, searchPath: 'app, public', timeZone: 'UTC' }
+    })
+    const second = await importConnectionFile(ctx, {
+      source: 'navicat-ncx',
+      path,
+      keys: ['PostgreSQL:Ledger'],
+      existingMode: 'replace'
+    })
+    expect(second.created).toEqual([])
+    expect(second.updated[0]).toMatchObject({
+      id: created.id,
+      engine: 'postgresql',
+      postgres: { initialDatabase: 'ledger_db', searchPath: 'app, public', timeZone: 'UTC' }
+    })
+    expect(ctx.connections.list()).toHaveLength(1)
+  })
+
+  it('imports DBeaver PostgreSQL entries with previews on', async () => {
+    settings.update({ previewEngines: true })
+    const result = await importConnectionFile(ctx, {
+      source: 'dbeaver',
+      path: DBEAVER,
+      keys: ['postgres-jdbc-18a2b3c4d61-4c5d6e7f8091a2b3'],
+      existingMode: 'replace'
+    })
+    expect(result.warnings).toEqual([])
+    expect(result.created[0]).toMatchObject({
+      name: 'Warehouse',
+      engine: 'postgresql',
+      port: 5432,
+      postgres: { initialDatabase: 'warehouse' },
+      source: { app: 'dbeaver', format: 'json' }
+    })
   })
 })

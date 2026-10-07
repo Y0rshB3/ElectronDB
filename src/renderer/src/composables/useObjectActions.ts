@@ -1,5 +1,6 @@
 import type { EngineCapabilities } from '@shared/engines'
-import type { ObjectType } from '@shared/types'
+import { postgresqlDialect } from '@shared/dialects/postgresql'
+import type { EngineObjectType, NameRef, ObjectType } from '@shared/types'
 import { api } from '@renderer/api'
 import { descriptorOf } from '@renderer/engines/capabilities'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -9,6 +10,9 @@ import { nodeIds, useTreeStore, type TreeNode } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
 import { OBJECT_TYPE_LABELS, OBJECT_TYPE_WITH_ARTICLE } from '@renderer/utils/objectTypes'
 import { qualified } from '@renderer/utils/sql'
+import { splitRoutineName } from '@renderer/utils/objectColumns'
+import { schemaRef } from '@renderer/utils/schemaRef'
+import { connectionUri } from '@renderer/components/dialogs/connectionForm'
 import { useConfirm } from './useConfirm'
 import { useNotify } from './useNotify'
 import { useWorkspace } from './useWorkspace'
@@ -37,6 +41,42 @@ export function objectTypeOf(node: TreeNode): ObjectType | null {
       return null
   }
 }
+
+/** Object type of a node on any engine (PostgreSQL adds matviews, sequences and types). */
+export function engineObjectTypeOf(node: TreeNode): EngineObjectType | null {
+  switch (node.group) {
+    case 'materializedViews':
+      return 'materialized_view'
+    case 'sequences':
+      return 'sequence'
+    case 'types':
+      return 'type'
+    default:
+      return objectTypeOf(node)
+  }
+}
+
+/**
+ * Name argument of db:showCreate / db:dropObject: the plain name, or on
+ * PostgreSQL routines `{ type, name, signature }` (the node name is `name(args)`).
+ */
+export function nameRefOf(node: TreeNode, type: EngineObjectType): NameRef {
+  if (node.database !== undefined && (type === 'function' || type === 'procedure')) {
+    const parts = splitRoutineName(node.name ?? '')
+    return { type, name: parts.name, signature: parts.signature ?? '' }
+  }
+  return node.name ?? ''
+}
+
+/** PostgreSQL labels for the types MySQL does not have. */
+const PG_TYPE_LABELS: Partial<Record<EngineObjectType, { label: string; article: string }>> = {
+  materialized_view: { label: 'vista materializada', article: 'la vista materializada' },
+  sequence: { label: 'secuencia', article: 'la secuencia' },
+  type: { label: 'tipo', article: 'el tipo' }
+}
+
+const pgQ = postgresqlDialect.quoteIdent
+const pgQualified = (schema: string, name: string): string => `${pgQ(schema)}.${pgQ(name)}`
 
 export function useObjectActions() {
   const tree = useTreeStore()
@@ -67,6 +107,7 @@ export function useObjectActions() {
   }
 
   async function dropObject(node: TreeNode): Promise<void> {
+    if (node.database !== undefined) return dropPgObject(node)
     const type = objectTypeOf(node)
     if (!type || !node.schema || !node.name) return
     const ok = await confirmDestructive({
@@ -115,10 +156,481 @@ export function useObjectActions() {
   }
 
   async function exportDdl(node: TreeNode): Promise<void> {
+    if (node.database !== undefined) {
+      const type = engineObjectTypeOf(node)
+      if (!type || !node.schema || !node.name) return
+      const ddl = await api.db.showCreate(
+        node.connectionId,
+        schemaRef(node.schema, node.database),
+        type,
+        nameRefOf(node, type)
+      )
+      await copyText(ddl, 'DDL')
+      return
+    }
     const type = objectTypeOf(node)
     if (!type || !node.schema || !node.name) return
     const ddl = await api.db.showCreate(node.connectionId, node.schema, type, node.name)
     await copyText(ddl, 'DDL')
+  }
+
+  /* ---------- PostgreSQL (preview) ---------- */
+
+  /** Runs one confirmed statement on the node's database; true when it succeeded. */
+  async function runPg(node: TreeNode, sql: string, success: string): Promise<boolean> {
+    const [result] = await api.db.execute(node.connectionId, sql, {
+      schema: schemaRef(node.schema ?? '', node.database),
+      confirmProduction: true
+    })
+    if (result?.error) {
+      notify.error(result.error)
+      return false
+    }
+    notify.success(success)
+    return true
+  }
+
+  async function dropPgObject(node: TreeNode): Promise<void> {
+    const type = engineObjectTypeOf(node)
+    if (!type || !node.schema || !node.name || node.database === undefined) return
+    const labels = PG_TYPE_LABELS[type] ?? {
+      label: OBJECT_TYPE_LABELS[type as ObjectType],
+      article: OBJECT_TYPE_WITH_ARTICLE[type as ObjectType]
+    }
+    const target = `${node.database}.${node.schema}.${node.label}`
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: `Eliminar ${labels.label}`,
+      message: `Se eliminará ${labels.label} ${target} de forma permanente.`,
+      confirmText: 'Eliminar',
+      destructive: {
+        title: `¿Eliminar ${labels.article} «${node.label}»?`,
+        message: 'Se eliminará de forma permanente. Esta acción no se puede deshacer.',
+        items: [{ tag: `DROP ${type.replace('_', ' ').toUpperCase()}`, text: target }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    await api.db.dropObject(
+      node.connectionId,
+      schemaRef(node.schema, node.database),
+      type,
+      nameRefOf(node, type),
+      { confirmProduction: true }
+    )
+    notify.success(`${node.label} eliminado`)
+    await tree.loadGroup(node.connectionId, node.schema, node.group!, true, node.database)
+  }
+
+  /** TRUNCATE with PostgreSQL's options; CASCADE lists the tables whose rows also go. */
+  async function truncatePg(
+    node: TreeNode,
+    options: { restartIdentity?: boolean; cascade?: boolean } = {}
+  ): Promise<void> {
+    if (!node.schema || !node.name || node.database === undefined) return
+    const target = pgQualified(node.schema, node.name)
+    const sql =
+      `TRUNCATE TABLE ${target}` +
+      (options.restartIdentity ? ' RESTART IDENTITY' : '') +
+      (options.cascade ? ' CASCADE' : '')
+    let dependants: string[] = []
+    if (options.cascade) {
+      const [r] = await api.db.execute(
+        node.connectionId,
+        `SELECT DISTINCT n.nspname || '.' || c.relname FROM pg_catalog.pg_constraint con
+           JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+           JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+          WHERE con.contype = 'f' AND con.confrelid = '${target.replace(/'/g, "''")}'::regclass
+            AND con.conrelid <> con.confrelid ORDER BY 1`,
+        { schema: schemaRef(node.schema, node.database) }
+      )
+      dependants = (r?.resultSet?.rows ?? []).map((row) => String(row[0]))
+    }
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Truncar tabla',
+      message:
+        `Se borrarán todas las filas de ${node.schema}.${node.name}` +
+        (dependants.length
+          ? ` y de las tablas que dependen de ella (${dependants.join(', ')})`
+          : '') +
+        (options.restartIdentity ? ' y se reiniciarán sus secuencias' : '') +
+        '. Esta acción no se puede deshacer.',
+      details: sql,
+      confirmText: 'Truncar',
+      destructive: {
+        title: `¿Vaciar la tabla «${node.name}»?`,
+        message: 'Se borrarán todas sus filas. Esta acción no se puede deshacer.',
+        items: [
+          { tag: 'TRUNCATE TABLE', text: `${node.schema}.${node.name}` },
+          ...dependants.map((d) => ({ tag: 'CASCADE', text: d }))
+        ],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    if (await runPg(node, sql, `Tabla ${node.name} truncada`))
+      await tree.loadGroup(node.connectionId, node.schema, 'tables', true, node.database)
+  }
+
+  /** «Vaciar»: DELETE FROM (fires triggers, keeps sequences). */
+  async function emptyPgTable(node: TreeNode): Promise<void> {
+    if (!node.schema || !node.name) return
+    const sql = `DELETE FROM ${pgQualified(node.schema, node.name)}`
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Vaciar tabla',
+      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los triggers).`,
+      details: sql,
+      confirmText: 'Vaciar',
+      destructive: {
+        title: `¿Vaciar la tabla «${node.name}»?`,
+        message: 'Se borrarán todas sus filas. Esta acción no se puede deshacer.',
+        items: [{ tag: 'DELETE', text: `${node.schema}.${node.name}` }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (ok) await runPg(node, sql, `Tabla ${node.name} vaciada`)
+  }
+
+  async function refreshMatview(node: TreeNode, concurrently: boolean): Promise<void> {
+    if (!node.schema || !node.name) return
+    const sql = `REFRESH MATERIALIZED VIEW ${concurrently ? 'CONCURRENTLY ' : ''}${pgQualified(node.schema, node.name)}`
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Refrescar vista materializada',
+      message: `Se volverá a calcular ${node.schema}.${node.name}.`,
+      details: sql,
+      alwaysAsk: false
+    })
+    if (ok && (await runPg(node, sql, `${node.name} refrescada`)))
+      await tree.loadGroup(node.connectionId, node.schema, node.group!, true, node.database)
+  }
+
+  async function analyzeTable(node: TreeNode): Promise<void> {
+    if (!node.schema || !node.name) return
+    const sql = `ANALYZE ${pgQualified(node.schema, node.name)}`
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Analizar tabla',
+      message: `Se actualizarán las estadísticas de ${node.schema}.${node.name}.`,
+      details: sql,
+      alwaysAsk: false
+    })
+    if (ok && (await runPg(node, sql, `Estadísticas de ${node.name} actualizadas`)))
+      await tree.loadGroup(node.connectionId, node.schema, 'tables', true, node.database)
+  }
+
+  async function sequenceValue(node: TreeNode): Promise<void> {
+    if (!node.schema || !node.name) return
+    const [r] = await api.db.execute(
+      node.connectionId,
+      `SELECT last_value, is_called FROM ${pgQualified(node.schema, node.name)}`,
+      { schema: schemaRef(node.schema, node.database) }
+    )
+    if (r?.error) notify.error(r.error)
+    else {
+      const [last, called] = r?.resultSet?.rows[0] ?? []
+      notify.success(
+        `${node.name}: valor actual ${String(last)}${called ? '' : ' (todavía no usado)'}`
+      )
+    }
+  }
+
+  function pgStatementTab(node: TreeNode, sql: string, name: string): void {
+    ws.openQuery(node.connectionId, node.schema ?? null, { sql, name }, node.database)
+  }
+
+  async function showExtensions(connectionId: string, database: string): Promise<void> {
+    const list = await api.db.extensions(connectionId, database)
+    await ask({
+      title: `Extensiones de ${database}`,
+      message: list.length
+        ? 'Extensiones instaladas (para crear una, usa CREATE EXTENSION en el editor de consultas):'
+        : 'No hay extensiones instaladas. Para crear una, usa CREATE EXTENSION en el editor de consultas.',
+      items: list.map((e) => ({ tag: e.version, text: `${e.name} (${e.schema})` })),
+      confirmText: 'Cerrar'
+    })
+  }
+
+  function pgNewObjectFor(node: TreeNode): MenuAction[] {
+    const c = node.connectionId
+    const s = node.schema!
+    const db = node.database!
+    const q =
+      (sql: string, name: string): MenuAction['action'] =>
+      () =>
+        pgStatementTab(node, sql, name)
+    switch (node.group) {
+      case 'tables':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva tabla',
+            icon: 'mdi-table-plus',
+            action: () => ws.openTableDesigner(c, s, null, db)
+          }
+        ]
+      case 'views':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva vista',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'view', null, db)
+          }
+        ]
+      case 'materializedViews':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva vista materializada',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'materialized_view', null, db)
+          }
+        ]
+      case 'functions':
+        return [
+          {
+            key: 'newf',
+            label: 'Nueva función',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'function', null, db)
+          },
+          {
+            key: 'newp',
+            label: 'Nuevo procedimiento',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'procedure', null, db)
+          }
+        ]
+      case 'sequences':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva secuencia',
+            icon: 'mdi-plus',
+            action: q(
+              `CREATE SEQUENCE ${pgQualified(s, 'nueva_secuencia')} START 1;`,
+              'Nueva secuencia'
+            )
+          }
+        ]
+      case 'types':
+        return [
+          {
+            key: 'new',
+            label: 'Nuevo tipo enumerado',
+            icon: 'mdi-plus',
+            action: q(
+              `CREATE TYPE ${pgQualified(s, 'nuevo_tipo')} AS ENUM ('valor1', 'valor2');`,
+              'Nuevo tipo'
+            )
+          }
+        ]
+      case 'queries':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva consulta',
+            icon: 'mdi-plus',
+            action: () => ws.openQuery(c, s, undefined, db)
+          }
+        ]
+      default:
+        return []
+    }
+  }
+
+  /** Context menu of a PostgreSQL database / schema / group / object node (section 4.1). */
+  function pgActionsFor(node: TreeNode, refresh: MenuAction): MenuAction[] {
+    const c = node.connectionId
+    const db = node.database!
+    if (node.kind === 'database')
+      return [
+        {
+          key: 'query',
+          label: 'Nueva consulta',
+          icon: 'mdi-database-search-outline',
+          action: () => ws.openQuery(c, null, undefined, db)
+        },
+        {
+          key: 'extensions',
+          label: 'Extensiones',
+          icon: 'mdi-puzzle-outline',
+          action: () => showExtensions(c, db)
+        },
+        { key: 'd1', label: '', divider: true },
+        refresh,
+        {
+          key: 'drop',
+          label: 'Eliminar base de datos',
+          icon: 'mdi-delete-outline',
+          danger: true,
+          action: () => dropDatabase(node)
+        }
+      ]
+    if (node.kind === 'schema') {
+      const s = node.schema!
+      return [
+        {
+          key: 'query',
+          label: 'Nueva consulta',
+          icon: 'mdi-database-search-outline',
+          action: () => ws.openQuery(c, s, undefined, db)
+        },
+        {
+          key: 'table',
+          label: 'Nueva tabla',
+          icon: 'mdi-table-plus',
+          action: () => ws.openTableDesigner(c, s, null, db)
+        },
+        { key: 'd1', label: '', divider: true },
+        refresh
+      ]
+    }
+    if (node.kind === 'group')
+      return [...pgNewObjectFor(node), { key: 'd1', label: '', divider: true }, refresh]
+
+    const s = node.schema!
+    const group = node.group
+    const items: MenuAction[] = []
+    const opens = group !== 'sequences' && group !== 'types'
+    items.push({
+      key: 'open',
+      label: opens ? 'Abrir' : 'Ver DDL',
+      icon: 'mdi-open-in-app',
+      action: () => ws.openNode(node)
+    })
+    if (group === 'tables')
+      items.push({
+        key: 'design',
+        label: 'Diseñar tabla',
+        icon: 'mdi-table-edit',
+        action: () => ws.designNode(node)
+      })
+    items.push(...pgNewObjectFor({ ...node, kind: 'group' }))
+    items.push({ key: 'd1', label: '', divider: true })
+    if (group === 'queries') {
+      items.push({
+        key: 'copy',
+        label: 'Copiar nombre',
+        icon: 'mdi-content-copy',
+        action: () => copyText(node.label, 'Nombre')
+      })
+      items.push({
+        key: 'delete',
+        label: 'Eliminar',
+        icon: 'mdi-delete-outline',
+        danger: true,
+        action: () => deleteSavedQuery(node)
+      })
+      items.push({ key: 'd2', label: '', divider: true }, refresh)
+      return items
+    }
+    const plainName = group === 'functions' ? splitRoutineName(node.name!).name : node.name!
+    items.push({
+      key: 'copy',
+      label: 'Copiar nombre cualificado',
+      icon: 'mdi-content-copy',
+      action: () => copyText(pgQualified(s, plainName), 'Nombre')
+    })
+    items.push({
+      key: 'ddl',
+      label: 'Exportar DDL (copiar)',
+      icon: 'mdi-code-tags',
+      action: () => exportDdl(node)
+    })
+    if (group === 'tables') {
+      items.push({
+        key: 'analyze',
+        label: 'Analizar (ANALYZE)',
+        icon: 'mdi-chart-box-outline',
+        action: () => analyzeTable(node)
+      })
+      items.push({
+        key: 'empty',
+        label: 'Vaciar (DELETE)',
+        icon: 'mdi-eraser-variant',
+        danger: true,
+        action: () => emptyPgTable(node)
+      })
+      items.push({
+        key: 'truncate',
+        label: 'Truncar tabla',
+        icon: 'mdi-eraser',
+        danger: true,
+        action: () => truncatePg(node)
+      })
+      items.push({
+        key: 'truncateRestart',
+        label: 'Truncar y reiniciar identidad',
+        icon: 'mdi-eraser',
+        danger: true,
+        action: () => truncatePg(node, { restartIdentity: true })
+      })
+      items.push({
+        key: 'truncateCascade',
+        label: 'Truncar en cascada…',
+        icon: 'mdi-eraser',
+        danger: true,
+        action: () => truncatePg(node, { restartIdentity: true, cascade: true })
+      })
+    }
+    if (group === 'materializedViews') {
+      items.push({
+        key: 'refreshMv',
+        label: 'Refrescar',
+        icon: 'mdi-sync',
+        action: () => refreshMatview(node, false)
+      })
+      items.push({
+        key: 'refreshMvC',
+        label: 'Refrescar (concurrently)',
+        icon: 'mdi-sync',
+        action: () => refreshMatview(node, true)
+      })
+    }
+    if (group === 'sequences') {
+      items.push({
+        key: 'seqValue',
+        label: 'Valor actual',
+        icon: 'mdi-numeric',
+        action: () => sequenceValue(node)
+      })
+      items.push({
+        key: 'setval',
+        label: 'Fijar valor actual…',
+        icon: 'mdi-numeric-positive-1',
+        action: () =>
+          pgStatementTab(
+            node,
+            `SELECT setval('${pgQualified(s, node.name!).replace(/'/g, "''")}', 1, false);`,
+            `setval ${node.name}`
+          )
+      })
+    }
+    if (group === 'types')
+      items.push({
+        key: 'addValue',
+        label: 'Añadir valor…',
+        icon: 'mdi-playlist-plus',
+        action: () =>
+          pgStatementTab(
+            node,
+            `ALTER TYPE ${pgQualified(s, node.name!)} ADD VALUE 'nuevo_valor';`,
+            `Añadir valor a ${node.name}`
+          )
+      })
+    items.push({
+      key: 'delete',
+      label: 'Eliminar',
+      icon: 'mdi-delete-outline',
+      danger: true,
+      action: () => dropObject(node)
+    })
+    items.push({ key: 'd2', label: '', divider: true }, refresh)
+    return items
   }
 
   async function deleteSavedQuery(node: TreeNode): Promise<void> {
@@ -170,6 +682,29 @@ export function useObjectActions() {
   }
 
   async function dropDatabase(node: TreeNode): Promise<void> {
+    if (node.kind === 'database' && node.database !== undefined) {
+      const name = node.database
+      const ok = await confirmDestructive({
+        connectionId: node.connectionId,
+        title: 'Eliminar base de datos',
+        message: `Se eliminará la base de datos ${name} con todos sus esquemas, objetos y datos.`,
+        details: `DROP DATABASE ${pgQ(name)}`,
+        confirmText: 'Eliminar base de datos',
+        destructive: {
+          title: `¿Eliminar la base de datos «${name}»?`,
+          message:
+            'Se eliminarán todos sus esquemas, tablas y datos. Esta acción no se puede deshacer.',
+          items: [{ tag: 'DROP DATABASE', text: name }],
+          confirmText: 'Eliminar'
+        }
+      })
+      if (!ok) return
+      await api.db.dropDatabase(node.connectionId, name, { confirmProduction: true })
+      notify.success(`Base de datos ${name} eliminada`)
+      tree.forget(node.connectionId)
+      await tree.loadDatabases(node.connectionId, true)
+      return
+    }
     if (!node.schema) return
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
@@ -273,6 +808,8 @@ export function useObjectActions() {
       action: () => tree.refresh(node)
     }
     const caps = capsOf(c)
+    if (node.kind !== 'connection' && node.database !== undefined)
+      return pgActionsFor(node, refresh)
     if (node.kind === 'connection') {
       const open = connections.isOpen(c)
       const items: (MenuAction | false)[] = [
@@ -294,6 +831,17 @@ export function useObjectActions() {
           label: 'Editar conexión…',
           icon: 'mdi-pencil-outline',
           action: () => ui.openConnectionDialog(connections.get(c) ?? null)
+        },
+        // PostgreSQL only (MySQL menus unchanged): the URI never contains the password.
+        connections.get(c)?.engine === 'postgresql' && {
+          key: 'copyUri',
+          label: 'Copiar URI',
+          icon: 'mdi-link-variant',
+          action: () => {
+            const config = connections.get(c)
+            const uri = config ? connectionUri(config) : null
+            if (uri) void copyText(uri, 'URI')
+          }
         },
         { key: 'd1', label: '', divider: true },
         {

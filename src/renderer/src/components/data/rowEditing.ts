@@ -152,7 +152,7 @@ export function buildRowChanges(
  */
 export function commitRows(
   rows: EditableRow[],
-  generatedIds: (number | null)[] = [],
+  generatedIds: (number | string | null)[] = [],
   idColumn: number | null = null
 ): EditableRow[] {
   let insert = 0

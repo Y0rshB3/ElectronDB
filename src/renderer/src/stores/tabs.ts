@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { ObjectType } from '@shared/types'
+import type { EngineObjectType } from '@shared/types'
 
 export type TabKind =
   | 'objects'
@@ -28,7 +28,8 @@ export interface WorkspaceTab {
   database?: string
   schema?: string
   objectName?: string
-  objectType?: ObjectType
+  /** MySQL object types; PostgreSQL adds materialized_view, sequence, type… */
+  objectType?: EngineObjectType
   /** Saved query id, job id, initial SQL, etc. */
   payload?: Record<string, unknown>
 }
@@ -57,7 +58,7 @@ export interface OpenTabInput {
   database?: string
   schema?: string
   objectName?: string
-  objectType?: ObjectType
+  objectType?: EngineObjectType
   payload?: Record<string, unknown>
 }
 
@@ -123,11 +124,19 @@ export const useTabsStore = defineStore('tabs', () => {
    * Points a tab at another connection/schema (query tab connection picker). The
    * tab keeps its id and view; closeForConnection and the toolbar follow it.
    */
-  function setTarget(id: string, connectionId: string, schema: string | null): void {
+  function setTarget(
+    id: string,
+    connectionId: string,
+    schema: string | null,
+    /** PostgreSQL: the tab's database; omitted (MySQL) removes it. */
+    database?: string
+  ): void {
     const tab = tabs.value.find((t) => t.id === id)
     if (!tab) return
     tab.connectionId = connectionId
     tab.schema = schema ?? undefined
+    if (database !== undefined) tab.database = database
+    else delete tab.database
   }
 
   function setTitle(id: string, title: string): void {

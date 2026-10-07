@@ -16,6 +16,7 @@ import { useTabActions } from '@renderer/composables/useTabActions'
 import type { MenuAction } from '@renderer/composables/useObjectActions'
 import { viewFor } from '@renderer/views/registry'
 import ContextMenu from '@renderer/components/common/ContextMenu.vue'
+import TransactionPromptHost from '@renderer/components/query/TransactionPromptHost.vue'
 
 const tabs = useTabsStore()
 const { requestClose, closeOthers } = useTabActions()
@@ -249,6 +250,7 @@ function onKeydown(event: KeyboardEvent, index: number): void {
       </KeepAlive>
     </div>
     <ContextMenu ref="menu" />
+    <TransactionPromptHost />
   </section>
 </template>
 

@@ -45,18 +45,34 @@ const label = computed(() =>
 const icon = computed(() => {
   const n = props.node
   if (n.kind === 'connection') return isOpen.value ? 'mdi-database' : 'mdi-database-outline'
-  if (n.kind === 'schema') return expanded.value ? 'mdi-folder-open-outline' : 'mdi-folder-outline'
+  // PostgreSQL database: closed (outline) until its schemas are loaded.
+  if (n.kind === 'database') return dbLoaded.value ? 'mdi-database' : 'mdi-database-outline'
+  if (n.kind === 'schema')
+    return n.database !== undefined
+      ? 'mdi-file-tree-outline'
+      : expanded.value
+        ? 'mdi-folder-open-outline'
+        : 'mdi-folder-outline'
   if (n.kind === 'group') return GROUP_ICONS[n.group!]
   if (n.group === 'functions')
     return n.subtype === 'PROCEDURE' ? 'mdi-script-text-outline' : 'mdi-function-variant'
   return GROUP_ICONS[n.group!]
 })
 
+/** PostgreSQL database node: its pool is open once its schemas were listed. */
+const dbLoaded = computed(
+  () =>
+    props.node.kind === 'database' &&
+    !!tree.schemas[
+      `${encodeURIComponent(props.node.connectionId)}:${encodeURIComponent(props.node.database!)}`
+    ]
+)
+
 const countBadge = computed(() => {
   const n = props.node
   if (n.kind !== 'group' || !n.schema) return null
-  if (!tree.hasItems(n.connectionId, n.schema, n.group!)) return null
-  return tree.itemsOf(n.connectionId, n.schema, n.group!).length
+  if (!tree.hasItems(n.connectionId, n.schema, n.group!, n.database)) return null
+  return tree.itemsOf(n.connectionId, n.schema, n.group!, n.database).length
 })
 
 const envLabel = computed(() =>
@@ -78,7 +94,8 @@ const envPill = computed(() =>
       class="tree-node__row"
       :class="{
         'tree-node__row--selected': selected,
-        'tree-node__row--closed': node.kind === 'connection' && !isOpen,
+        'tree-node__row--closed':
+          (node.kind === 'connection' && !isOpen) || (node.kind === 'database' && !dbLoaded),
         'tree-node__row--connection': node.kind === 'connection',
         'tree-node__row--production':
           node.kind === 'connection' && connection?.environment === 'production',

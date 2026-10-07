@@ -29,11 +29,19 @@ export interface DriverSecrets {
   password: string | null
   /** 'ssh:<id>': SSH password or key passphrase. Consumed by the manager's tunnel. */
   sshPassword: string | null
+  /** 'sslKey:<id>': passphrase of the SSL client key (PostgreSQL); absent/null = none. */
+  sslKeyPassword?: string | null
 }
 
 export interface DriverHooks {
   /** The connection is gone for good; the manager tears it down and tells the renderer. */
   onFatal(reason: string): void
+  /**
+   * Writes to this connection need the typed confirmation right now (production,
+   * Ajustes › Seguridad). Engines with server-side read-only sessions (PostgreSQL)
+   * open them read-only while it is true. Absent => false.
+   */
+  isGuarded?(): boolean
 }
 
 export interface Driver {
@@ -105,7 +113,7 @@ export interface SqlDriverConnection<
   acquire(scope: Scope | null): Promise<S>
 }
 
-export type DriverConnection = SqlDriverConnection
+export type DriverConnection = SqlDriverConnection<SqlSession>
 
 /**
  * Connections whose sessions are today's MysqlSession-based PooledSession.

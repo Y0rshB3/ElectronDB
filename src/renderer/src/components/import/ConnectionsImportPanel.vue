@@ -2,17 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import type {
   ExistingConnectionMode,
+  ImportConnectionItem,
   ImportConnectionsPreview,
   ImportConnectionsResult,
   ImportSourceInfo
 } from '@shared/importers'
+import { ENGINES } from '@shared/engines'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
-import {
-  environmentLabel,
-  environmentPillClass
-} from '@renderer/components/backups/backupHelpers'
+import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 import {
   ROW_STATUS_LABEL,
   connectionRowStatus,
@@ -42,6 +41,11 @@ const importing = ref(false)
 const error = ref('')
 
 watch([loading, importing], ([a, b]) => emit('busy', a || b))
+
+/** Icon of the engine Vortaq would create (a neutral one for unsupported types). */
+function engineIcon(item: ImportConnectionItem): string {
+  return item.engine ? ENGINES[item.engine].icon : 'mdi-database-off-outline'
+}
 
 const isNcx = computed(() => props.source.id === 'navicat-ncx')
 const selectable = computed(() => selectableKeys(preview.value))
@@ -262,12 +266,20 @@ defineExpose({ pick })
               >
                 <v-icon icon="mdi-alert-outline" size="12" /> {{ w }}
               </div>
-              <div v-if="item.unsupportedReason" class="conn-import__warning">
+              <div
+                v-if="item.unsupportedReason"
+                class="conn-import__warning"
+                data-test="import-row-reason"
+              >
                 {{ item.unsupportedReason }}
               </div>
             </td>
             <td class="conn-import__nowrap">
-              <span class="nd-pill">{{ item.engineLabel }}</span>
+              <span class="nd-pill" data-test="import-row-engine"
+                ><v-icon :icon="engineIcon(item)" size="12" class="mr-1" />{{
+                  item.engineLabel
+                }}</span
+              >
             </td>
             <td class="nd-mono conn-import__host">
               {{ item.host ? `${item.host}${item.port ? `:${item.port}` : ''}` : '—' }}
@@ -321,8 +333,10 @@ defineExpose({ pick })
     <!-- Step 4: result -->
     <template v-else-if="step === 4 && result">
       <v-alert type="success" variant="tonal" data-test="import-connections-result">
-        {{ result.created.length }} {{ result.created.length === 1 ? 'conexión nueva' : 'conexiones nuevas' }}
-        y {{ result.updated.length }} {{ result.updated.length === 1 ? 'actualizada' : 'actualizadas' }}.
+        {{ result.created.length }}
+        {{ result.created.length === 1 ? 'conexión nueva' : 'conexiones nuevas' }} y
+        {{ result.updated.length }}
+        {{ result.updated.length === 1 ? 'actualizada' : 'actualizadas' }}.
         <template v-if="result.passwordsSaved">
           {{ result.passwordsSaved }} con contraseña guardada.</template
         >

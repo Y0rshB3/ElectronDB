@@ -168,11 +168,11 @@ describe('SettingsDialog preview engines switch', () => {
   const switchInput = () =>
     wrapper!.get('[data-test="settings-preview-engines"] input[type="checkbox"]')
 
-  it('shows the Spanish switch, off by default, and says no preview engine ships yet', async () => {
+  it('shows the Spanish switch, off by default, and names the preview engines', async () => {
     await openDialog()
     const field = wrapper!.get('[data-test="settings-preview-engines"]')
     expect(field.text()).toContain('Motores en vista previa')
-    expect(field.text()).toContain('Esta versión todavía no incluye ninguno.')
+    expect(field.text()).toContain('motores que aún están en desarrollo: PostgreSQL.')
     expect((switchInput().element as HTMLInputElement).checked).toBe(false)
   })
 

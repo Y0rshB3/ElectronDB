@@ -20,6 +20,13 @@ import { AnthropicAdapter } from './anthropic'
 import { buildMemoryBlock, buildSchemaContext, formatTable } from './context'
 import { explainSelect, isSingleSelect } from './explain'
 import {
+  PgMetadataQueryable,
+  explainPgSelect,
+  isSinglePgSelect,
+  readPgSchemaNames,
+  readPgSchemaSnapshot
+} from './pgMetadata'
+import {
   MetadataQueryable,
   readSchemaSnapshot,
   type Queryable,
@@ -48,6 +55,10 @@ export interface AiServiceDeps {
   /** Environment of a connection (shown to the model so it is careful with production). */
   environmentOf(connectionId: string): Environment | null
   acquire(connectionId: string, schema: string | null): Promise<BorrowedSession>
+  /** True for PostgreSQL connections (structure comes from pg_catalog, see pgMetadata.ts). */
+  isPostgres?(connectionId: string): boolean
+  /** A pooled PostgreSQL session of `database` (null = the initial database). */
+  acquirePg?(connectionId: string, database: string | null): Promise<BorrowedSession>
   emit<E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]): void
   log: AiLogger
   fetch?: FetchFn
@@ -181,6 +192,24 @@ export class AiService {
 
   /* ---------- context ---------- */
 
+  private isPg(connectionId: string): boolean {
+    return this.deps.isPostgres?.(connectionId) === true && !!this.deps.acquirePg
+  }
+
+  /** PostgreSQL: the same structure-only rule over pg_catalog (PgMetadataQueryable). */
+  private async withPgMetadata<T>(
+    connectionId: string,
+    database: string | null,
+    fn: (q: PgMetadataQueryable) => Promise<T>
+  ): Promise<T> {
+    const session = await this.deps.acquirePg!(connectionId, database)
+    try {
+      return await fn(new PgMetadataQueryable(session))
+    } finally {
+      await session.release().catch(() => undefined)
+    }
+  }
+
   private async withMetadata<T>(
     connectionId: string,
     fn: (q: MetadataQueryable) => Promise<T>
@@ -197,13 +226,16 @@ export class AiService {
   private async snapshot(
     connectionId: string,
     schema: string,
-    fresh = false
+    fresh = false,
+    database: string | null = null
   ): Promise<SchemaSnapshot> {
-    const key = `${connectionId}\u0000${schema}`
+    const key = `${connectionId}\u0000${database ?? ''}\u0000${schema}`
     const ttl = this.deps.snapshotTtlMs ?? 5 * 60_000
     const hit = this.snapshots.get(key)
     if (!fresh && hit && Date.now() - hit.at < ttl) return hit.snap
-    const snap = await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
+    const snap = this.isPg(connectionId)
+      ? await this.withPgMetadata(connectionId, database, (q) => readPgSchemaSnapshot(q, schema))
+      : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
     this.snapshots.set(key, { at: Date.now(), snap })
     return snap
   }
@@ -215,6 +247,8 @@ export class AiService {
   ): Promise<AiContextPreview> {
     const connectionId = requireString(request.connectionId, 'Conexión')
     const schema = typeof request.schema === 'string' && request.schema ? request.schema : null
+    const database =
+      typeof request.database === 'string' && request.database ? request.database : null
     const env = this.deps.environmentOf(connectionId)
     const parts: string[] = []
     if (env) parts.push(`Entorno de la conexión: ${ENV_LABEL[env]}.`)
@@ -227,7 +261,7 @@ export class AiService {
     let truncated = false
     let tableCount = 0
     if (schema) {
-      const snap = await this.snapshot(connectionId, schema, options.fresh)
+      const snap = await this.snapshot(connectionId, schema, options.fresh, database)
       const built = buildSchemaContext(snap, {
         hints: [request.input, request.editorSql],
         openTable: request.openTable
@@ -236,16 +270,23 @@ export class AiService {
       tableCount = built.tableCount
       parts.push(built.text)
     } else {
-      const names = await this.withMetadata(connectionId, async (q) =>
-        (
-          await q.query<{ name: string }>(
-            'SELECT SCHEMA_NAME AS name FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME'
-          )
-        ).map((r) => String(r.name))
-      )
-      parts.push(
-        `No hay ninguna base de datos seleccionada. Bases de datos de la conexión: ${names.join(', ') || '(ninguna)'}.`
-      )
+      if (this.isPg(connectionId)) {
+        const names = await this.withPgMetadata(connectionId, database, (q) => readPgSchemaNames(q))
+        parts.push(
+          `No hay ningún esquema seleccionado (PostgreSQL${database ? `, base de datos ${database}` : ''}). Esquemas: ${names.join(', ') || '(ninguno)'}.`
+        )
+      } else {
+        const names = await this.withMetadata(connectionId, async (q) =>
+          (
+            await q.query<{ name: string }>(
+              'SELECT SCHEMA_NAME AS name FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME'
+            )
+          ).map((r) => String(r.name))
+        )
+        parts.push(
+          `No hay ninguna base de datos seleccionada. Bases de datos de la conexión: ${names.join(', ') || '(ninguna)'}.`
+        )
+      }
     }
     const context = parts.join('\n\n')
     return {
@@ -258,11 +299,15 @@ export class AiService {
   }
 
   /** get_table_structure: structure of the requested tables, read on demand (never rows). */
-  private toolFor(connectionId: string): ToolExecutor {
+  private toolFor(connectionId: string, database: string | null = null): ToolExecutor {
     return async (input: TableStructureInput) => {
-      const snap = await this.withMetadata(connectionId, (q) =>
-        readSchemaSnapshot(q, input.schema, input.tables)
-      )
+      const snap = this.isPg(connectionId)
+        ? await this.withPgMetadata(connectionId, database, (q) =>
+            readPgSchemaSnapshot(q, input.schema, input.tables)
+          )
+        : await this.withMetadata(connectionId, (q) =>
+            readSchemaSnapshot(q, input.schema, input.tables)
+          )
       const found = new Set(snap.tables.map((t) => t.name))
       const lines = snap.tables.map((t) => formatTable(t, input.schema))
       const missing = input.tables.filter((t) => !found.has(t))
@@ -300,6 +345,7 @@ export class AiService {
       providerId: typeof raw.providerId === 'string' && raw.providerId ? raw.providerId : null,
       connectionId: requireString(raw.connectionId, 'Conexión'),
       schema: typeof raw.schema === 'string' && raw.schema ? raw.schema : null,
+      database: typeof raw.database === 'string' && raw.database ? raw.database : null,
       mode: raw.mode,
       history: Array.isArray(raw.history) ? raw.history : [],
       input,
@@ -357,12 +403,29 @@ export class AiService {
       const preview = await this.buildContext({
         connectionId: request.connectionId,
         schema: request.schema,
+        database: request.database ?? null,
         input: request.input,
         editorSql: request.mode === 'chat' ? request.editorSql : (request.sql ?? request.editorSql),
         openTable: request.openTable
       })
       let plan: string | null = null
-      if (request.mode === 'explain' && isSingleSelect(request.sql)) {
+      if (this.isPg(request.connectionId)) {
+        if (request.mode === 'explain' && isSinglePgSelect(request.sql)) {
+          // EXPLAIN (plan only, never ANALYZE) of one read-only SELECT; nothing else is executed.
+          this.deps.emit('event:aiStatus', { requestId, status: 'Obteniendo el plan (EXPLAIN)…' })
+          const session = await this.deps.acquirePg!(request.connectionId, request.database ?? null)
+          try {
+            if (request.schema)
+              await session.query('SELECT pg_catalog.set_config($1, $2, false)', [
+                'search_path',
+                `"${request.schema.replace(/"/g, '""')}", public`
+              ])
+            plan = await explainPgSelect(session, request.sql ?? '')
+          } finally {
+            await session.release().catch(() => undefined)
+          }
+        }
+      } else if (request.mode === 'explain' && isSingleSelect(request.sql)) {
         // EXPLAIN only for one SELECT (explainSelect checks it); nothing else is executed.
         this.deps.emit('event:aiStatus', { requestId, status: 'Obteniendo el plan (EXPLAIN)…' })
         const session = await this.deps.acquire(request.connectionId, request.schema)
@@ -388,7 +451,7 @@ export class AiService {
           effort: settings.aiEffort,
           maxTokens: settings.aiMaxTokens,
           signal: controller.signal,
-          tool: this.toolFor(request.connectionId)
+          tool: this.toolFor(request.connectionId, request.database ?? null)
         },
         {
           onText: (text) => this.deps.emit('event:aiDelta', { requestId, text }),

@@ -91,8 +91,10 @@ describe('engine availability', () => {
     expect(engineAvailabilityError({ engine: 'oracle' as EngineId })).toBe(
       'Motor de base de datos desconocido: "oracle".'
     )
-    expect(engineAvailabilityError({ engine: 'postgresql' })).toBe(
-      'PostgreSQL todavía no está disponible en esta versión de Vortaq.'
+    // PostgreSQL ships a driver (preview) since 0.2.0.
+    expect(engineAvailabilityError({ engine: 'postgresql' })).toBeNull()
+    expect(engineAvailabilityError({ engine: 'mariadb' })).toBe(
+      'MariaDB todavía no está disponible en esta versión de Vortaq.'
     )
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
       'SQLite todavía no está disponible en esta versión de Vortaq.'
@@ -203,7 +205,7 @@ describe('engine block rules', () => {
       engineBlockErrors(
         input({
           engine: 'postgresql',
-          postgres: { initialDatabase: ' ', showSystemSchemas: false, timeZone: '' }
+          postgres: { initialDatabase: ' ', showSystemSchemas: false, timeZone: '', searchPath: '' }
         })
       )
     ).toEqual(['PostgreSQL: la base de datos inicial es obligatoria.'])

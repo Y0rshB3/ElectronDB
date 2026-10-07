@@ -168,16 +168,23 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   attributes**, so every attribute is optional (MySQL port 3306, SSH port 22, flags off).
 - `ConnType` (case-insensitive): `MYSQL`, `MARIADB` (imported as a MySQL connection while
   MariaDB has no driver of its own), `POSTGRESQL`, `SQLITE`, `MONGODB`, `SQLSERVER`,
-  `ORACLE`, `REDIS`, `SNOWFLAKE`. Only MySQL and MariaDB are importable today; the rest are
-  listed with «Motor no soportado en esta versión». The import identity is
+  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL` is
+  importable while «Motores en vista previa» is on (otherwise listed and disabled with
+  «PostgreSQL está en vista previa…»); the rest are listed with «Motor no soportado en esta
+  versión». The import identity is
   `(type, ConnectionName)`, the same as for `conn.plist` imports, so an `.ncx` merges into
   connections imported from the folder.
 - Attributes used: `ConnectionName`, `ConnType`, `Host`, `Port`, `UserName`, `Database`,
   `SSH`, `SSH_Host`, `SSH_Port`, `SSH_UserName`, `SSH_AuthenMethod` (`PASSWORD` |
   `PUBLICKEY`), `SSH_PrivateKey`, `SSL`, `SSL_CACert`, `SSL_ClientCert`, `SSL_ClientKey`,
   `SSL_Authen`, `HTTP` («Túnel HTTP no soportado»).
+- PostgreSQL: `InitialDatabase` (falls back to `Database`, then `postgres`), port default
+  5432, `ServiceProvider` (`Redshift`, `GaussDB`/`openGauss`, `KingbaseES` stay unsupported
+  with a reason), `Host` lists such as `h1:5432,h2:5433` (only the first host is used, with a
+  warning).
 - **Unverified** (accepted when present, never required): `SSL_VerifyCA`, a colour attribute
-  (`Color` / `ConnectionColor`); no sample confirms how Navicat writes either.
+  (`Color` / `ConnectionColor`), and the PostgreSQL SSL mode attribute (`SSL_Mode` /
+  `SSLMode`, any libpq spelling); no sample confirms how Navicat writes them.
 - Secrets: `Password`, `SSH_Password`, `SSH_Passphrase`, `SSL_PEMClientKeyPassword`, hex of
   a fixed-key scheme (AES-128-CBC in current versions, Blowfish in older ones;
   `src/main/importers/navicat/ncxCipher.ts`). `Ver` < 1.4 tries Blowfish first, newer files

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { TableDataRequest, TableFilter } from '@shared/types'
+import type { TableFilter } from '@shared/types'
+import type { TableDataRequest } from './tableData'
 import { buildCountSql, buildSelectSql, fetchTableData } from './tableData'
 import type { FullSession, RawStatementResult } from './session'
 

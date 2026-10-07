@@ -33,6 +33,7 @@
     "scripts/**/*.d.mts",
     "src/renderer/src/components/query/selectSource.ts",
     "src/renderer/src/components/query/resultEditability.ts",
+    "src/renderer/src/components/query/selectSourcePg.ts",
     "src/renderer/src/utils/columnMeta.ts",
     "src/renderer/src/components/data/rowEditing.ts",
     "src/renderer/src/components/designer/alterTable.ts",

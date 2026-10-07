@@ -4,8 +4,10 @@
  *
  * Runs `vitest run --project node` (same as `npm run test:integration`) with
  * VORTAQ_REQUIRE_INTEGRATION=1, so a missing VORTAQ_TEST_MYSQL_URL (MySQL 8.4),
- * VORTAQ_TEST_MYSQL57_URL (MySQL 5.7) or VORTAQ_TEST_MARIADB_URL (MariaDB 11)
- * makes the run fail instead of skip (tests/integration/targets.ts). Extra arguments are passed to vitest.
+ * VORTAQ_TEST_MYSQL57_URL (MySQL 5.7), VORTAQ_TEST_MARIADB_URL (MariaDB 11) or
+ * VORTAQ_TEST_PG_URL (PostgreSQL 17) makes the run fail instead of skip
+ * (tests/integration/targets.ts); VORTAQ_TEST_SSH_URL (the PostgreSQL SSH-tunnel test)
+ * stays optional. Extra arguments are passed to vitest.
  * A script instead of `VAR=1 vitest` so it also works from PowerShell and cmd.
  */
 import { spawnSync } from 'node:child_process'

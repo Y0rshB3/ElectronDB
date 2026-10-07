@@ -1,5 +1,5 @@
 import { engineOf } from '@shared/engines'
-import type { EngineId } from '@shared/types'
+import type { EngineId, SslConfig, SslMode } from '@shared/types'
 import { FOREIGN_PATH_WARNING, MARIADB_AS_MYSQL_WARNING, unsupportedEngine } from './types'
 
 /** A path written on another OS: a drive/UNC path on macOS/Linux, a POSIX path on Windows. */
@@ -100,3 +100,79 @@ export function uniqueKey(base: string, used: Set<string>): string {
   used.add(key)
   return key
 }
+
+/* ---------- PostgreSQL ---------- */
+
+/** PostgreSQL-compatible servers whose catalog differs: listed but not importable. */
+const POSTGRES_FORKS: [RegExp, string][] = [
+  [/redshift/i, 'Amazon Redshift'],
+  [/opengauss/i, 'openGauss'],
+  [/gauss/i, 'GaussDB'],
+  [/kingbase/i, 'KingbaseES']
+]
+
+export const postgresForkReason = (label: string): string =>
+  `${label} no es compatible: su catálogo es distinto del de PostgreSQL`
+
+/** Engine for a PostgreSQL connection; a known fork (by service provider or driver) is unsupported. */
+export function postgresFamily(provider = ''): EngineChoice {
+  const fork = POSTGRES_FORKS.find(([re]) => re.test(provider))
+  if (fork) return { engine: null, unsupportedReason: postgresForkReason(fork[1]), warning: null }
+  return { engine: 'postgresql', unsupportedReason: null, warning: null }
+}
+
+const SSL_MODES: readonly SslMode[] = [
+  'disable',
+  'allow',
+  'prefer',
+  'require',
+  'verify-ca',
+  'verify-full'
+]
+
+export const unknownSslModeWarning = (raw: string): string =>
+  `Modo SSL desconocido «${raw}»: se usa el predeterminado`
+
+/**
+ * Applies a libpq sslmode spelling (`verify-full`, `VERIFY_FULL`, `verifyFull`…) to `ssl`.
+ * Empty leaves `ssl` as it is; an unknown value adds a warning and keeps the default.
+ */
+export function applySslMode(ssl: SslConfig, raw: string, warnings: string[]): SslConfig {
+  const value = raw.trim()
+  if (!value) return ssl
+  const norm = value
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/_/g, '-')
+    .toLowerCase()
+  const mode = SSL_MODES.find((m) => m === norm)
+  if (!mode) {
+    warnings.push(unknownSslModeWarning(value))
+    return ssl
+  }
+  return {
+    ...ssl,
+    mode,
+    enabled: mode !== 'disable',
+    verifyServer: mode === 'verify-ca' || mode === 'verify-full'
+  }
+}
+
+export const multiHostWarning = (host: string): string =>
+  `Varios servidores: solo se usa el primero (${host})`
+
+/**
+ * First host of a `h1,h2` / `h1:5432,h2:5433` list (failover is not supported) plus its port,
+ * with a warning; a single host is returned unchanged.
+ */
+export function firstHost(raw: string, warnings: string[]): { host: string; port: number | null } {
+  const value = raw.trim()
+  if (!value.includes(',')) return { host: value, port: null }
+  const first = value.split(',')[0].trim()
+  const m = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(first)
+  const host = (m?.[1] ?? first).replace(/^\[|\]$/g, '')
+  warnings.push(multiHostWarning(host))
+  return { host, port: m?.[2] ? Number(m[2]) : null }
+}
+
+export const previewEngineReason = (label: string): string =>
+  `${label} está en vista previa: actívalo en Ajustes › Motores en vista previa`

@@ -86,4 +86,34 @@ describe('InfoPanel', () => {
     expect(section.text()).toContain('InnoDB')
     wrapper.unmount()
   })
+
+  it('lists engine details the server reports (PostgreSQL)', async () => {
+    installBridge({
+      'connections:list': [
+        makeConnection({ id: 'pg', name: 'PG', engine: 'postgresql', port: 5432 })
+      ],
+      'connections:open': () =>
+        makeServerInfo({
+          version: '17.11',
+          engine: 'postgresql',
+          details: [
+            { label: 'Base de datos inicial', value: 'shop' },
+            { label: 'Cifrado', value: 'SSL: TLSv1.3' }
+          ]
+        })
+    })
+    const connections = useConnectionsStore()
+    await connections.load()
+    await connections.open('pg')
+    useTreeStore().select(nodeIds.connection('pg'))
+    const wrapper = mount(InfoPanel, {
+      global: { plugins: [createTestVuetify()] },
+      attachTo: document.body
+    })
+    await flush()
+    const info = rows('[data-test="info-connection"]')
+    expect(info['Base de datos inicial']).toBe('shop')
+    expect(info['Cifrado']).toBe('SSL: TLSv1.3')
+    wrapper.unmount()
+  })
 })

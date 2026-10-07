@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { BackupFile, ConnectionConfig, Environment } from '@shared/types'
+import type { BackupFile, ConnectionConfig, EngineId, Environment } from '@shared/types'
 
 /** One affected object or statement listed in a confirmation. */
 export interface ConfirmItem {
@@ -62,7 +62,12 @@ export const useUiStore = defineStore('ui', () => {
   const aiPanelVisible = ref(false)
   const aiWidth = ref(400)
 
-  const connectionDialog = ref<{ open: boolean; editing: ConnectionConfig | null }>({
+  const connectionDialog = ref<{
+    open: boolean
+    editing: ConnectionConfig | null
+    /** Engine preselected for a new connection (absent = MySQL). */
+    engine?: EngineId
+  }>({
     open: false,
     editing: null
   })
@@ -105,8 +110,8 @@ export const useUiStore = defineStore('ui', () => {
 
   const confirm = ref<ConfirmState>({ open: false, title: '', message: '', resolve: null })
 
-  function openConnectionDialog(editing: ConnectionConfig | null = null): void {
-    connectionDialog.value = { open: true, editing }
+  function openConnectionDialog(editing: ConnectionConfig | null = null, engine?: EngineId): void {
+    connectionDialog.value = engine ? { open: true, editing, engine } : { open: true, editing }
   }
   function openNewDatabaseDialog(connectionId: string): void {
     newDatabaseDialog.value = { open: true, connectionId }

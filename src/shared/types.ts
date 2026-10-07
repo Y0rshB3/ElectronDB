@@ -31,6 +31,11 @@ export interface PostgresOptions {
   showSystemSchemas: boolean
   /** Session TimeZone; '' = server default. */
   timeZone: string
+  /**
+   * search_path of every session ('' = the server's default), e.g. `app, public`. A query
+   * tab's schema is put first and this list (or the server default) follows it.
+   */
+  searchPath: string
 }
 
 export interface SqliteAttachedDatabase {
@@ -189,6 +194,8 @@ export interface ConnectionTestResult {
   connectedWithoutPassword?: boolean
   durationMs: number
   error?: string
+  /** Extra facts for the dialog, e.g. "SSL: TLSv1.3" / "sin cifrar", "Túnel SSH: host" (PostgreSQL). */
+  details?: string[]
 }
 
 export interface ServerInfo {
@@ -256,6 +263,10 @@ export interface RoutineInfo {
   created: string | null
   modified: string | null
   comment: string
+  /** PostgreSQL: identity arguments (pg_get_function_identity_arguments); overloads share a name. */
+  signature?: string
+  /** PostgreSQL: 'function' | 'procedure' | 'trigger function'. */
+  kind?: string
 }
 
 export interface EventInfo {
@@ -344,6 +355,19 @@ export interface IndexInfo {
   comment: string
   /** Engine-neutral primary-key flag; absent => the renderer checks name === 'PRIMARY'. */
   primary?: boolean
+  /** PostgreSQL: full CREATE INDEX statement (pg_get_indexdef). */
+  definition?: string
+  /** PostgreSQL: constraint the index backs (primary key / unique / exclusion), if any. */
+  constraint?: string | null
+}
+
+/** PostgreSQL table constraint other than foreign keys (p/u/c/x), with its server text. */
+export interface ConstraintInfo {
+  name: string
+  type: 'primary' | 'unique' | 'check' | 'exclusion'
+  /** pg_get_constraintdef, e.g. `CHECK ((price > 0))`. */
+  definition: string
+  columns: string[]
 }
 
 export interface ForeignKeyInfo {
@@ -377,6 +401,76 @@ export interface TableStructure {
   comment: string
   autoIncrement: number | null
   createSql: string
+  /** PostgreSQL: primary key / unique / check / exclusion constraints. */
+  constraints?: ConstraintInfo[]
+  /**
+   * Engine table options. PostgreSQL: unlogged (boolean), owner, tablespace and
+   * partitionKey (strings; '' when not set).
+   */
+  options?: Record<string, string | number | boolean | null>
+}
+
+/** PostgreSQL schema of a database (db:schemas). */
+export interface SchemaInfo {
+  name: string
+  owner: string
+  comment: string
+  /** pg_catalog, information_schema, pg_toast…: hidden unless showSystemSchemas. */
+  system: boolean
+}
+
+/**
+ * One object of a group that has no dedicated info type (db:objects): PostgreSQL
+ * materialized views, sequences, types, indexes, triggers and routines.
+ */
+export interface ObjectSummary {
+  name: string
+  type: EngineObjectType
+  schema: string
+  /** Routines: identity arguments (overloads). */
+  signature?: string
+  /** Indexes and triggers: owning table. */
+  table?: string
+  /** Free-form sub kind: 'enum' | 'domain' | 'composite' | 'range', 'function' | 'procedure' | 'trigger function'… */
+  kind?: string
+  /** Estimated rows (reltuples), null when never analysed. */
+  rows?: number | null
+  sizeBytes?: number | null
+  owner?: string
+  comment?: string
+  /** Short extra column: a routine's result type, a sequence's last value, an enum's labels… */
+  detail?: string | null
+}
+
+/** PostgreSQL extension (db:extensions, read-only). */
+export interface ExtensionInfo {
+  name: string
+  version: string
+  schema: string
+}
+
+/** A data type the designer can offer (db:dataTypes, PostgreSQL). */
+export interface DataTypeInfo {
+  /** Name as written in DDL, schema-qualified when outside pg_catalog/public. */
+  name: string
+  schema: string
+  kind: 'base' | 'enum' | 'domain' | 'composite' | 'range' | 'pseudo' | 'multirange'
+  /** Enums: labels in order. */
+  enumValues?: string[]
+}
+
+/** State of the transaction of a query-tab session (tab sessions, D12). */
+export type TransactionStatus = 'idle' | 'in' | 'failed'
+
+/** db:sessionState / db:commit / db:rollback answer for one query tab. */
+export interface TabSessionState {
+  /** A session is open for the tab (it opens on the first run). */
+  open: boolean
+  transactionStatus: TransactionStatus
+  /** current_schema() after the last statement (PostgreSQL), null when unknown. */
+  effectiveSchema: string | null
+  /** Database the session is connected to (PostgreSQL). */
+  database: string | null
 }
 
 export interface UserInfo {
@@ -461,6 +555,14 @@ export interface QueryStatementResult {
   error: string | null
   /** SQLite only: storage class of each cell of `resultSet.rows`. */
   storage?: StorageClass[][]
+  /** PostgreSQL RAISE NOTICE / WARNING messages of the statement. */
+  notices?: string[]
+  /** Tab sessions: transaction state after the statement. */
+  transactionStatus?: TransactionStatus
+  /** Tab sessions (PostgreSQL): current_schema() after the statement. */
+  effectiveSchema?: string | null
+  /** 0-based offset into `sql` of the error, when the server reports one. */
+  errorPosition?: number | null
 }
 
 /**
@@ -478,14 +580,26 @@ export interface WriteOptions {
 }
 
 export interface QueryExecuteOptions extends WriteOptions {
-  schema?: string | null
+  /**
+   * Default namespace. MySQL: the database (USE). PostgreSQL: `{ database, schema }`
+   * (schema '' keeps the search_path as configured).
+   */
+  schema?: SchemaRef | null
+  /** Lets `db:cancel` stop this run (engines with cancel support; ignored on MySQL). */
+  executionId?: string
+  /**
+   * Query tab id: engines with tab sessions run the script on the tab's own session
+   * (transactions, SET and temp tables survive between runs). Ignored on MySQL.
+   */
+  sessionKey?: string
   /** Max rows kept per result set. */
   maxRows?: number
   stopOnError?: boolean
 }
 
 export interface TableDataRequest {
-  schema: string
+  /** MySQL: the database. PostgreSQL: `{ database, schema }`. */
+  schema: SchemaRef
   table: string
   limit: number
   offset: number
@@ -597,7 +711,7 @@ export interface ApplyRowChangesResult {
    * Generated AUTO_INCREMENT id of each change, aligned with the request
    * (null for updates, deletes and inserts without a generated id).
    */
-  insertIds?: (number | null)[]
+  insertIds?: (number | string | null)[]
 }
 
 /* ---------- Backups (.nb3) ---------- */

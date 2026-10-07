@@ -1,4 +1,7 @@
-import type { ObjectType } from '@shared/types'
+import type { EngineObjectType } from '@shared/types'
+import { api } from '@renderer/api'
+import { splitRoutineName } from '@renderer/utils/objectColumns'
+import { schemaRef } from '@renderer/utils/schemaRef'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { OBJECTS_TAB_ID, objectTabId, useTabsStore, tabTitle } from '@renderer/stores/tabs'
 import { nodeIds, useTreeStore, type TreeNode } from '@renderer/stores/tree'
@@ -33,6 +36,13 @@ export function useWorkspace() {
     if (tree.selected?.schema) return tree.selected.schema
     const cid = currentConnectionId()
     return cid && tabs.active.connectionId === cid ? (tabs.active.schema ?? null) : null
+  }
+
+  /** PostgreSQL database in context (tree selection, then the active tab); undefined on MySQL. */
+  function currentDatabase(): string | undefined {
+    if (tree.selected?.database !== undefined) return tree.selected.database
+    const cid = currentConnectionId()
+    return cid && tabs.active.connectionId === cid ? tabs.active.database : undefined
   }
 
   async function ensureOpen(connectionId: string): Promise<boolean> {
@@ -89,31 +99,40 @@ export function useWorkspace() {
     })
   }
 
+  /**
+   * DDL editor tab. PostgreSQL routines pass `{ signature }` (overloads share a
+   * name) and triggers `{ table }` in `payload`; MySQL callers pass none.
+   */
   function openDdlEditor(
     connectionId: string,
     schema: string,
-    type: ObjectType,
+    type: EngineObjectType,
     name: string | null,
-    database?: string
+    database?: string,
+    payload?: { signature?: string; table?: string }
   ): void {
+    const idName = name && payload?.signature !== undefined ? `${name}(${payload.signature})` : name
     tabs.open({
       kind: 'ddlEditor',
-      id: name ? objectTabId('ddl', connectionId, database, schema, type, name) : undefined,
-      title: name
-        ? tabTitle(name, schema, connections.nameOf(connectionId), database)
+      id: idName ? objectTabId('ddl', connectionId, database, schema, type, idName) : undefined,
+      title: idName
+        ? tabTitle(idName, schema, connections.nameOf(connectionId), database)
         : tabTitle(`Nuevo ${type}`, schema, connections.nameOf(connectionId), database),
       connectionId,
       database,
       schema,
       objectName: name ?? undefined,
-      objectType: type
+      objectType: type,
+      ...(payload ? { payload } : {})
     })
   }
 
   function openQuery(
     connectionId?: string | null,
     schema?: string | null,
-    payload?: { savedQueryId?: string; sql?: string; name?: string }
+    payload?: { savedQueryId?: string; sql?: string; name?: string },
+    /** PostgreSQL: database of the tab (defaults to the tree's / the initial one). */
+    database?: string
   ): void {
     const cid = connectionId ?? currentConnectionId()
     if (!cid) {
@@ -133,14 +152,23 @@ export function useWorkspace() {
     }
     const s = schema ?? (tree.selected?.connectionId === cid ? currentSchema() : null)
     const name = payload?.name ?? 'Consulta sin título'
+    // PostgreSQL tabs always know their database (MySQL tabs never get one).
+    const db = tree.hasDatabaseLevel(cid)
+      ? (database ??
+        (tree.selected?.connectionId === cid ? currentDatabase() : undefined) ??
+        connections.get(cid)?.postgres?.initialDatabase ??
+        'postgres')
+      : undefined
     // A tab with this id may since have been switched to another connection: open a new one.
     const queryTabId = savedId ? `query:${cid}:${savedId}` : undefined
     const idTaken = !!queryTabId && tabs.tabs.some((t) => t.id === queryTabId)
+    const where = db !== undefined ? (s ? `${db}.${s}` : db) : s
     tabs.open({
       kind: 'query',
       id: idTaken ? undefined : queryTabId,
-      title: `${name}${s ? `@${s}` : ''} (${connections.nameOf(cid)})`,
+      title: `${name}${where ? `@${where}` : ''} (${connections.nameOf(cid)})`,
       connectionId: cid,
+      ...(db !== undefined ? { database: db } : {}),
       schema: s ?? undefined,
       payload
     })
@@ -199,9 +227,11 @@ export function useWorkspace() {
       return false
     }
     if (!(await ensureOpen(cid))) return false
+    const db = currentDatabase()
     tree.setExpanded(nodeIds.connection(cid), true)
-    tree.setExpanded(nodeIds.schema(cid, schema), true)
-    const node = tree.parse(nodeIds.group(cid, schema, group))
+    if (db !== undefined) tree.setExpanded(nodeIds.database(cid, db), true)
+    tree.setExpanded(nodeIds.schema(cid, schema, db), true)
+    const node = tree.parse(nodeIds.group(cid, schema, group, db))
     if (!node) return false
     tree.select(node.id)
     showObjects()
@@ -216,7 +246,8 @@ export function useWorkspace() {
       return
     }
     if (node.kind !== 'object' || !node.schema || !node.name) return
-    const { connectionId, schema, name, group } = node
+    const { connectionId, schema, name, group, database } = node
+    if (database !== undefined) return openPgNode(node)
     switch (group) {
       case 'tables':
         return openTableData(connectionId, schema, name)
@@ -238,15 +269,50 @@ export function useWorkspace() {
     }
   }
 
+  /** PostgreSQL objects: every tab carries the database (two databases never share a tab). */
+  async function openPgNode(node: TreeNode): Promise<void> {
+    const { connectionId: c, schema, name, group, database: db } = node
+    if (!schema || !name || db === undefined) return
+    switch (group) {
+      case 'tables':
+      case 'materializedViews':
+        return openTableData(c, schema, name, db)
+      case 'views':
+        return openDdlEditor(c, schema, 'view', name, db)
+      case 'functions': {
+        const parts = splitRoutineName(name)
+        return openDdlEditor(
+          c,
+          schema,
+          node.subtype === 'PROCEDURE' ? 'procedure' : 'function',
+          parts.name,
+          db,
+          { signature: parts.signature ?? '' }
+        )
+      }
+      case 'sequences':
+      case 'types': {
+        // No dedicated editor: the DDL opens in a query tab (read it, edit it, run it).
+        const type = group === 'sequences' ? 'sequence' : 'type'
+        const ddl = await api.db.showCreate(c, schemaRef(schema, db), type, name)
+        return openQuery(c, schema, { sql: ddl, name }, db)
+      }
+      case 'queries':
+        return openQuery(c, schema, { savedQueryId: name }, db)
+    }
+  }
+
   function designNode(node: TreeNode): void {
     if (node.kind !== 'object' || !node.schema || !node.name) return
-    if (node.group === 'tables') openTableDesigner(node.connectionId, node.schema, node.name)
+    if (node.group === 'tables')
+      openTableDesigner(node.connectionId, node.schema, node.name, node.database)
     else void runSafely(() => openNode(node))
   }
 
   return {
     currentConnectionId,
     currentSchema,
+    currentDatabase,
     ensureOpen,
     openTableData,
     openTableDesigner,

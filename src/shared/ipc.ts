@@ -11,8 +11,11 @@ import type {
   ConnectionConfig,
   ConnectionInput,
   ConnectionTestResult,
+  DataTypeInfo,
   DatabaseInfo,
+  EngineObjectType,
   EventInfo,
+  ExtensionInfo,
   Job,
   JobInput,
   JobLogEvent,
@@ -24,7 +27,8 @@ import type {
   NavicatImportRequest,
   NavicatImportResult,
   NavicatJobPreview,
-  ObjectType,
+  NameRef,
+  ObjectSummary,
   ProgressEvent,
   QueryExecuteOptions,
   QueryStatementResult,
@@ -35,8 +39,11 @@ import type {
   RollbackRequest,
   RoutineInfo,
   RowChange,
+  SchemaInfo,
+  SchemaRef,
   ServerInfo,
   StartupNotice,
+  TabSessionState,
   TableDataPage,
   TableDataRequest,
   TableFilter,
@@ -150,52 +157,96 @@ export interface IpcInvokeMap {
   'connections:hasPassword': { args: [id: string]; result: boolean }
   'connections:setSshPassword': { args: [id: string, password: string | null]; result: void }
   'connections:hasSshPassword': { args: [id: string]; result: boolean }
+  /** PostgreSQL SSL client-key passphrase (CredentialStore 'sslKey'); null removes it. */
+  'connections:setSslKeyPassword': { args: [id: string, password: string | null]; result: void }
+  'connections:hasSslKeyPassword': { args: [id: string]; result: boolean }
   'connections:open': { args: [id: string]; result: ServerInfo }
   'connections:close': { args: [id: string]; result: void }
   'connections:isOpen': { args: [id: string]; result: boolean }
 
+  /*
+   * `schema: SchemaRef`: a plain string is the MySQL database (unchanged); PostgreSQL needs
+   * `{ database, schema }` and main rejects a plain string for it.
+   */
   'db:databases': { args: [connectionId: string]; result: DatabaseInfo[] }
-  'db:tables': { args: [connectionId: string, schema: string]; result: TableInfo[] }
-  'db:views': { args: [connectionId: string, schema: string]; result: ViewInfo[] }
-  'db:routines': { args: [connectionId: string, schema: string]; result: RoutineInfo[] }
-  'db:events': { args: [connectionId: string, schema: string]; result: EventInfo[] }
-  'db:triggers': { args: [connectionId: string, schema: string]; result: TriggerInfo[] }
+  'db:tables': { args: [connectionId: string, schema: SchemaRef]; result: TableInfo[] }
+  'db:views': { args: [connectionId: string, schema: SchemaRef]; result: ViewInfo[] }
+  'db:routines': { args: [connectionId: string, schema: SchemaRef]; result: RoutineInfo[] }
+  'db:events': { args: [connectionId: string, schema: SchemaRef]; result: EventInfo[] }
+  'db:triggers': { args: [connectionId: string, schema: SchemaRef]; result: TriggerInfo[] }
   'db:columns': {
-    args: [connectionId: string, schema: string, table: string]
+    args: [connectionId: string, schema: SchemaRef, table: string]
     result: ColumnInfo[]
   }
   'db:tableStructure': {
-    args: [connectionId: string, schema: string, table: string]
+    args: [connectionId: string, schema: SchemaRef, table: string]
     result: TableStructure
   }
+  /** DDL of an object. PostgreSQL routines pass `{ type, name, signature }` (overloads). */
   'db:showCreate': {
-    args: [connectionId: string, schema: string, type: ObjectType, name: string]
+    args: [connectionId: string, schema: SchemaRef, type: EngineObjectType, name: NameRef]
     result: string
   }
+  /** PostgreSQL: schemas of one database (hidden system schemas unless showSystemSchemas). */
+  'db:schemas': { args: [connectionId: string, database: string]; result: SchemaInfo[] }
+  /** Objects of a group without its own channel (materialized views, sequences, types…). */
+  'db:objects': {
+    args: [connectionId: string, schema: SchemaRef, type: EngineObjectType]
+    result: ObjectSummary[]
+  }
+  /** PostgreSQL: installed extensions of a database (read-only list). */
+  'db:extensions': { args: [connectionId: string, database: string]; result: ExtensionInfo[] }
+  /** PostgreSQL: data types for the designer's type picker (pg_type at runtime). */
+  'db:dataTypes': { args: [connectionId: string, database: string]; result: DataTypeInfo[] }
+  /** Stops a running `db:execute` started with this executionId; false when none is running. */
+  'db:cancel': { args: [connectionId: string, executionId: string]; result: boolean }
+  /** Tab sessions: state of the query tab's session (closed => open: false). */
+  'db:sessionState': {
+    args: [connectionId: string, sessionKey: string]
+    result: TabSessionState
+  }
+  /** Tab sessions: COMMIT of the tab's open transaction (a write under the production guard). */
+  'db:commit': {
+    args: [connectionId: string, sessionKey: string, options?: WriteOptions]
+    result: TabSessionState
+  }
+  /** Tab sessions: ROLLBACK of the tab's open (or failed) transaction. */
+  'db:rollback': {
+    args: [connectionId: string, sessionKey: string]
+    result: TabSessionState
+  }
+  /** Tab sessions: closes the tab's session (an open transaction is rolled back). */
+  'db:closeSession': { args: [connectionId: string, sessionKey: string]; result: void }
   'db:tableData': { args: [connectionId: string, request: TableDataRequest]; result: TableDataPage }
   /** Saved filter profiles of one table (userData/filter-profiles.json). */
   'filters:list': {
-    args: [connectionId: string, schema: string, table: string]
+    args: [connectionId: string, schema: SchemaRef, table: string]
     result: TableFilterProfile[]
   }
   /** Creates or replaces the profile `name`; returns the table's profiles. */
   'filters:save': {
-    args: [connectionId: string, schema: string, table: string, name: string, filter: TableFilter]
+    args: [
+      connectionId: string,
+      schema: SchemaRef,
+      table: string,
+      name: string,
+      filter: TableFilter
+    ]
     result: TableFilterProfile[]
   }
   'filters:delete': {
-    args: [connectionId: string, schema: string, table: string, name: string]
+    args: [connectionId: string, schema: SchemaRef, table: string, name: string]
     result: TableFilterProfile[]
   }
   /** WHERE text (without the keyword) main would run for a structured filter; '' when empty. */
   'db:tableFilterSql': {
-    args: [connectionId: string, schema: string, table: string, filter: TableFilter]
+    args: [connectionId: string, schema: SchemaRef, table: string, filter: TableFilter]
     result: string
   }
   'db:applyRowChanges': {
     args: [
       connectionId: string,
-      schema: string,
+      schema: SchemaRef,
       table: string,
       changes: RowChange[],
       options?: WriteOptions
@@ -210,20 +261,25 @@ export interface IpcInvokeMap {
   'db:dropObject': {
     args: [
       connectionId: string,
-      schema: string,
-      type: ObjectType,
-      name: string,
+      schema: SchemaRef,
+      type: EngineObjectType,
+      name: NameRef,
       options?: WriteOptions
     ]
     result: void
   }
+  /**
+   * MySQL: charset and collation. PostgreSQL ignores them and reads `engineOptions`
+   * (owner, template, encoding).
+   */
   'db:createDatabase': {
     args: [
       connectionId: string,
       name: string,
       charset: string,
       collation: string,
-      options?: WriteOptions
+      options?: WriteOptions,
+      engineOptions?: Record<string, string>
     ]
     result: void
   }
@@ -424,6 +480,8 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'connections:hasPassword',
   'connections:setSshPassword',
   'connections:hasSshPassword',
+  'connections:setSslKeyPassword',
+  'connections:hasSslKeyPassword',
   'connections:open',
   'connections:close',
   'connections:isOpen',
@@ -436,6 +494,15 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'db:columns',
   'db:tableStructure',
   'db:showCreate',
+  'db:schemas',
+  'db:objects',
+  'db:extensions',
+  'db:dataTypes',
+  'db:cancel',
+  'db:sessionState',
+  'db:commit',
+  'db:rollback',
+  'db:closeSession',
   'db:tableData',
   'db:tableFilterSql',
   'filters:list',

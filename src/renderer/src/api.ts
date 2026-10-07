@@ -3,13 +3,15 @@ import type {
   BackupCreateOptions,
   ConnectionInput,
   JobInput,
+  EngineObjectType,
+  NameRef,
   NavicatImportRequest,
-  ObjectType,
   QueryExecuteOptions,
   RestoreOptions,
   RollbackFilesSource,
   RollbackRequest,
   RowChange,
+  SchemaRef,
   TableDataRequest,
   TableFilter,
   WriteOptions
@@ -140,32 +142,52 @@ export const api = {
     setSshPassword: (id: string, password: string | null) =>
       invoke('connections:setSshPassword', id, password),
     hasSshPassword: (id: string) => invokeSilent('connections:hasSshPassword', id),
+    setSslKeyPassword: (id: string, password: string | null) =>
+      invoke('connections:setSslKeyPassword', id, password),
+    hasSslKeyPassword: (id: string) => invokeSilent('connections:hasSslKeyPassword', id),
     open: (id: string) => invoke('connections:open', id),
     close: (id: string) => invoke('connections:close', id),
     isOpen: (id: string) => invokeSilent('connections:isOpen', id)
   },
+  /*
+   * `s: SchemaRef`: the MySQL database name (string), or `{ database, schema }` on
+   * PostgreSQL (build it with utils/schemaRef.ts `schemaRef(schema, database)`).
+   */
   db: {
     databases: (c: string) => invokeSilent('db:databases', c),
-    tables: (c: string, s: string) => invokeSilent('db:tables', c, s),
-    views: (c: string, s: string) => invokeSilent('db:views', c, s),
-    routines: (c: string, s: string) => invokeSilent('db:routines', c, s),
-    events: (c: string, s: string) => invokeSilent('db:events', c, s),
-    triggers: (c: string, s: string) => invokeSilent('db:triggers', c, s),
-    columns: (c: string, s: string, t: string) => invoke('db:columns', c, s, t),
-    tableStructure: (c: string, s: string, t: string) => invoke('db:tableStructure', c, s, t),
-    showCreate: (c: string, s: string, type: ObjectType, name: string) =>
+    tables: (c: string, s: SchemaRef) => invokeSilent('db:tables', c, s),
+    views: (c: string, s: SchemaRef) => invokeSilent('db:views', c, s),
+    routines: (c: string, s: SchemaRef) => invokeSilent('db:routines', c, s),
+    events: (c: string, s: SchemaRef) => invokeSilent('db:events', c, s),
+    triggers: (c: string, s: SchemaRef) => invokeSilent('db:triggers', c, s),
+    columns: (c: string, s: SchemaRef, t: string) => invoke('db:columns', c, s, t),
+    tableStructure: (c: string, s: SchemaRef, t: string) => invoke('db:tableStructure', c, s, t),
+    showCreate: (c: string, s: SchemaRef, type: EngineObjectType, name: NameRef) =>
       invoke('db:showCreate', c, s, type, name),
+    /** PostgreSQL only. */
+    schemas: (c: string, database: string) => invokeSilent('db:schemas', c, database),
+    /** PostgreSQL only: materialized views, sequences, types, indexes… */
+    objects: (c: string, s: SchemaRef, type: EngineObjectType) =>
+      invokeSilent('db:objects', c, s, type),
+    extensions: (c: string, database: string) => invokeSilent('db:extensions', c, database),
+    dataTypes: (c: string, database: string) => invokeSilent('db:dataTypes', c, database),
+    cancel: (c: string, executionId: string) => invokeSilent('db:cancel', c, executionId),
+    sessionState: (c: string, key: string) => invokeSilent('db:sessionState', c, key),
+    commit: (c: string, key: string, options?: WriteOptions) =>
+      invoke('db:commit', c, key, options),
+    rollback: (c: string, key: string) => invoke('db:rollback', c, key),
+    closeSession: (c: string, key: string) => invokeSilent('db:closeSession', c, key),
     tableData: (c: string, req: TableDataRequest) => invokeSilent('db:tableData', c, req),
-    tableFilterSql: (c: string, s: string, t: string, filter: TableFilter) =>
+    tableFilterSql: (c: string, s: SchemaRef, t: string, filter: TableFilter) =>
       invokeSilent('db:tableFilterSql', c, s, t, filter),
-    filterProfiles: (c: string, s: string, t: string) => invokeSilent('filters:list', c, s, t),
-    saveFilterProfile: (c: string, s: string, t: string, name: string, filter: TableFilter) =>
+    filterProfiles: (c: string, s: SchemaRef, t: string) => invokeSilent('filters:list', c, s, t),
+    saveFilterProfile: (c: string, s: SchemaRef, t: string, name: string, filter: TableFilter) =>
       invoke('filters:save', c, s, t, name, filter),
-    deleteFilterProfile: (c: string, s: string, t: string, name: string) =>
+    deleteFilterProfile: (c: string, s: SchemaRef, t: string, name: string) =>
       invoke('filters:delete', c, s, t, name),
     applyRowChanges: (
       c: string,
-      s: string,
+      s: SchemaRef,
       t: string,
       changes: RowChange[],
       options?: WriteOptions
@@ -173,15 +195,24 @@ export const api = {
     execute: (c: string, sql: string, options?: QueryExecuteOptions) =>
       invoke('db:execute', c, sql, options),
     users: (c: string) => invoke('db:users', c),
-    dropObject: (c: string, s: string, type: ObjectType, name: string, options?: WriteOptions) =>
-      invoke('db:dropObject', c, s, type, name, options),
+    dropObject: (
+      c: string,
+      s: SchemaRef,
+      type: EngineObjectType,
+      name: NameRef,
+      options?: WriteOptions
+    ) => invoke('db:dropObject', c, s, type, name, options),
     createDatabase: (
       c: string,
       name: string,
       charset: string,
       collation: string,
-      options?: WriteOptions
-    ) => invoke('db:createDatabase', c, name, charset, collation, options),
+      options?: WriteOptions,
+      engineOptions?: Record<string, string>
+    ) =>
+      engineOptions
+        ? invoke('db:createDatabase', c, name, charset, collation, options, engineOptions)
+        : invoke('db:createDatabase', c, name, charset, collation, options),
     dropDatabase: (c: string, name: string, options?: WriteOptions) =>
       invoke('db:dropDatabase', c, name, options),
     charsets: (c: string) => invoke('db:charsets', c)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mysqlDriver } from '../mysql/driver'
+import { postgresDriver } from '../postgres/driver'
 import { DbUserError } from './errors'
 import { getDriver, hasDriver } from './registry'
 
@@ -9,10 +10,14 @@ describe('driver registry', () => {
     expect(await getDriver('mysql')).toBe(mysqlDriver)
   })
 
+  it('serves the PostgreSQL driver (preview) for postgresql connections', async () => {
+    expect(hasDriver('postgresql')).toBe(true)
+    expect(await getDriver('postgresql')).toBe(postgresDriver)
+  })
+
   it('refuses every engine without a driver in this build', async () => {
     const labels = {
       mariadb: 'MariaDB',
-      postgresql: 'PostgreSQL',
       sqlite: 'SQLite',
       mongodb: 'MongoDB'
     } as const

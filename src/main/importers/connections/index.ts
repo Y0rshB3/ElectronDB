@@ -8,7 +8,9 @@ import type {
   ImportConnectionsResult,
   ImportSourceId
 } from '@shared/importers'
-import type { ConnectionConfig, ConnectionInput, Environment } from '@shared/types'
+import { engineAvailabilityError } from '@shared/connectionValidation'
+import { engineOf } from '@shared/engines'
+import type { ConnectionConfig, ConnectionInput, EngineId, Environment } from '@shared/types'
 import type { AppContext } from '../../context'
 import type { ConnectionSecretKind } from '../../credentials/store'
 import { safeDirName } from '../../navicat/importer'
@@ -16,6 +18,7 @@ import { nowIso } from '../../storage/ids'
 import { parseDbeaverDataSources } from './dbeaver'
 import { parseNcx } from './ncx'
 import type { ConnectionSecrets, ParsedConnection, ParsedConnectionFile } from './types'
+import { previewEngineReason } from './util'
 import { parseWorkbenchConnections } from './workbench'
 
 /** The slice of the app context connection imports need (keeps tests free of Electron). */
@@ -86,7 +89,30 @@ export function findImported(
   )
 }
 
-function toItem(parsed: ParsedConnection, existing: ConnectionConfig | null): ImportConnectionItem {
+/**
+ * Why a parsed connection cannot be imported here: unsupported engine, an engine without a
+ * driver in this build, or a preview engine while «Motores en vista previa» is off. null = ok.
+ */
+export function importBlockReason(
+  parsed: Pick<ParsedConnection, 'engine' | 'unsupportedReason'>,
+  previewEngines: boolean
+): string | null {
+  if (!parsed.engine) return parsed.unsupportedReason ?? 'Motor no soportado'
+  if (parsed.unsupportedReason) return parsed.unsupportedReason
+  const unavailable = engineAvailabilityError({ engine: parsed.engine })
+  if (unavailable) return unavailable
+  const engine = engineOf({ engine: parsed.engine })
+  return engine.capabilities.preview && !previewEngines ? previewEngineReason(engine.label) : null
+}
+
+const previewOn = (ctx: Pick<AppContext, 'settings'>): boolean =>
+  ctx.settings.get().previewEngines === true
+
+function toItem(
+  parsed: ParsedConnection,
+  existing: ConnectionConfig | null,
+  previewEngines: boolean
+): ImportConnectionItem {
   return {
     key: parsed.key,
     name: parsed.name,
@@ -102,14 +128,16 @@ function toItem(parsed: ParsedConnection, existing: ConnectionConfig | null): Im
     environment: parsed.environment,
     hasPassword: parsed.secrets.mysql !== undefined,
     existingConnectionId: existing?.id ?? null,
-    unsupportedReason: parsed.unsupportedReason,
+    unsupportedReason: parsed.engine
+      ? importBlockReason(parsed, previewEngines)
+      : parsed.unsupportedReason,
     warnings: [...parsed.warnings]
   }
 }
 
 /** Preview of the connections in `path` (a file of `source`). Secrets never leave main. */
 export async function previewConnectionFile(
-  ctx: Pick<AppContext, 'connections'>,
+  ctx: Pick<AppContext, 'connections' | 'settings'>,
   sourceId: ImportSourceId,
   path: string,
   platform: NodeJS.Platform = process.platform
@@ -117,7 +145,10 @@ export async function previewConnectionFile(
   const source = sourceOf(sourceId)
   const file = await readConnectionFile(source, path, platform)
   const existing = ctx.connections.list()
-  const items = file.connections.map((c) => toItem(c, findImported(existing, source.app, c)))
+  const preview = previewOn(ctx)
+  const items = file.connections.map((c) =>
+    toItem(c, findImported(existing, source.app, c), preview)
+  )
   return {
     source: sourceId,
     path,
@@ -134,6 +165,22 @@ function mergeEnvironment(existing: ConnectionConfig | null, inferred: Environme
   return existing.environment
 }
 
+/** PostgreSQL block: the file's database is the initial one; other options stay as they were. */
+function postgresBlock(
+  parsed: ParsedConnection,
+  existing: ConnectionConfig | null
+): Pick<ConnectionInput, 'postgres'> {
+  return {
+    postgres: {
+      showSystemSchemas: false,
+      timeZone: '',
+      searchPath: '',
+      ...existing?.postgres,
+      initialDatabase: parsed.database || existing?.postgres?.initialDatabase || 'postgres'
+    }
+  }
+}
+
 function toInput(
   parsed: ParsedConnection,
   source: ConnectionFileSource,
@@ -141,9 +188,11 @@ function toInput(
   backupsRootDir: string,
   importedAt: string
 ): ConnectionInput {
+  const engine: EngineId = parsed.engine ?? 'mysql'
   return {
     id: existing?.id,
-    engine: parsed.engine ?? 'mysql',
+    engine,
+    ...(engine === 'postgresql' ? postgresBlock(parsed, existing) : {}),
     name: existing?.name ?? parsed.name,
     color: parsed.color ?? existing?.color ?? null,
     environment: mergeEnvironment(existing, parsed.environment),
@@ -229,6 +278,7 @@ export async function importConnectionFile(
   }
   const importedAt = nowIso()
   const backupsRootDir = ctx.settings.get().backupsRootDir
+  const preview = previewOn(ctx)
 
   for (const key of new Set(keys)) {
     const parsed = byKey.get(key)
@@ -236,9 +286,11 @@ export async function importConnectionFile(
       result.warnings.push(`La conexión «${key}» ya no está en el archivo`)
       continue
     }
-    if (!parsed.engine) {
+    // Main enforces the same rules as the preview (unsupported, unavailable, preview engine off).
+    const blocked = importBlockReason(parsed, preview)
+    if (!parsed.engine || blocked) {
       result.warnings.push(
-        `«${parsed.name}» no se ha importado: ${parsed.unsupportedReason ?? 'motor no soportado'}`
+        `«${parsed.name}» no se ha importado: ${blocked ?? 'motor no soportado'}`
       )
       continue
     }

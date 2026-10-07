@@ -10,6 +10,8 @@ export interface QueryEditorHandle {
   tabId: string
   connectionId(): string
   schema(): string | null
+  /** PostgreSQL: the tab's database (null/absent for MySQL). */
+  database?(): string | null
   sql(): string
   selection(): string
   insertAtCursor(text: string): void

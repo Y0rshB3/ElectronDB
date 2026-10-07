@@ -9,7 +9,15 @@ import {
   shallowRef,
   watch
 } from 'vue'
-import type { QueryStatementResult } from '@shared/types'
+import type { QueryStatementResult, TransactionStatus } from '@shared/types'
+import { postgresqlDialect } from '@shared/dialects/postgresql'
+import {
+  cachedPg,
+  pgCompletionSource,
+  type PgRelationKind
+} from '@renderer/components/common/editor/pgCompletion'
+import { useTransactionPrompt } from '@renderer/composables/useTransactionPrompt'
+import { newOperationId } from '@renderer/api'
 import { api } from '@renderer/api'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { cached, type SchemaProvider } from '@renderer/components/common/editor/sqlCompletion'
@@ -56,6 +64,20 @@ const savedConnectionId = ref<string | null>(null)
 const queryName = ref('Consulta sin título')
 const schema = ref<string | null>(props.tab.schema ?? null)
 const schemas = ref<string[]>([])
+
+/*
+ * PostgreSQL tabs (D12): a database combo above the schema combo, the tab's
+ * own server session (sessionKey = tab id) with its transaction state,
+ * Confirmar/Deshacer, cancel through db:cancel, and the PG dialect for the
+ * guards and completion. MySQL tabs never read any of this.
+ */
+const database = ref<string | null>(props.tab.database ?? null)
+const pgDatabases = ref<string[]>([])
+const txStatus = ref<TransactionStatus>('idle')
+const settlingTx = ref(false)
+/** executionId of the run in progress (PostgreSQL cancel). */
+let executionId: string | null = null
+const txPrompt = useTransactionPrompt()
 /**
  * Lazy metadata for autocompletion, cached per connection: recreated when the
  * connection changes and cleared after running anything that may write.
@@ -88,6 +110,61 @@ function makeProvider(): SchemaProvider & { clear(): void } {
   })
 }
 const completion = shallowRef(makeProvider())
+
+/** Configured search_path of the connection ('' = server default, assumed to include public). */
+function configuredSearchPath(): string[] {
+  const raw = connections.get(connectionId.value)?.postgres?.searchPath ?? ''
+  const list = raw
+    .split(',')
+    .map((s) => s.trim().replace(/^"|"$/g, ''))
+    .filter((s) => s && s !== '$user')
+  return list.length ? list : ['public']
+}
+
+/** PostgreSQL completion metadata, cached per tab database (recreated when it changes). */
+function makePgProvider() {
+  const ref = (s: string) => ({ database: database.value ?? '', schema: s })
+  return cachedPg({
+    searchPath: () =>
+      [...new Set([schema.value, ...configuredSearchPath()].filter(Boolean))] as string[],
+    schemas: async () =>
+      connectionId.value && database.value
+        ? (await invokeSilent('db:schemas', connectionId.value, database.value)).map((s) => s.name)
+        : [],
+    tables: async (s) => {
+      if (!connectionId.value || !database.value) return []
+      const [tables, views, matviews] = await Promise.all([
+        invokeSilent('db:tables', connectionId.value, ref(s)),
+        invokeSilent('db:views', connectionId.value, ref(s)).catch(() => []),
+        invokeSilent('db:objects', connectionId.value, ref(s), 'materialized_view').catch(() => [])
+      ])
+      return [
+        ...tables.map((t) => ({
+          name: t.name,
+          kind: (t.engine === 'foránea' ? 'foreign' : 'table') as PgRelationKind
+        })),
+        ...views.map((v) => ({ name: v.name, kind: 'view' as PgRelationKind })),
+        ...matviews.map((m) => ({ name: m.name, kind: 'materialized_view' as PgRelationKind }))
+      ]
+    },
+    columns: async (s, t) =>
+      connectionId.value && database.value
+        ? (await invokeSilent('db:columns', connectionId.value, ref(s), t)).map((c) => ({
+            name: c.name,
+            type: c.columnType
+          }))
+        : [],
+    functions: async (s) =>
+      connectionId.value && database.value
+        ? (await invokeSilent('db:objects', connectionId.value, ref(s), 'function')).map((f) => ({
+            name: f.name,
+            signature: f.signature ?? ''
+          }))
+        : []
+  })
+}
+const pgCompletion = shallowRef(makePgProvider())
+const pgSource = computed(() => pgCompletionSource(pgCompletion.value))
 
 const running = ref(false)
 const results = ref<QueryStatementResult[]>([])
@@ -147,6 +224,7 @@ function onSplitKey(event: KeyboardEvent): void {
 }
 
 const connectionId = computed(() => props.tab.connectionId ?? '')
+const isPg = computed(() => connections.get(connectionId.value)?.engine === 'postgresql')
 const production = computed(() => connections.isProduction(connectionId.value))
 /** Switching connection (opening it, loading its databases). */
 const switching = ref(false)
@@ -203,12 +281,58 @@ async function confirmDiscardEdits(): Promise<boolean> {
 }
 
 function updateTitle(): void {
+  if (isPg.value) {
+    const where = [database.value, schema.value].filter(Boolean).join('.')
+    tabs.setTitle(
+      props.tab.id,
+      `${queryName.value}${where ? `@${where}` : ''} (${connections.nameOf(connectionId.value)})`
+    )
+    return
+  }
   const s = schema.value ? `@${schema.value}` : ''
   tabs.setTitle(props.tab.id, `${queryName.value}${s} (${connections.nameOf(connectionId.value)})`)
 }
 
+/** PostgreSQL: databases of the connection (honouring «Mostrar solo estas bases de datos»). */
+async function loadPgDatabases(): Promise<void> {
+  const conn = connections.get(connectionId.value)
+  let names: string[] = []
+  try {
+    names = (await api.db.databases(connectionId.value)).map((d) => d.name)
+  } catch {
+    names = []
+  }
+  const custom = conn?.customDatabases ?? []
+  if (custom.length) names = names.filter((n) => custom.includes(n))
+  pgDatabases.value = names
+  if (!database.value) {
+    const initial = conn?.postgres?.initialDatabase
+    database.value = (initial && names.includes(initial) ? initial : names[0]) ?? initial ?? null
+    if (database.value)
+      tabs.setTarget(props.tab.id, connectionId.value, schema.value, database.value)
+  }
+}
+
+/** PostgreSQL: schemas of the tab's database. */
+async function loadPgSchemas(): Promise<void> {
+  if (!database.value) {
+    schemas.value = []
+    return
+  }
+  try {
+    schemas.value = (await api.db.schemas(connectionId.value, database.value)).map((s) => s.name)
+  } catch {
+    schemas.value = schema.value ? [schema.value] : []
+  }
+}
+
 async function loadSchemas(): Promise<void> {
   if (!connectionId.value) return
+  if (isPg.value) {
+    await loadPgDatabases()
+    await loadPgSchemas()
+    return
+  }
   try {
     schemas.value = (await api.db.databases(connectionId.value)).map((d) => d.name)
   } catch {
@@ -217,13 +341,21 @@ async function loadSchemas(): Promise<void> {
 }
 
 async function loadCompletion(): Promise<void> {
+  if (isPg.value) {
+    if (connectionId.value && database.value && schema.value)
+      void pgCompletion.value.tables(schema.value).catch(() => [])
+    return
+  }
   // Warm the cache for the selected database so the first suggestions are instant.
   if (connectionId.value && schema.value) void completion.value.tables(schema.value).catch(() => [])
 }
 
-watch(schema, () => {
+watch(schema, (value) => {
   updateTitle()
   void loadCompletion()
+  // PostgreSQL: the schema is part of the tab's target (the next run applies it to search_path).
+  if (isPg.value)
+    tabs.setTarget(props.tab.id, connectionId.value, value, database.value ?? undefined)
 })
 
 function loadPayload(): void {
@@ -237,6 +369,7 @@ function loadPayload(): void {
       queryName.value = saved.name
       sql.value = saved.sql
       savedSql.value = saved.sql
+      if (saved.database && isPg.value) database.value = saved.database
       if (saved.schema) schema.value = saved.schema
       return
     }
@@ -257,11 +390,14 @@ async function run(selectionOnly = false): Promise<void> {
   if (!(await confirmDiscardEdits())) return
   // Allowlist: on production (and the environments of Ajustes › Seguridad) anything not provably
   // read-only (SELECT/SHOW/DESCRIBE/EXPLAIN/USE...) asks for the typed name first.
-  const check = analyzeWrites(script)
+  const pg = isPg.value
+  const check = pg ? postgresqlDialect.analyzeWrites(script) : analyzeWrites(script)
   const confirmProduction = connections.needsTypedConfirm(connectionId.value) && check.writes
   // DROP / TRUNCATE / DELETE / ALTER … DROP / UPDATE without WHERE ask on any connection (setting).
   const drops = settings.settings.confirmDestructiveEverywhere
-    ? analyzeDestructiveScript(script)
+    ? pg
+      ? (postgresqlDialect.analyzeDestructive?.(script) ?? [])
+      : analyzeDestructiveScript(script)
     : []
   if (confirmProduction || drops.length) {
     const allRows = drops.filter((d) => d.allRows).length
@@ -298,11 +434,20 @@ async function run(selectionOnly = false): Promise<void> {
   try {
     // confirmProduction tells main the user typed the name; main rejects unconfirmed writes to
     // production and to the environments of Ajustes › Seguridad.
-    const out = await api.invokeSilent('db:execute', connectionId.value, script, {
-      schema: schema.value,
-      ...(confirmProduction ? { confirmProduction: true } : {})
-    })
+    executionId = pg ? newOperationId('exec') : null
+    const out = pg
+      ? await api.invokeSilent('db:execute', connectionId.value, script, {
+          schema: { database: database.value ?? '', schema: schema.value ?? '' },
+          sessionKey: props.tab.id,
+          executionId: executionId!,
+          ...(confirmProduction ? { confirmProduction: true } : {})
+        })
+      : await api.invokeSilent('db:execute', connectionId.value, script, {
+          schema: schema.value,
+          ...(confirmProduction ? { confirmProduction: true } : {})
+        })
     if (seq !== runSeq) return
+    if (pg) followSession(out)
     results.value = out
     totalMs.value = Math.round(performance.now() - started)
     const firstSet = resultSets.value[0]
@@ -312,14 +457,112 @@ async function run(selectionOnly = false): Promise<void> {
     notice.value = errorMessage(err)
     resultTab.value = 'messages'
   } finally {
-    if (seq === runSeq) running.value = false
+    if (seq === runSeq) {
+      running.value = false
+      executionId = null
+    }
     // DDL/DML may have created tables, columns or databases: drop stale completion metadata.
-    if (check.writes) completion.value.clear()
+    if (check.writes) {
+      completion.value.clear()
+      pgCompletion.value.clear()
+    }
+    // A lost PostgreSQL session reports itself as an error: re-read the state.
+    if (pg && notice.value) void refreshSessionState()
   }
+}
+
+/** Transaction state and effective schema reported by a PostgreSQL run. */
+function followSession(out: QueryStatementResult[]): void {
+  const last = out[out.length - 1]
+  if (last?.transactionStatus) txStatus.value = last.transactionStatus
+  const effective = last?.effectiveSchema
+  // `SET search_path` in the script moved the tab: follow it in the combo.
+  if (effective && effective !== schema.value) {
+    if (!schemas.value.includes(effective)) schemas.value = [...schemas.value, effective].sort()
+    schema.value = effective
+  }
+}
+
+async function refreshSessionState(): Promise<void> {
+  if (!isPg.value || !connectionId.value || !connections.isOpen(connectionId.value)) return
+  try {
+    txStatus.value = (await api.db.sessionState(connectionId.value, props.tab.id)).transactionStatus
+  } catch {
+    txStatus.value = 'idle'
+  }
+}
+
+/** «Confirmar» (COMMIT) of the tab's transaction; typed confirmation on guarded connections. */
+async function commitTransaction(): Promise<void> {
+  if (settlingTx.value) return
+  settlingTx.value = true
+  try {
+    const state = await txPrompt.commit(connectionId.value, props.tab.id)
+    if (state) {
+      txStatus.value = state.transactionStatus
+      notify.success('Transacción confirmada (COMMIT)')
+    }
+  } finally {
+    settlingTx.value = false
+  }
+}
+
+/** «Deshacer» (ROLLBACK) of the tab's transaction. */
+async function rollbackTransaction(): Promise<void> {
+  if (settlingTx.value) return
+  settlingTx.value = true
+  try {
+    const state = await txPrompt.rollback(connectionId.value, props.tab.id)
+    if (state) {
+      txStatus.value = state.transactionStatus
+      notify.success('Transacción deshecha (ROLLBACK)')
+    }
+  } finally {
+    settlingTx.value = false
+  }
+}
+
+/**
+ * PostgreSQL database combo: the tab session belongs to one database, so
+ * changing it closes the session (asking first about an open transaction).
+ */
+async function changeDatabase(value: string | null): Promise<void> {
+  if (!value || value === database.value || running.value) return
+  if (
+    !(await txPrompt.settleTransaction(
+      connectionId.value,
+      props.tab.id,
+      'Cambiar de base de datos',
+      txStatus.value
+    ))
+  )
+    return
+  await api.db.closeSession(connectionId.value, props.tab.id).catch(() => undefined)
+  txStatus.value = 'idle'
+  database.value = value
+  schema.value = null
+  tabs.setTarget(props.tab.id, connectionId.value, null, value)
+  pgCompletion.value = makePgProvider()
+  updateTitle()
+  await loadPgSchemas()
+}
+
+/** «Ir al error»: cursor at the position the server reported inside the statement. */
+function locateError(result: QueryStatementResult): void {
+  if (result.errorPosition === undefined || result.errorPosition === null) return
+  const start = sql.value.indexOf(result.sql)
+  if (start < 0) return
+  editor.value?.moveCursor?.(start + result.errorPosition)
 }
 
 function stop(): void {
   if (!running.value) return
+  if (isPg.value) {
+    // PostgreSQL cancels the running statement (pg_cancel_backend); its error arrives as a result.
+    if (executionId) void api.db.cancel(connectionId.value, executionId).catch(() => false)
+    notice.value = 'Cancelando la consulta en curso…'
+    return
+  }
   // MySQL cannot cancel a statement mid-flight from here: drop late results instead.
   runSeq++
   running.value = false
@@ -353,7 +596,8 @@ function persist(name: string, id: string | null): void {
     id: target ?? undefined,
     name,
     sql: sql.value,
-    schema: schema.value
+    schema: schema.value,
+    ...(isPg.value && database.value ? { database: database.value } : {})
   })
   savedQueryId.value = saved.id
   savedConnectionId.value = cid
@@ -410,10 +654,43 @@ async function switchConnection(id: string): Promise<boolean> {
     }))
   )
     return false
+  if (isPg.value && connections.isOpen(connectionId.value)) {
+    // The tab session stays on the old connection: settle its transaction, then close it.
+    if (
+      !(await txPrompt.settleTransaction(
+        connectionId.value,
+        props.tab.id,
+        'Cambiar de conexión',
+        txStatus.value
+      ))
+    )
+      return false
+    await api.db.closeSession(connectionId.value, props.tab.id).catch(() => undefined)
+    txStatus.value = 'idle'
+  }
   switching.value = true
   try {
     // Opening reports its own error; the tab stays on the current connection.
     if (!(await workspace.ensureOpen(id))) return false
+    if (connections.get(id)?.engine === 'postgresql') {
+      runSeq++
+      results.value = []
+      pendingEdits.value = {}
+      runId.value++
+      totalMs.value = null
+      notice.value = null
+      resultTab.value = 'messages'
+      database.value = null
+      schema.value = null
+      tabs.setTarget(props.tab.id, id, null)
+      completion.value = makeProvider()
+      await loadPgDatabases()
+      pgCompletion.value = makePgProvider()
+      await loadPgSchemas()
+      updateTitle()
+      return true
+    }
+    database.value = null
     let names: string[] = []
     try {
       names = (await api.db.databases(id)).map((d) => d.name)
@@ -479,6 +756,10 @@ onMounted(async () => {
   loadPayload()
   updateTitle()
   await Promise.all([loadSchemas(), loadCompletion()])
+  if (isPg.value) {
+    updateTitle()
+    await refreshSessionState()
+  }
 })
 
 /* ---------- AI assistant (never runs SQL: it only reads it or inserts it) ---------- */
@@ -516,13 +797,25 @@ const unregisterEditor = registerQueryEditor({
   tabId: props.tab.id,
   connectionId: () => connectionId.value,
   schema: () => schema.value,
+  database: () => (isPg.value ? database.value : null),
   sql: () => sql.value,
   selection: () => editor.value?.getSelection() ?? '',
   insertAtCursor
 })
 onUnmounted(unregisterEditor)
 
-defineExpose({ run, stop, results, schema, switchConnection })
+defineExpose({
+  run,
+  stop,
+  results,
+  schema,
+  database,
+  txStatus,
+  switchConnection,
+  changeDatabase,
+  commitTransaction,
+  rollbackTransaction
+})
 </script>
 
 <template>
@@ -619,6 +912,43 @@ defineExpose({ run, stop, results, schema, switchConnection })
           ><span class="query-view__label">Explicar / optimizar</span></v-btn
         >
       </template>
+      <template v-if="isPg && txStatus !== 'idle'">
+        <span class="nd-viewbar__sep" aria-hidden="true" />
+        <span
+          class="nd-status-pill query-view__tx"
+          :class="txStatus === 'failed' ? 'query-view__tx--failed' : 'query-view__tx--open'"
+          role="status"
+          data-test="tx-status"
+          >{{
+            txStatus === 'failed' ? 'Transacción abortada: ejecuta ROLLBACK' : 'Transacción abierta'
+          }}</span
+        >
+        <v-btn
+          v-if="txStatus === 'in'"
+          prepend-icon="mdi-check"
+          size="small"
+          color="success"
+          variant="tonal"
+          class="ml-1"
+          :disabled="running || settlingTx"
+          title="Confirmar la transacción (COMMIT)"
+          data-test="tx-commit"
+          @click="commitTransaction"
+          >Confirmar</v-btn
+        >
+        <v-btn
+          prepend-icon="mdi-undo"
+          size="small"
+          color="warning"
+          variant="tonal"
+          class="ml-1"
+          :disabled="running || settlingTx"
+          title="Deshacer la transacción (ROLLBACK)"
+          data-test="tx-rollback"
+          @click="rollbackTransaction"
+          >Deshacer</v-btn
+        >
+      </template>
       <span class="nd-viewbar__spacer" />
       <QueryConnectionPicker
         :model-value="connectionId"
@@ -630,12 +960,27 @@ defineExpose({ run, stop, results, schema, switchConnection })
         @update:model-value="switchConnection"
       />
       <v-select
-        v-model="schema"
-        :items="schemas"
-        :disabled="switching"
+        v-if="isPg"
+        :model-value="database"
+        :items="pgDatabases"
+        :disabled="switching || running"
         placeholder="Base de datos"
         aria-label="Base de datos"
         prepend-inner-icon="mdi-database-outline"
+        density="compact"
+        hide-details
+        no-data-text="Sin bases de datos"
+        class="query-view__schema"
+        data-test="database"
+        @update:model-value="changeDatabase"
+      />
+      <v-select
+        v-model="schema"
+        :items="schemas"
+        :disabled="switching"
+        :placeholder="isPg ? 'Esquema' : 'Base de datos'"
+        :aria-label="isPg ? 'Esquema' : 'Base de datos'"
+        :prepend-inner-icon="isPg ? 'mdi-folder-outline' : 'mdi-database-outline'"
         density="compact"
         clearable
         hide-details
@@ -652,6 +997,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
           v-model="sql"
           :provider="completion"
           :engine="connections.get(connectionId)?.engine"
+          :completion-source="isPg ? pgSource : undefined"
           min-height="80px"
           @run="run()"
           @save="save"
@@ -781,6 +1127,7 @@ defineExpose({ run, stop, results, schema, switchConnection })
               :notice="notice"
               :can-explain="aiEnabled"
               @explain-error="explainError"
+              @locate-error="locateError"
             />
           </v-window-item>
           <v-window-item v-for="rs in resultSets" :key="rs.key" :value="rs.key" class="fill">
@@ -835,6 +1182,12 @@ defineExpose({ run, stop, results, schema, switchConnection })
 
 <style scoped src="../components/data/viewChrome.css"></style>
 <style scoped>
+.query-view__tx--open {
+  color: var(--nd-warning);
+}
+.query-view__tx--failed {
+  color: var(--nd-error);
+}
 /* Production connection: a red rule under the toolbar, on top of the red picker. */
 .query-view__bar {
   /* Size container: secondary buttons drop their labels before the pickers get squeezed. */

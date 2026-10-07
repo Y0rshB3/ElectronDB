@@ -43,6 +43,16 @@ export function getAiService(ctx: AppContext): AiService {
     settings: ctx.settings,
     environmentOf: (id) => ctx.connections.get(id)?.environment ?? null,
     acquire: (connectionId, schema) => manager.acquire(connectionId, schema),
+    isPostgres: (id) => ctx.connections.get(id)?.engine === 'postgresql',
+    acquirePg: async (connectionId, database) => {
+      const { isPgConnection } = await import('../postgres/connection')
+      const connection = await manager.connection(connectionId)
+      if (!isPgConnection(connection)) throw new Error('La conexión no es PostgreSQL.')
+      const session = await connection.acquire(database ? { database, schema: null } : null)
+      // set_config of the explain path is user state: reset the pooled session on release.
+      session.usage.userSql = true
+      return session
+    },
     emit: (channel, payload) => ctx.emit(channel, payload),
     log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
     fetch: electronFetch,

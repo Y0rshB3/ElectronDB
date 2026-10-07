@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { DatabaseInfo } from '@shared/types'
+import type { DatabaseInfo, SchemaInfo } from '@shared/types'
 import type { WorkspaceTab } from '@renderer/stores/tabs'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { nodeIds, useTreeStore, type TreeNode } from '@renderer/stores/tree'
@@ -10,8 +10,9 @@ import { useObjectActions, type MenuAction } from '@renderer/composables/useObje
 import { useObjectsContext } from '@renderer/composables/useObjectsContext'
 import {
   DATABASE_COLUMNS,
-  GROUP_COLUMNS,
   GROUP_SINGULAR,
+  SCHEMA_COLUMNS,
+  columnsFor,
   filterItems,
   itemLabel,
   itemName
@@ -29,21 +30,31 @@ const connections = useConnectionsStore()
 const ui = useUiStore()
 const ws = useWorkspace()
 const { actionsFor } = useObjectActions()
-const { context, connectionOpen, databases, items } = useObjectsContext()
+const { context, connectionOpen, databases, schemas, items } = useObjectsContext()
 
 const search = ref('')
 const selectedDb = ref<string | null>(null)
 const menu = ref<InstanceType<typeof ContextMenu> | null>(null)
 
 const group = computed(() => context.value?.group ?? null)
+/** PostgreSQL database of the selection (undefined on MySQL). */
+const database = computed(() => context.value?.database)
 const isDatabaseList = computed(() => !!context.value && !group.value)
+/** PostgreSQL: a database node lists its schemas instead of databases. */
+const isSchemaList = computed(() => isDatabaseList.value && database.value !== undefined)
+const engine = computed(() =>
+  context.value ? connections.get(context.value.connectionId)?.engine : undefined
+)
 
 /** Tree node id that drives loading/error state for the current list. */
 const listNodeId = computed(() => {
   const ctx = context.value
   if (!ctx) return null
-  if (!ctx.group || !ctx.schema) return nodeIds.connection(ctx.connectionId)
-  return nodeIds.group(ctx.connectionId, ctx.schema, ctx.group)
+  if (!ctx.group || !ctx.schema)
+    return ctx.database !== undefined
+      ? nodeIds.database(ctx.connectionId, ctx.database)
+      : nodeIds.connection(ctx.connectionId)
+  return nodeIds.group(ctx.connectionId, ctx.schema, ctx.group, ctx.database)
 })
 const loading = computed(() => {
   const id = listNodeId.value
@@ -54,11 +65,19 @@ const loading = computed(() => {
 })
 const error = computed(() => (listNodeId.value ? tree.errors[listNodeId.value] : undefined))
 
-const columns = computed(() => (group.value ? GROUP_COLUMNS[group.value] : DATABASE_COLUMNS))
+const columns = computed(() =>
+  group.value
+    ? columnsFor(group.value, engine.value)
+    : isSchemaList.value
+      ? SCHEMA_COLUMNS
+      : DATABASE_COLUMNS
+)
 const rows = computed<unknown[]>(() =>
-  isDatabaseList.value
-    ? filterItems<DatabaseInfo>(databases.value, null, search.value)
-    : filterItems(items.value, group.value, search.value)
+  isSchemaList.value
+    ? filterItems<SchemaInfo>(schemas.value, null, search.value)
+    : isDatabaseList.value
+      ? filterItems<DatabaseInfo>(databases.value, null, search.value)
+      : filterItems(items.value, group.value, search.value)
 )
 
 const selectedKey = computed(() =>
@@ -70,6 +89,7 @@ function rowKey(item: unknown): string {
 }
 
 function rowIcon(item: unknown): string {
+  if (isSchemaList.value) return 'mdi-folder-outline'
   if (!group.value) return 'mdi-database-outline'
   if (group.value === 'functions')
     return (item as { type?: string }).type === 'PROCEDURE'
@@ -82,7 +102,7 @@ function objectNode(item: unknown): TreeNode | null {
   const ctx = context.value
   if (!ctx || !ctx.schema || !ctx.group) return null
   const node = tree.parse(
-    nodeIds.object(ctx.connectionId, ctx.schema, ctx.group, itemName(ctx.group, item))
+    nodeIds.object(ctx.connectionId, ctx.schema, ctx.group, itemName(ctx.group, item), ctx.database)
   )
   if (!node) return null
   node.label = itemLabel(ctx.group, item)
@@ -93,7 +113,7 @@ function objectNode(item: unknown): TreeNode | null {
 const groupNode = computed<TreeNode | null>(() => {
   const ctx = context.value
   if (!ctx || !ctx.schema || !ctx.group) return null
-  return tree.parse(nodeIds.group(ctx.connectionId, ctx.schema, ctx.group))
+  return tree.parse(nodeIds.group(ctx.connectionId, ctx.schema, ctx.group, ctx.database))
 })
 
 const selectedItem = computed(() => {
@@ -111,12 +131,14 @@ watch(
       context.value?.connectionId,
       context.value?.schema,
       context.value?.group,
-      connectionOpen.value
+      connectionOpen.value,
+      context.value?.database
     ] as const,
-  ([connectionId, schema, g, open]) => {
+  ([connectionId, schema, g, open, db]) => {
     selectedDb.value = null
     if (!connectionId || !open) return
-    if (schema && g) void tree.loadGroup(connectionId, schema, g)
+    if (schema && g) void tree.loadGroup(connectionId, schema, g, false, db)
+    else if (db !== undefined) void tree.loadSchemas(connectionId, db)
     else void tree.loadDatabases(connectionId)
   },
   { immediate: true }
@@ -132,12 +154,28 @@ function onSelect(item: unknown): void {
 }
 
 async function onOpen(item: unknown): Promise<void> {
+  if (isSchemaList.value) {
+    const ctx = context.value!
+    const schema = (item as SchemaInfo).name
+    tree.setExpanded(nodeIds.database(ctx.connectionId, ctx.database!), true)
+    tree.setExpanded(nodeIds.schema(ctx.connectionId, schema, ctx.database), true)
+    tree.select(nodeIds.schema(ctx.connectionId, schema, ctx.database))
+    return
+  }
   if (isDatabaseList.value) {
     const ctx = context.value!
-    const schema = (item as DatabaseInfo).name
+    const name = (item as DatabaseInfo).name
     tree.setExpanded(nodeIds.connection(ctx.connectionId), true)
-    tree.setExpanded(nodeIds.schema(ctx.connectionId, schema), true)
-    tree.select(nodeIds.schema(ctx.connectionId, schema))
+    if (tree.hasDatabaseLevel(ctx.connectionId)) {
+      const node = tree.parse(nodeIds.database(ctx.connectionId, name))
+      if (node) {
+        tree.select(node.id)
+        await tree.expand(node)
+      }
+      return
+    }
+    tree.setExpanded(nodeIds.schema(ctx.connectionId, name), true)
+    tree.select(nodeIds.schema(ctx.connectionId, name))
     return
   }
   const node = objectNode(item)
@@ -146,8 +184,14 @@ async function onOpen(item: unknown): Promise<void> {
 
 function onContextMenu(event: MouseEvent, item: unknown): void {
   if (isDatabaseList.value) {
+    const ctx = context.value!
+    const name = (item as DatabaseInfo | SchemaInfo).name
     const node = tree.parse(
-      nodeIds.schema(context.value!.connectionId, (item as DatabaseInfo).name)
+      isSchemaList.value
+        ? nodeIds.schema(ctx.connectionId, name, ctx.database)
+        : tree.hasDatabaseLevel(ctx.connectionId)
+          ? nodeIds.database(ctx.connectionId, name)
+          : nodeIds.schema(ctx.connectionId, name)
     )
     if (node) menu.value?.show(event, actionsFor(node))
     return
@@ -166,7 +210,9 @@ function onBackgroundContextMenu(event: MouseEvent): void {
 
 /* ---------- Sub-toolbar ---------- */
 
-const noun = computed(() => (group.value ? GROUP_SINGULAR[group.value] : 'base de datos'))
+const noun = computed(() =>
+  group.value ? GROUP_SINGULAR[group.value] : isSchemaList.value ? 'esquema' : 'base de datos'
+)
 
 /* "Nuevo/Nueva" must agree with the noun's gender (Spanish UI). */
 const NEW_LABELS: Record<GroupKind, string> = {
@@ -175,7 +221,10 @@ const NEW_LABELS: Record<GroupKind, string> = {
   functions: 'Nueva función',
   events: 'Nuevo evento',
   queries: 'Nueva consulta',
-  backups: 'Nueva copia de seguridad'
+  backups: 'Nueva copia de seguridad',
+  materializedViews: 'Nueva vista materializada',
+  sequences: 'Nueva secuencia',
+  types: 'Nuevo tipo'
 }
 const newLabel = computed(() => (group.value ? NEW_LABELS[group.value] : 'Nueva base de datos'))
 
@@ -198,9 +247,15 @@ function findAction(node: TreeNode | null, key: string): MenuAction | undefined 
 }
 
 const deleteAction = computed(() => {
+  if (isSchemaList.value) return undefined
   if (isDatabaseList.value && selectedDb.value && context.value) {
+    const cid = context.value.connectionId
     return findAction(
-      tree.parse(nodeIds.schema(context.value.connectionId, selectedDb.value)),
+      tree.parse(
+        tree.hasDatabaseLevel(cid)
+          ? nodeIds.database(cid, selectedDb.value)
+          : nodeIds.schema(cid, selectedDb.value)
+      ),
       'drop'
     )
   }
@@ -213,7 +268,10 @@ const canDesign = computed(
 )
 
 function openSelected(): void {
-  if (isDatabaseList.value) {
+  if (isSchemaList.value) {
+    const s = schemas.value.find((x) => x.name === selectedDb.value)
+    if (s) void runSafely(() => onOpen(s))
+  } else if (isDatabaseList.value) {
     const db = databases.value.find((d) => d.name === selectedDb.value)
     if (db) void runSafely(() => onOpen(db))
   } else if (selectedItem.value) {
@@ -230,6 +288,7 @@ function refresh(): void {
   const ctx = context.value
   if (!ctx || !connectionOpen.value) return
   if (groupNode.value) void tree.refresh(groupNode.value)
+  else if (ctx.database !== undefined) void tree.loadSchemas(ctx.connectionId, ctx.database, true)
   else void tree.loadDatabases(ctx.connectionId, true)
 }
 
@@ -247,8 +306,18 @@ const crumbs = computed(() => {
   return {
     connection: connections.nameOf(ctx.connectionId),
     color: connections.get(ctx.connectionId)?.color ?? null,
-    schema: ctx.group ? ctx.schema : null,
-    group: ctx.group ? GROUP_LABELS[ctx.group] : 'Bases de datos'
+    schema: ctx.group
+      ? ctx.database !== undefined
+        ? `${ctx.database}.${ctx.schema}`
+        : ctx.schema
+      : ctx.database !== undefined
+        ? ctx.database
+        : null,
+    group: ctx.group
+      ? GROUP_LABELS[ctx.group]
+      : ctx.database !== undefined
+        ? 'Esquemas'
+        : 'Bases de datos'
   }
 })
 
@@ -256,8 +325,9 @@ const title = computed(() => {
   const ctx = context.value
   if (!ctx) return ''
   const conn = connections.nameOf(ctx.connectionId)
-  if (!ctx.group) return conn
-  return `${GROUP_LABELS[ctx.group]} · ${ctx.schema} (${conn})`
+  if (!ctx.group) return ctx.database !== undefined ? `${ctx.database} (${conn})` : conn
+  const where = ctx.database !== undefined ? `${ctx.database}.${ctx.schema}` : ctx.schema
+  return `${GROUP_LABELS[ctx.group]} · ${where} (${conn})`
 })
 </script>
 

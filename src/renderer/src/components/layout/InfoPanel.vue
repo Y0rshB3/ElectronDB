@@ -4,7 +4,8 @@ import { api } from '@renderer/api'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
-import { objectTypeOf } from '@renderer/composables/useObjectActions'
+import { engineObjectTypeOf, nameRefOf } from '@renderer/composables/useObjectActions'
+import { schemaRef } from '@renderer/utils/schemaRef'
 import { errorMessage } from '@renderer/composables/useNotify'
 import { itemLabel, itemName, objectDetails, type DetailRow } from '@renderer/utils/objectColumns'
 import { ENVIRONMENT_LABELS, GROUP_ICONS, GROUP_LABELS } from '@renderer/utils/objectTypes'
@@ -49,6 +50,8 @@ const connectionRows = computed<DetailRow[]>(() => {
       ? [{ label: 'Túnel SSH', value: `${c.ssh.username}@${c.ssh.host}:${c.ssh.port}` }]
       : []),
     ...(s ? [{ label: 'Tiempo activo', value: dash(formatUptime(s.uptimeSeconds)) }] : []),
+    // Engine-neutral facts (PostgreSQL: initial database, session time zone, TLS…); MySQL sends none.
+    ...(s?.details ?? []).map((d) => ({ label: d.label, value: dash(d.value) })),
     { label: 'Observaciones', value: dash(notes) }
   ]
 })
@@ -80,20 +83,42 @@ const objectInfo = computed(() => {
   const n = node.value
   if (!n || n.kind !== 'object' || !n.schema || !n.group || !n.name) return null
   const item = tree
-    .itemsOf(n.connectionId, n.schema, n.group)
+    .itemsOf(n.connectionId, n.schema, n.group, n.database)
     .find((i) => itemName(n.group!, i) === n.name)
   if (!item) return null
   return {
     title: itemLabel(n.group, item) || n.label,
     icon: GROUP_ICONS[n.group],
-    subtitle: `${GROUP_LABELS[n.group]} · ${n.schema}`,
+    subtitle: `${GROUP_LABELS[n.group]} · ${n.database !== undefined ? `${n.database}.${n.schema}` : n.schema}`,
     rows: objectDetails(n.group, item)
   }
 })
 
 const schemaInfo = computed(() => {
   const n = node.value
+  if (n?.kind === 'database' && n.database !== undefined) {
+    const db = (tree.databases[n.connectionId] ?? []).find((d) => d.name === n.database)
+    return {
+      title: n.database,
+      rows: [
+        { label: 'Codificación', value: db?.characterSet || '—' },
+        { label: 'Intercalación', value: db?.collation || '—' }
+      ]
+    }
+  }
   if (!n || (n.kind !== 'schema' && n.kind !== 'group') || !n.schema) return null
+  if (n.database !== undefined) {
+    // PostgreSQL schema: owner and comment instead of MySQL's charset/collation.
+    const info = tree.schemasOf(n.connectionId, n.database).find((x) => x.name === n.schema)
+    return {
+      title: n.schema,
+      subtitle: `Esquema · ${n.database}`,
+      rows: [
+        { label: 'Propietario', value: info?.owner || '—' },
+        { label: 'Comentario', value: info?.comment || '—' }
+      ]
+    }
+  }
   const db = (tree.databases[n.connectionId] ?? []).find((d) => d.name === n.schema)
   return {
     title: n.schema,
@@ -112,7 +137,7 @@ const ddlLoading = ref(false)
 const ddlError = ref<string | null>(null)
 
 const ddlType = computed(() =>
-  node.value && node.value.kind === 'object' ? objectTypeOf(node.value) : null
+  node.value && node.value.kind === 'object' ? engineObjectTypeOf(node.value) : null
 )
 const ddl = computed(() => (node.value ? ddlCache.value[node.value.id] : undefined))
 
@@ -123,7 +148,13 @@ async function loadDdl(): Promise<void> {
   ddlLoading.value = true
   ddlError.value = null
   try {
-    const sql = await api.invokeSilent('db:showCreate', n.connectionId, n.schema, type, n.name)
+    const sql = await api.invokeSilent(
+      'db:showCreate',
+      n.connectionId,
+      schemaRef(n.schema, n.database),
+      type,
+      nameRefOf(n, type)
+    )
     ddlCache.value = { ...ddlCache.value, [n.id]: sql }
   } catch (err) {
     ddlError.value = errorMessage(err)
@@ -212,7 +243,9 @@ watch(ddlType, (type) => {
             </span>
             <div class="info-panel__titles">
               <div class="info-panel__name" :title="schemaInfo.title">{{ schemaInfo.title }}</div>
-              <div class="info-panel__sub">Base de datos</div>
+              <div class="info-panel__sub">
+                {{ 'subtitle' in schemaInfo ? schemaInfo.subtitle : 'Base de datos' }}
+              </div>
             </div>
           </div>
           <dl class="info-panel__list">

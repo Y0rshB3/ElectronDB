@@ -72,6 +72,7 @@ describe('context menus per engine', () => {
     expect(keys(actionsFor(tree.parse(nodeIds.connection('pg'))!))).toEqual([
       'close',
       'edit',
+      'copyUri',
       'query',
       'newdb',
       'refresh',

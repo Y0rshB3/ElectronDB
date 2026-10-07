@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { CellValue, ColumnInfo, QueryColumn } from '@shared/types'
+import type { CellValue, ColumnInfo, QueryColumn, SchemaRef } from '@shared/types'
 import { api, invokeSilent } from '@renderer/api'
 import CellValuePanel from '@renderer/components/data/CellValuePanel.vue'
 import { isCellChanged } from '@renderer/components/data/rowEditing'
@@ -17,6 +17,9 @@ import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { formatDuration, formatNumber } from '@renderer/utils/format'
+import { refOf } from '@renderer/utils/schemaRef'
+import { isViewLike } from '@renderer/utils/columnMeta'
+import { useConnectionsStore } from '@renderer/stores/connections'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
 
@@ -37,11 +40,21 @@ const loadError = ref<string | null>(null)
 const page = ref(1)
 const sort = ref<{ column: string; direction: 'ASC' | 'DESC' } | null>(null)
 
-const target = (): [string, string, string] => [
+/** `{ database, schema }` on PostgreSQL tabs, the database name on MySQL ones. */
+const target = (): [string, SchemaRef, string] => [
   props.tab.connectionId ?? '',
-  props.tab.schema ?? '',
+  refOf(props.tab),
   props.tab.objectName ?? ''
 ]
+const connections = useConnectionsStore()
+const isPostgres = computed(
+  () => connections.get(props.tab.connectionId ?? '')?.engine === 'postgresql'
+)
+/**
+ * PostgreSQL rows are written by primary key only (a PK-less table or a
+ * materialized view is read-only in v1); MySQL keeps all-columns keys.
+ */
+const pgReadOnlyReason = ref<string | null>(null)
 const filter = useTableFilter(props.tab, {
   columns,
   generateWhere: (f) => api.db.tableFilterSql(...target(), f),
@@ -64,15 +77,37 @@ async function loadColumnInfo(): Promise<void> {
   const { connectionId, schema, objectName } = props.tab
   if (!connectionId || !schema || !objectName) return
   try {
-    columnInfoList.value = await invokeSilent('db:columns', connectionId, schema, objectName)
+    columnInfoList.value = await invokeSilent(
+      'db:columns',
+      connectionId,
+      refOf(props.tab),
+      objectName
+    )
   } catch {
     columnInfoList.value = [] // editors fall back to the result types
+  }
+  if (isPostgres.value) {
+    try {
+      const structure = await invokeSilent(
+        'db:tableStructure',
+        connectionId,
+        refOf(props.tab),
+        objectName
+      )
+      pgReadOnlyReason.value = isViewLike(structure)
+        ? 'Vista materializada: solo lectura (usa «Refrescar» para recalcularla).'
+        : null
+    } catch {
+      /* the primary-key check below still applies */
+    }
   }
 }
 /** Column widths are remembered per table (names and pixels only). */
 const widthKey = computed(() =>
   props.tab.connectionId && props.tab.schema && props.tab.objectName
-    ? `${props.tab.connectionId}:${props.tab.schema}:${props.tab.objectName}`
+    ? props.tab.database !== undefined
+      ? `${props.tab.connectionId}:${props.tab.database}:${props.tab.schema}:${props.tab.objectName}`
+      : `${props.tab.connectionId}:${props.tab.schema}:${props.tab.objectName}`
     : null
 )
 
@@ -98,6 +133,15 @@ const hasNext = computed(() =>
   pageCount.value === null ? loadedRows.value >= pageSize.value : page.value < pageCount.value
 )
 const noPrimaryKey = computed(() => columns.value.length > 0 && primaryKey.value.length === 0)
+/** Why the grid cannot be edited (PostgreSQL only; MySQL keeps editing by all columns). */
+const readOnlyNotice = computed(() =>
+  !isPostgres.value
+    ? null
+    : (pgReadOnlyReason.value ??
+      (noPrimaryKey.value
+        ? 'La tabla no tiene clave primaria: sus filas no se pueden editar desde la cuadrícula (solo lectura).'
+        : null))
+)
 
 watch(dirty, (value) => tabs.setDirty(props.tab.id, value), { immediate: true })
 
@@ -120,7 +164,7 @@ async function load(): Promise<void> {
   loadError.value = null
   try {
     const result = await api.db.tableData(props.tab.connectionId, {
-      schema: props.tab.schema,
+      schema: refOf(props.tab),
       table: props.tab.objectName,
       limit: pageSize.value,
       offset: (page.value - 1) * pageSize.value,
@@ -208,8 +252,14 @@ async function toggleFilterMode(): Promise<void> {
 async function applyChanges(): Promise<void> {
   const { connectionId, schema, objectName } = props.tab
   if (!connectionId || !schema || !objectName) return
+  if (readOnlyNotice.value) return
   const applied = await editor.apply(
-    { connectionId, schema, table: objectName },
+    {
+      connectionId,
+      schema,
+      table: objectName,
+      ...(props.tab.database !== undefined ? { database: props.tab.database } : {})
+    },
     columns.value,
     primaryKey.value
   )
@@ -288,9 +338,9 @@ defineExpose({ rows, applyChanges, load })
       >
       <span class="nd-viewbar__sep" aria-hidden="true" />
       <RowEditActions
-        :can-add="!loading && columns.length > 0"
-        :can-delete="selected.length > 0"
-        :can-set-null="!!active"
+        :can-add="!loading && columns.length > 0 && !readOnlyNotice"
+        :can-delete="selected.length > 0 && !readOnlyNotice"
+        :can-set-null="!!active && !readOnlyNotice"
         :pending="pending"
         :applying="applying"
         @add="editor.addRow"
@@ -332,7 +382,11 @@ defineExpose({ rows, applyChanges, load })
         @close="applyError = null"
       />
 
-      <div v-if="noPrimaryKey" class="table-data__notice" role="note">
+      <div v-if="readOnlyNotice" class="table-data__notice" role="note" data-test="read-only">
+        <v-icon icon="mdi-lock-outline" size="14" />
+        {{ readOnlyNotice }}
+      </div>
+      <div v-else-if="noPrimaryKey" class="table-data__notice" role="note">
         <v-icon icon="mdi-key-remove" size="14" />
         La tabla no tiene clave primaria: las filas se identifican por todos sus valores.
       </div>
@@ -373,6 +427,7 @@ defineExpose({ rows, applyChanges, load })
           :error-col="applyError?.col ?? null"
           :column-info="columnInfo"
           :width-key="widthKey"
+          :readonly="!!readOnlyNotice"
           @sort="toggleSort"
           @edit="editor.onEdit"
         />
@@ -384,7 +439,7 @@ defineExpose({ rows, applyChanges, load })
         :column="activeCell ? (columns[activeCell.col] ?? null) : null"
         :info="activeCell ? columnInfo[activeCell.col] : null"
         :value="activeCell?.value ?? null"
-        :editable="!!activeCell && !activeCell.row.deleted"
+        :editable="!!activeCell && !activeCell.row.deleted && !readOnlyNotice"
         :changed="!!activeCell && isCellChanged(activeCell.row, activeCell.col)"
         view="table"
         @edit="editFromPanel"

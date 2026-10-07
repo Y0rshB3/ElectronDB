@@ -6,6 +6,7 @@ import {
 } from '@shared/typedConfirm'
 import type { ConnectionConfig, Environment, Job, JobInput, WriteOptions } from '@shared/types'
 import type { AppContext } from '../context'
+import { dialectForEngine } from '@shared/dialects'
 import { MysqlUserError } from '../mysql/errors'
 import { splitStatements } from '../mysql/sqlSplit'
 
@@ -60,8 +61,20 @@ export function assertScriptAllowed(
   options: WriteOptions | undefined
 ): void {
   if (options?.confirmProduction === true) return
-  if (!splitStatements(script).some((s) => isObviousWrite(s.sql))) return
+  if (!scriptHasObviousWrite(ctx, connectionId, script)) return
   assertProductionWriteConfirmed(ctx, connectionId, options, 'Ejecutar SQL que modifica datos')
+}
+
+/**
+ * Main's denylist per engine: MySQL keeps the v0.1.0 splitter and
+ * isObviousWrite; other engines use their dialect's (section 10).
+ */
+function scriptHasObviousWrite(ctx: GuardContext, connectionId: string, script: string): boolean {
+  const engine = ctx.connections.get(connectionId)?.engine ?? 'mysql'
+  if (engine === 'mysql') return splitStatements(script).some((s) => isObviousWrite(s.sql))
+  const dialect = dialectForEngine(engine)
+  if (!dialect) return false
+  return dialect.splitStatements(script).some((s) => dialect.isObviousWrite(s.sql))
 }
 
 function guardedTargets(ctx: GuardContext, job: Pick<Job, 'tasks'>): ConnectionConfig[] {

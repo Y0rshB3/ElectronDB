@@ -128,13 +128,29 @@ export const useAiStore = defineStore('ai', () => {
    */
   const target = computed<AiTarget | null>(() => {
     const editor = queryEditorFor(tabs.activeId)
-    if (editor && editor.connectionId())
-      return { connectionId: editor.connectionId(), schema: editor.schema() }
+    // `database` only exists for PostgreSQL (query tab, tab or tree node); MySQL targets never carry it.
+    if (editor && editor.connectionId()) {
+      const db = editor.database?.() ?? null
+      return {
+        connectionId: editor.connectionId(),
+        schema: editor.schema(),
+        ...(db ? { database: db } : {})
+      }
+    }
     const active = tabs.active
     if (active?.connectionId && active.kind !== 'objects')
-      return { connectionId: active.connectionId, schema: active.schema ?? null }
-    const sel = tree.selected
-    if (sel?.connectionId) return { connectionId: sel.connectionId, schema: sel.schema ?? null }
+      return {
+        connectionId: active.connectionId,
+        schema: active.schema ?? null,
+        ...(active.database ? { database: active.database } : {})
+      }
+    const sel = tree.selected as (typeof tree.selected & { database?: string }) | null
+    if (sel?.connectionId)
+      return {
+        connectionId: sel.connectionId,
+        schema: sel.schema ?? null,
+        ...(sel.database ? { database: sel.database } : {})
+      }
     const open = connections.items.filter((c) => connections.isOpen(c.id))
     return open.length === 1 ? { connectionId: open[0].id, schema: null } : null
   })
@@ -279,6 +295,7 @@ export const useAiStore = defineStore('ai', () => {
       providerId: activeProvider.value?.id ?? null,
       connectionId: t.connectionId,
       schema: t.schema,
+      ...(t.database ? { database: t.database } : {}),
       mode,
       input,
       sql: extras.sql ?? null,
