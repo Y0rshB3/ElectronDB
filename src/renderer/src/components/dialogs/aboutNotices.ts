@@ -7,10 +7,11 @@ export interface NoticeSection {
 /**
  * Splits THIRD_PARTY_LICENSES.txt (scripts/third-party-licenses.mjs) into
  * its header and one section per component; sections are separated by a
- * line of '=' characters and start with «name version».
+ * line of exactly 78 '=' characters (licence texts may underline their own
+ * headings with shorter or longer ones) and start with «name version».
  */
 export function splitNotices(text: string): { header: string; sections: NoticeSection[] } {
-  const parts = text.split(/^={20,}$/m).map((p) => p.trim())
+  const parts = text.split(/^={78}$/m).map((p) => p.trim())
   const header = parts.shift() ?? ''
   const sections = parts
     .filter((p) => p.length > 0)

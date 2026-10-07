@@ -122,11 +122,7 @@ export function renderNotices({ appName, appVersion, packages, electron }) {
   const head = [
     `${appName} ${appVersion} — Licencias de terceros`,
     '',
-    `${appName} es software libre con licencia MIT (archivo LICENSE). Incluye los componentes de`,
-    'código abierto listados a continuación, cada uno con su licencia y su aviso de copyright,',
-    'tal como los publican sus autores. Las fuentes Inter y JetBrains Mono se distribuyen con la',
-    'SIL Open Font License 1.1 y los iconos Material Design Icons con la licencia de Pictogrammers',
-    '(ver sus secciones).',
+    `${appName} es software libre con licencia MIT (archivo LICENSE). Incluye los componentes de código abierto listados a continuación, cada uno con su licencia y su aviso de copyright, tal como los publican sus autores. Las fuentes Inter y JetBrains Mono se distribuyen con la SIL Open Font License 1.1 y los iconos Material Design Icons con la licencia de Pictogrammers (ver sus secciones).`,
     '',
     `Componentes: ${packages.length + (electron ? 1 : 0)}`,
     ...summary
