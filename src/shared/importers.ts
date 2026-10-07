@@ -202,9 +202,10 @@ export interface SqlDumpImportResult {
   durationMs: number
   /** .nb3 copy of the replaced database (replaceSchema), null when none was taken. */
   safetyBackupPath: string | null
-  /** Stopped by the user (the result covers what ran before). */
-  cancelled: boolean
 }
+
+/** Message of the error thrown when the user cancels an import (the log keeps what ran). */
+export const SQL_IMPORT_CANCELLED = 'Importación cancelada'
 
 /* ---------- Folder of dumps («paquete») ---------- */
 
@@ -244,7 +245,6 @@ export interface SqlFolderImportResult {
     error: string | null
   }[]
   durationMs: number
-  cancelled: boolean
 }
 
 /* ---------- Export to .sql ---------- */
