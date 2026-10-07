@@ -6,6 +6,7 @@ import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
+import { descriptorOf } from '@renderer/engines/capabilities'
 import DialogHeader from './DialogHeader.vue'
 
 type Charset = { charset: string; defaultCollation: string; collations: string[] }
@@ -23,8 +24,18 @@ const charsets = ref<Charset[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
+/* PostgreSQL options (CREATE DATABASE … OWNER … TEMPLATE … ENCODING …); empty = server default. */
+const owner = ref('')
+const template = ref('')
+const encoding = ref('')
 
 const connectionId = computed(() => ui.newDatabaseDialog.connectionId)
+/** PostgreSQL asks for owner/template/encoding instead of a charset and collation. */
+const isPg = computed(
+  () =>
+    !!connectionId.value &&
+    descriptorOf(connections.get(connectionId.value))?.capabilities.createDatabase === 'pg'
+)
 const open = computed({
   get: () => ui.newDatabaseDialog.open,
   set: (value: boolean) => {
@@ -47,7 +58,7 @@ const canSave = computed(
     !!connectionId.value &&
     !!name.value.trim() &&
     !nameError.value &&
-    !!charset.value &&
+    (isPg.value || !!charset.value) &&
     !saving.value
 )
 
@@ -78,7 +89,10 @@ watch(
     charset.value = 'utf8mb4'
     collation.value = ''
     error.value = ''
-    void loadCharsets()
+    owner.value = ''
+    template.value = ''
+    encoding.value = ''
+    if (!isPg.value) void loadCharsets()
   },
   { immediate: true }
 )
@@ -106,14 +120,29 @@ async function save(): Promise<void> {
     })
     if (!ok) return
     // Silent invoke: the error is shown inline in the dialog, not twice.
-    await api.invokeSilent(
-      'db:createDatabase',
-      cid,
-      dbName,
-      charset.value,
-      collation.value || defaultCollationOf(charset.value),
-      { confirmProduction: true }
-    )
+    if (isPg.value) {
+      const engineOptions: Record<string, string> = {}
+      if (owner.value.trim()) engineOptions.owner = owner.value.trim()
+      if (template.value.trim()) engineOptions.template = template.value.trim()
+      if (encoding.value.trim()) engineOptions.encoding = encoding.value.trim()
+      await api.invokeSilent(
+        'db:createDatabase',
+        cid,
+        dbName,
+        '',
+        '',
+        { confirmProduction: true },
+        engineOptions
+      )
+    } else
+      await api.invokeSilent(
+        'db:createDatabase',
+        cid,
+        dbName,
+        charset.value,
+        collation.value || defaultCollationOf(charset.value),
+        { confirmProduction: true }
+      )
     notify.success(`Base de datos ${dbName} creada`)
     open.value = false
     await tree.loadDatabases(cid, true).catch(() => undefined)
@@ -143,7 +172,28 @@ async function save(): Promise<void> {
           data-test="newdb-name"
           @keyup.enter="save"
         />
+        <template v-if="isPg">
+          <v-text-field
+            v-model="owner"
+            label="Propietario (opcional)"
+            placeholder="Usuario de la conexión"
+            data-test="newdb-owner"
+          />
+          <v-text-field
+            v-model="template"
+            label="Plantilla (opcional)"
+            placeholder="template1"
+            data-test="newdb-template"
+          />
+          <v-text-field
+            v-model="encoding"
+            label="Codificación (opcional)"
+            placeholder="UTF8"
+            data-test="newdb-encoding"
+          />
+        </template>
         <v-autocomplete
+          v-if="!isPg"
           :model-value="charset"
           :items="charsetItems"
           :loading="loading"
@@ -151,6 +201,7 @@ async function save(): Promise<void> {
           @update:model-value="onCharsetChange"
         />
         <v-autocomplete
+          v-if="!isPg"
           v-model="collation"
           :items="collationItems"
           :loading="loading"

@@ -29,9 +29,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     date: '2026-10-07',
     highlights: [
       'ElectronDB ahora se llama Vortaq',
-      'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y archivos .sql',
-      'Exporta copias en .sql compatibles con otros gestores',
+      'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
       'Nuevo icono y barra de herramientas reorganizada',
+      'PostgreSQL (vista previa): actívalo en Ajustes › Motores en vista previa',
       'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
     ],
     important: ['Tus datos se trasladan automáticamente a Vortaq'],

@@ -18,6 +18,7 @@ import { ConnectionManager } from '@main/db/manager'
 import { createPgDbHandlers, type PgDbHandlers } from '@main/ipc/dbPostgres'
 import { isPgConnection } from '@main/postgres/connection'
 import { PgMetadataQueryable, explainPgSelect, readPgSchemaSnapshot } from '@main/ai/pgMetadata'
+import { pgTablePlanner } from '../../src/renderer/src/components/designer/pg/planner'
 import {
   decideEditability,
   resultSource
@@ -585,6 +586,36 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
     await expect(
       pg.applyRowChanges(id, ref, 'nokey', [{ kind: 'delete', key: { a: 1, b: 'one' } }])
     ).rejects.toThrow(/no tiene clave primaria/)
+  })
+
+  it('alters a table from the designer plan in one transaction, enum value first', async () => {
+    const original = await pg.tableStructure(id, ref, 'items')
+    const draft = pgTablePlanner.draftFromStructure(original)
+    draft.enumAdditions = { [`${SCHEMA}.mood`]: ['ecstatic'] }
+    draft.columns = draft.columns.map((c) =>
+      c.name === 'feeling'
+        ? { ...c, defaultValue: `'ecstatic'::${SCHEMA}.mood` }
+        : c.name === 'note'
+          ? { ...c, columnType: 'varchar(80)' }
+          : c
+    )
+    const plan = pgTablePlanner.buildAlter(original, draft)
+    expect(plan.problems).toEqual([])
+    expect(plan.preStatements?.[0]).toMatch(/ALTER TYPE .*mood ADD VALUE IF NOT EXISTS 'ecstatic'/)
+    for (const sql of plan.preStatements ?? []) ok(await exec(sql))
+    ok(
+      await exec(
+        ['BEGIN', ...plan.statements.map((s) => s.replace(/;$/, '')), 'COMMIT'].join(';\n')
+      )
+    )
+    const after = await pg.tableStructure(id, ref, 'items')
+    expect(after.columns.find((c) => c.name === 'feeling')?.defaultValue).toBe(
+      `'ecstatic'::${SCHEMA}.mood`
+    )
+    expect(after.columns.find((c) => c.name === 'note')?.columnType).toBe('character varying(80)')
+    expect(
+      pgTablePlanner.buildAlter(after, pgTablePlanner.draftFromStructure(after)).statements
+    ).toEqual([])
   })
 
   it('gives the AI assistant structure only (pg_catalog reader, plan-only EXPLAIN)', async () => {

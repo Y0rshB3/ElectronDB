@@ -3,7 +3,16 @@ import { ref } from 'vue'
 import { emptyIndex, type IndexDraft } from '@renderer/utils/tableDesigner'
 import { INDEX_TYPES } from './columnType'
 
-defineProps<{ columnNames: string[] }>()
+const props = withDefaults(
+  defineProps<{
+    columnNames: string[]
+    /** Index methods offered (PostgreSQL: btree, gin…); MySQL keeps INDEX_TYPES. */
+    types?: string[]
+    /** PostgreSQL: key parts may be expressions typed by the user (lower(name)…). */
+    allowExpressions?: boolean
+  }>(),
+  { types: () => INDEX_TYPES, allowExpressions: false }
+)
 const model = defineModel<IndexDraft[]>({ required: true })
 const selected = ref<number | null>(null)
 
@@ -65,7 +74,22 @@ function remove(): void {
               />
             </td>
             <td>
+              <v-combobox
+                v-if="props.allowExpressions"
+                :model-value="idx.columns"
+                :items="columnNames"
+                multiple
+                chips
+                closable-chips
+                density="compact"
+                variant="plain"
+                hide-details
+                aria-label="Campos o expresiones del índice"
+                class="designer-select"
+                @update:model-value="patch(i, { columns: $event })"
+              />
               <v-select
+                v-else
                 :model-value="idx.columns"
                 :items="columnNames"
                 multiple
@@ -82,7 +106,7 @@ function remove(): void {
             <td>
               <v-select
                 :model-value="idx.type"
-                :items="INDEX_TYPES"
+                :items="props.types"
                 density="compact"
                 variant="plain"
                 hide-details

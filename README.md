@@ -35,6 +35,8 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 
 ## Funciones
 
+- **PostgreSQL (vista previa)**: bases de datos y esquemas, consultas con sesión y transacción propias por
+  pestaña, cancelación, datos editables, diseñador y DDL ([PostgreSQL (vista previa)](#postgresql-vista-previa)).
 - **Conexiones MySQL/MariaDB** con colores, entorno (Local, Staging, Producción, Otro), túnel SSH (contraseña o
   clave privada), SSL, sin contraseña para proxies o certificados, lista de bases de datos personalizada y
   consultas iniciales de sesión.
@@ -333,6 +335,53 @@ aplica estos ajustes solo a ese servidor; con MySQL nada cambia.
 - El diseñador parte de la colación de la base de datos al crear una tabla.
 - **Copias `.nb3`**: el formato no tiene sitio para tablas versionadas ni secuencias; la ventana de copia y el
   registro de la tarea avisan con sus nombres antes de omitirlas.
+
+### PostgreSQL (vista previa)
+
+Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión** ofrece PostgreSQL. Las conexiones
+PostgreSQL ya creadas se abren aunque desactives el ajuste.
+
+- **Conexión**: host, puerto (5432), usuario, contraseña o «Sin contraseña», **base de datos inicial**,
+  `search_path` opcional y «Mostrar esquemas y bases de datos del sistema». Pestaña **SSL** con los modos de
+  libpq (`disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`), CA, certificado y clave de cliente
+  (con su contraseña). Con túnel SSH, `verify-full` comprueba el nombre del servidor real, no `127.0.0.1`.
+  **Avanzado**: consultas iniciales, zona horaria de sesión, tiempo de conexión y keepalive. Vortaq solo usa
+  las credenciales que le das: nunca `PGPASSWORD`, `~/.pgpass`, `PGUSER` ni otras variables de entorno.
+- **Árbol**: conexión › base de datos › esquema › Tablas, Vistas, Vistas materializadas, Funciones (con sus
+  sobrecargas), Secuencias, Tipos (enumerados, dominios, compuestos) y Consultas. Cada base de datos abre su
+  propio grupo de conexiones al desplegarla.
+- **Editor de consultas**: dos selectores, base de datos y esquema; el esquema elegido va primero en el
+  `search_path` y se mantiene el resto (las extensiones de `public` siguen visibles). Cada pestaña tiene su
+  propia sesión: `BEGIN`, `SET` y las tablas temporales se conservan entre ejecuciones, con los botones
+  **Confirmar** (COMMIT) y **Deshacer** (ROLLBACK) y el aviso «Transacción abortada: ejecuta ROLLBACK». Al
+  cerrar una pestaña con una transacción abierta pregunta si confirmar o deshacer. **Detener** cancela la
+  sentencia en el servidor (`pg_cancel_backend`). Los avisos (`RAISE NOTICE`) salen en Mensajes y un error
+  lleva al punto exacto de la sentencia. Autocompletado con nombres cualificados y entrecomillado cuando hace
+  falta (`"Clientes"`, `"user"`).
+- **Datos**: vista de tabla con filtros (`contiene` no distingue mayúsculas, booleanos, JSON y listas),
+  edición por clave primaria (las tablas sin clave primaria y las vistas materializadas son de solo lectura),
+  inserciones que dejan a `serial`/identidad generar el valor (se devuelve con `RETURNING`) y resultados
+  editables de un `SELECT` de una sola tabla. Fechas, `numeric`, `bigint` y JSON se muestran tal como los
+  devuelve el servidor, sin cambios de zona horaria.
+- **Diseñador de tablas**: tipos del servidor (también los tuyos y los de extensiones) con casilla de lista
+  (`text[]`), predeterminados como expresiones SQL, identidad, columnas `serial` reconocidas, `USING` al cambiar
+  un tipo, restricciones UNIQUE/CHECK, índices por método (btree, gin…), comentarios y `UNLOGGED`. Todos los
+  cambios se aplican en **una transacción**; añadir un valor a un enumerado se hace antes, porque PostgreSQL no
+  permite usarlo en la misma transacción. Editor DDL de vistas, vistas materializadas, funciones,
+  procedimientos y triggers (`$$ … $$`, sin DELIMITER).
+- **Menús**: truncar (también reiniciando identidad o en cascada, con la lista de tablas afectadas), vaciar,
+  `ANALYZE`, refrescar vistas materializadas, valor actual y `setval` de secuencias, añadir valores a un
+  enumerado, extensiones de la base de datos y «Copiar URI» (sin contraseña).
+- **Producción**: en conexiones que piden escribir el nombre, las sesiones PostgreSQL son de **solo lectura**
+  en el servidor salvo para la sentencia que confirmas; también cuentan como escritura `nextval`, `setval`,
+  `set_config`, `pg_terminate_backend` y los CTE con `INSERT`/`UPDATE`/`DELETE`. Una lectura nunca confirma
+  una transacción tuya a medias.
+- **Asistente de IA**: lee solo la estructura (catálogo `pg_catalog`/`information_schema`) con la misma regla
+  que en MySQL.
+- **Importar**: las conexiones PostgreSQL de DBeaver y de los `.ncx` de Navicat se importan con la vista previa
+  activada (Redshift y otras variantes quedan como no soportadas).
+- **Copias de seguridad y automatización** son solo para MySQL: con PostgreSQL esos menús no aparecen y Vortaq
+  rechaza las tareas que apunten a una conexión PostgreSQL.
 
 ### Importar desde otros gestores
 
@@ -1177,7 +1226,7 @@ el registro es más detallado y se copia también en la terminal.
 | `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
 | `npm run test:watch`                | Tests en modo observación                                                   |
 | `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)          |
-| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7 y MariaDB 11; falla si falta alguna URL   |
+| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, MariaDB 11 y PostgreSQL 17; falla si falta alguna URL |
 | `npm run lint`                      | ESLint                                                                      |
 | `npm run format`                    | Prettier                                                                    |
 | `npm run build`                     | Compila a `out/`                                                            |
@@ -1186,9 +1235,10 @@ el registro es más detallado y se copia también en la terminal.
 
 ### Tests de integración
 
-Necesitan servidores desechables: MySQL 8.4 en el puerto 33306, MySQL 5.7 en el 33357 y MariaDB 11 en el
-33311 (siempre en `127.0.0.1`, nunca en 3306/3307). `tests/docker-compose.yml` los declara (imágenes nativas
-arm64 salvo MySQL 5.7); los comandos valen igual en macOS, Linux y PowerShell:
+Necesitan servidores desechables: MySQL 8.4 en el puerto 33306, MySQL 5.7 en el 33357, MariaDB 11 en el
+33311 y PostgreSQL 17 en el 55432, más un servidor SSH de prueba en el 52222 para el túnel de PostgreSQL
+(siempre en `127.0.0.1`, nunca en 3306/3307). `tests/docker-compose.yml` los declara (imágenes nativas arm64
+salvo MySQL 5.7); los comandos valen igual en macOS, Linux y PowerShell:
 
 ```sh
 docker compose -f tests/docker-compose.yml up -d --wait
@@ -1211,8 +1261,9 @@ docker exec vortaq-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --w
 ```
 
 `npm run test:integration:required` es la puerta de calidad: ejecuta las suites de MySQL y de backups contra
-los dos MySQL, la de MariaDB contra el suyo, y **falla** (en vez de omitirlas) si falta
-`VORTAQ_TEST_MYSQL_URL`, `VORTAQ_TEST_MYSQL57_URL` o `VORTAQ_TEST_MARIADB_URL`.
+los dos MySQL, las de MariaDB y PostgreSQL contra los suyos, y **falla** (en vez de omitirlas) si falta
+`VORTAQ_TEST_MYSQL_URL`, `VORTAQ_TEST_MYSQL57_URL`, `VORTAQ_TEST_MARIADB_URL` o `VORTAQ_TEST_PG_URL`.
+`VORTAQ_TEST_SSH_URL` es opcional: sin ella solo se omite el test del túnel SSH de PostgreSQL.
 `npm run test:integration` omite en silencio el servidor que no tenga URL.
 
 ```sh
@@ -1220,6 +1271,8 @@ los dos MySQL, la de MariaDB contra el suyo, y **falla** (en vez de omitirlas) s
 VORTAQ_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
 VORTAQ_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
 VORTAQ_TEST_MARIADB_URL='mysql://root:navidog@127.0.0.1:33311/navidog_test' \
+VORTAQ_TEST_PG_URL='postgres://postgres:navidog@127.0.0.1:55432/navidog_test' \
+VORTAQ_TEST_SSH_URL='ssh://vortaq:navidog@127.0.0.1:52222' \
 npm run test:integration:required
 ```
 
@@ -1228,6 +1281,8 @@ npm run test:integration:required
 $env:VORTAQ_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
 $env:VORTAQ_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
 $env:VORTAQ_TEST_MARIADB_URL = 'mysql://root:navidog@127.0.0.1:33311/navidog_test'
+$env:VORTAQ_TEST_PG_URL = 'postgres://postgres:navidog@127.0.0.1:55432/navidog_test'
+$env:VORTAQ_TEST_SSH_URL = 'ssh://vortaq:navidog@127.0.0.1:52222'
 npm run test:integration:required
 ```
 
@@ -1308,6 +1363,8 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `VORTAQ_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                          |
 | `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
 | `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                                    |
+| `VORTAQ_TEST_PG_URL`            | PostgreSQL 17 desechable (`postgres://…:55432/…`) para `npm run test:integration[:required]`.                                                                                                             |
+| `VORTAQ_TEST_SSH_URL`           | Servidor SSH de prueba (`ssh://usuario:clave@127.0.0.1:52222`, servicio `sshd` del compose) para el test del túnel de PostgreSQL; opcional.                                                              |
 | `VORTAQ_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                       |
 | `VORTAQ_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `VORTAQ_USER_DATA`.                                                                                                                                                              |
 | `VORTAQ_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |

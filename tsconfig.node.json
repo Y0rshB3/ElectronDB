@@ -38,6 +38,8 @@
     "src/renderer/src/components/data/rowEditing.ts",
     "src/renderer/src/components/designer/alterTable.ts",
     "src/renderer/src/utils/tableDesigner.ts",
-    "src/renderer/src/utils/sql.ts"
+    "src/renderer/src/utils/sql.ts",
+    "src/renderer/src/components/designer/pg/planner.ts",
+    "src/renderer/src/components/designer/pg/types.ts"
   ]
 }

@@ -27,10 +27,18 @@ export interface DesignerAlter {
   problems: string[]
   /** Columns, keys and indexes removed for good (a changed index that is re-added is not listed). */
   drops: DesignerDrop[]
+  /**
+   * PostgreSQL: statements run one by one BEFORE the transaction (ALTER TYPE … ADD VALUE
+   * cannot be used in the transaction that adds the value). Absent for MySQL.
+   */
+  preStatements?: string[]
+  /** PostgreSQL: `statements` are applied inside one BEGIN/COMMIT (DDL is transactional). */
+  transactional?: boolean
 }
 
 export interface DesignerDrop {
-  kind: 'COLUMN' | 'PRIMARY KEY' | 'INDEX' | 'FOREIGN KEY'
+  /** CONSTRAINT: PostgreSQL unique/check/exclusion constraints. */
+  kind: 'COLUMN' | 'PRIMARY KEY' | 'INDEX' | 'FOREIGN KEY' | 'CONSTRAINT'
   name: string
 }
 

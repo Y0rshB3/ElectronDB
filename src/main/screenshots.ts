@@ -1176,6 +1176,79 @@ const IMPORT_STEPS: Step[] = [
 ]
 STEPS.push(...IMPORT_STEPS)
 
+/**
+ * PostgreSQL (preview) and MariaDB screens (VORTAQ_SHOTS_ONLY=40,41): need the
+ * profile and server fixtures of scripts/seed-engine-shots.mjs (connections
+ * «PostgreSQL Local» and «MariaDB Local», schema `tienda`, database `shots_maria`).
+ */
+const PG_ID = 'shot-pg'
+const PG_DB = 'navidog_test'
+const MARIA_ID = 'shot-maria'
+const ENGINE_STEPS: Step[] = [
+  {
+    name: '40a-pg-connection-dialog',
+    script: `
+      S.ui.openConnectionDialog(S.connections.get('${PG_ID}'))
+      await H.waitFor('[data-test="pg-initial-database"], [data-test="connection-dialog"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    name: '40b-pg-tree-schemas',
+    script: `
+      S.ui.toggleInfoPanel(true)
+      await S.tree.expand(S.tree.parse('c:${PG_ID}'))
+      if (!S.connections.isOpen('${PG_ID}')) throw new Error('could not open PostgreSQL Local')
+      await S.tree.expand(S.tree.parse('d:${PG_ID}:${PG_DB}'))
+      S.tree.setExpanded('s:${PG_ID}:tienda:${PG_DB}', true)
+      await S.tree.expand(S.tree.parse('g:${PG_ID}:tienda:tables:${PG_DB}'))
+      await S.tree.expand(S.tree.parse('g:${PG_ID}:tienda:functions:${PG_DB}'))
+      await S.tree.expand(S.tree.parse('g:${PG_ID}:tienda:materializedViews:${PG_DB}'))
+      S.tree.select('g:${PG_ID}:tienda:tables:${PG_DB}')
+      S.workspace.showObjects()
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '40c-pg-query-transaction',
+    script: `
+      const sql = [
+        "BEGIN;",
+        "UPDATE pedidos SET estado = 'pagado' WHERE id = 2;",
+        "SELECT p.id, p.estado, p.total, p.creado FROM pedidos p ORDER BY p.id;"
+      ].join('\\n')
+      S.workspace.openQuery('${PG_ID}', 'tienda', { sql, name: 'Cobrar pedido' }, '${PG_DB}')
+      await H.sleep(1200)
+      await H.click('[data-test="run"]', 10000)
+      await H.waitFor('[data-test="tx-status"]', 15000)
+      await H.sleep(900)`
+  },
+  {
+    name: '40d-pg-table-data',
+    script: `
+      S.workspace.openTableData('${PG_ID}', 'tienda', 'clientes', '${PG_DB}')
+      await H.waitFor('.v-window-item--active table tbody tr, table tbody tr', 15000).catch(() => null)
+      await H.settle(S, 1600)`
+  },
+  {
+    name: '40e-pg-designer',
+    script: `
+      S.workspace.openTableDesigner('${PG_ID}', 'tienda', 'pedidos', '${PG_DB}')
+      await H.settle(S, 2000)`
+  },
+  {
+    name: '41a-mariadb-versioned-table',
+    script: `
+      await S.tree.expand(S.tree.parse('c:${MARIA_ID}'))
+      if (!S.connections.isOpen('${MARIA_ID}')) throw new Error('could not open MariaDB Local')
+      S.tree.setExpanded('s:${MARIA_ID}:shots_maria', true)
+      await S.tree.expand(S.tree.parse('g:${MARIA_ID}:shots_maria:tables'))
+      S.tree.select('o:${MARIA_ID}:shots_maria:tables:precios')
+      S.workspace.openTableData('${MARIA_ID}', 'shots_maria', 'precios')
+      await H.waitFor('.v-window-item--active table tbody tr, table tbody tr', 15000).catch(() => null)
+      await H.settle(S, 1600)`
+  }
+]
+STEPS.push(...ENGINE_STEPS)
 
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { TableStructure } from '@shared/types'
+import type { DataTypeInfo, TableStructure } from '@shared/types'
 import { api } from '@renderer/api'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
@@ -9,6 +9,9 @@ import ColumnsEditor from '@renderer/components/designer/ColumnsEditor.vue'
 import ForeignKeysEditor from '@renderer/components/designer/ForeignKeysEditor.vue'
 import type { DesignerAlter } from '@renderer/components/designer/alterTable'
 import IndexesEditor from '@renderer/components/designer/IndexesEditor.vue'
+import ConstraintsEditor from '@renderer/components/designer/pg/ConstraintsEditor.vue'
+import PgColumnsEditor from '@renderer/components/designer/pg/PgColumnsEditor.vue'
+import { pgBuildCreatePlan, pgNewTableDraft } from '@renderer/components/designer/pg/planner'
 import { validateDraft } from '@renderer/components/designer/validateDraft'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -16,6 +19,7 @@ import { useConnectionsStore } from '@renderer/stores/connections'
 import { tabTitle, useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { useTreeStore } from '@renderer/stores/tree'
 import { emptyColumn, type TableDraft } from '@renderer/utils/tableDesigner'
+import { schemaRef } from '@renderer/utils/schemaRef'
 import { useEngineUi } from '@renderer/engines'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
@@ -24,6 +28,11 @@ const props = defineProps<{ tab: WorkspaceTab }>()
 const engineUi = useEngineUi(() => props.tab.connectionId)
 const designer = computed(() => engineUi.value.designer!)
 const tableEngines = computed(() => engineUi.value.typeCatalog?.tableEngines ?? [])
+/** PostgreSQL: own columns editor, constraints tab, transactional save (see save()). */
+const isPg = computed(() => engineUi.value.id === 'postgresql')
+
+/** Index methods of PostgreSQL (pg_am); MySQL keeps IndexesEditor's own list. */
+const PG_INDEX_METHODS = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist']
 
 const tabs = useTabsStore()
 const tree = useTreeStore()
@@ -39,6 +48,17 @@ const draft = ref<TableDraft>(designer.value.emptyTable())
 const initialSnapshot = ref('')
 const charsets = ref<Charset[]>([])
 const schemas = ref<string[]>([])
+/** v-model of the PG constraints and enum additions (optional members of the draft). */
+const pgConstraints = computed({
+  get: () => draft.value.constraints ?? [],
+  set: (constraints) => (draft.value = { ...draft.value, constraints })
+})
+const pgEnumAdditions = computed({
+  get: () => draft.value.enumAdditions ?? {},
+  set: (enumAdditions) => (draft.value = { ...draft.value, enumAdditions })
+})
+/** PostgreSQL type picker (db:dataTypes). */
+const dataTypes = ref<DataTypeInfo[]>([])
 const section = ref('fields')
 const loading = ref(false)
 const saving = ref(false)
@@ -46,11 +66,19 @@ const loadError = ref<string | null>(null)
 
 const connectionId = computed(() => props.tab.connectionId ?? '')
 const schema = computed(() => props.tab.schema ?? '')
+/** PostgreSQL: database of the tab (undefined for MySQL, where `schema` is the database). */
+const database = computed(() => props.tab.database)
+/** db:* namespace argument: the plain schema on MySQL, `{ database, schema }` on PostgreSQL. */
+const ref_ = computed(() => schemaRef(schema.value, database.value))
 const isNew = computed(() => !original.value)
 const columnNames = computed(() => draft.value.columns.map((c) => c.name).filter(Boolean))
 
 const plan = computed<DesignerAlter>(() => {
   if (!original.value) {
+    if (isPg.value)
+      return draft.value.name && draft.value.columns.length
+        ? pgBuildCreatePlan(schema.value, draft.value)
+        : { statements: [], risks: [], problems: [], drops: [] }
     const statements =
       draft.value.name && draft.value.columns.length
         ? [designer.value.buildCreate(schema.value, draft.value)]
@@ -60,11 +88,25 @@ const plan = computed<DesignerAlter>(() => {
   return designer.value.buildAlter(original.value, draft.value)
 })
 const statements = computed(() => plan.value.statements)
-const previewSql = computed(() =>
-  statements.value.length ? statements.value.join('\n\n') : '-- Sin cambios'
-)
+const preStatements = computed(() => plan.value.preStatements ?? [])
+const previewSql = computed(() => {
+  if (!statements.value.length && !preStatements.value.length) return '-- Sin cambios'
+  if (!isPg.value) return statements.value.join('\n\n')
+  // PostgreSQL: what save() runs, in order (ADD VALUE outside the transaction).
+  const parts: string[] = []
+  if (preStatements.value.length) parts.push('-- Antes de la transacción', ...preStatements.value)
+  if (statements.value.length)
+    parts.push(
+      plan.value.transactional
+        ? ['BEGIN;', ...statements.value, 'COMMIT;'].join('\n')
+        : statements.value.join('\n')
+    )
+  return parts.join('\n\n')
+})
 const dirty = computed(() =>
-  isNew.value ? JSON.stringify(draft.value) !== initialSnapshot.value : statements.value.length > 0
+  isNew.value
+    ? JSON.stringify(draft.value) !== initialSnapshot.value
+    : statements.value.length > 0 || preStatements.value.length > 0
 )
 const validation = computed(() => validateDraft(draft.value) ?? plan.value.problems[0] ?? null)
 
@@ -84,6 +126,7 @@ function setCharset(name: string | null): void {
 }
 
 function newTableDraft(): TableDraft {
+  if (isPg.value) return pgNewTableDraft()
   const id = {
     ...emptyColumn(),
     name: 'id',
@@ -108,7 +151,7 @@ async function loadStructure(): Promise<void> {
       const structure = await api.invokeSilent(
         'db:tableStructure',
         connectionId.value,
-        schema.value,
+        ref_.value,
         tableName.value
       )
       original.value = structure
@@ -140,6 +183,17 @@ async function databaseCollation(): Promise<string> {
 
 async function loadLookups(): Promise<void> {
   if (!connectionId.value) return
+  if (isPg.value) {
+    // No charsets in PostgreSQL; types and schemas come from the tab's database.
+    const db = database.value ?? ''
+    const [types, list] = await Promise.allSettled([
+      api.db.dataTypes(connectionId.value, db),
+      api.db.schemas(connectionId.value, db)
+    ])
+    if (types.status === 'fulfilled') dataTypes.value = types.value
+    if (list.status === 'fulfilled') schemas.value = list.value.map((s) => s.name)
+    return
+  }
   const [cs, dbs] = await Promise.allSettled([
     api.invokeSilent('db:charsets', connectionId.value),
     api.db.databases(connectionId.value)
@@ -154,7 +208,11 @@ async function save(): Promise<void> {
     notify.warning(validation.value)
     return
   }
-  const sql = statements.value.join('\n')
+  const sql = isPg.value
+    ? statements.value.length || preStatements.value.length
+      ? previewSql.value
+      : ''
+    : statements.value.join('\n')
   if (!sql) return
   // Risky changes (drops, type narrowing, NOT NULL, renames) always ask; production always asks via useConfirm.
   const risks = plan.value.risks
@@ -185,16 +243,20 @@ async function save(): Promise<void> {
 
   saving.value = true
   try {
-    const results = await api.invokeSilent('db:execute', connectionId.value, sql, {
-      schema: schema.value,
-      confirmProduction: true
-    })
-    const error = firstError(results)
-    if (error) {
-      notify.error(friendlyError(error))
-      // Earlier statements may already be applied: reload to show the real state.
-      if (!isNew.value) await loadStructure()
-      return
+    if (isPg.value) {
+      if (!(await savePg())) return
+    } else {
+      const results = await api.invokeSilent('db:execute', connectionId.value, sql, {
+        schema: schema.value,
+        confirmProduction: true
+      })
+      const error = firstError(results)
+      if (error) {
+        notify.error(friendlyError(error))
+        // Earlier statements may already be applied: reload to show the real state.
+        if (!isNew.value) await loadStructure()
+        return
+      }
     }
     const created = isNew.value
     const renamed = !created && draft.value.name !== tableName.value
@@ -202,9 +264,14 @@ async function save(): Promise<void> {
     if (created || renamed) {
       tabs.setTitle(
         props.tab.id,
-        tabTitle(draft.value.name, schema.value, connections.nameOf(connectionId.value))
+        tabTitle(
+          draft.value.name,
+          schema.value,
+          connections.nameOf(connectionId.value),
+          database.value
+        )
       )
-      void tree.loadGroup(connectionId.value, schema.value, 'tables', true).catch(() => undefined)
+      void refreshTables()
     }
     notify.success(
       created ? `Tabla "${draft.value.name}" creada` : `Tabla "${draft.value.name}" modificada`
@@ -215,6 +282,49 @@ async function save(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+/** Reloads the tree's table list (PostgreSQL groups are per database). */
+function refreshTables(): Promise<unknown> {
+  if (database.value === undefined)
+    return tree.loadGroup(connectionId.value, schema.value, 'tables', true).catch(() => undefined)
+  // Trailing `database` argument of the database-aware tree store (PostgreSQL).
+  const load = tree.loadGroup as (...args: unknown[]) => Promise<unknown>
+  return load(connectionId.value, schema.value, 'tables', true, database.value).catch(
+    () => undefined
+  )
+}
+
+/**
+ * PostgreSQL save: `ALTER TYPE … ADD VALUE` steps first, each on its own
+ * (a value added inside a transaction cannot be used in it), then the whole
+ * plan in ONE transaction: if any statement fails nothing is applied.
+ * Returns false (after telling the user) when something failed.
+ */
+async function savePg(): Promise<boolean> {
+  const options = { schema: ref_.value, confirmProduction: true }
+  for (const pre of preStatements.value) {
+    const results = await api.invokeSilent('db:execute', connectionId.value, pre, options)
+    const error = firstError(results)
+    if (error) {
+      notify.error(friendlyError(error))
+      if (!isNew.value) await loadStructure()
+      return false
+    }
+  }
+  if (!statements.value.length) return true
+  const body = statements.value.join('\n')
+  const script = plan.value.transactional ? `BEGIN;\n${body}\nCOMMIT;` : body
+  const results = await api.invokeSilent('db:execute', connectionId.value, script, options)
+  const error = firstError(results)
+  if (error) {
+    notify.error(
+      `${friendlyError(error)}${plan.value.transactional ? ' No se aplicó ningún cambio: la transacción se deshizo.' : ''}`
+    )
+    if (!isNew.value) await loadStructure()
+    return false
+  }
+  return true
 }
 
 async function revert(): Promise<void> {
@@ -306,6 +416,9 @@ defineExpose({ draft, previewSql, save })
         <v-tab value="fks" data-test="tab-fks">
           <v-icon icon="mdi-key-link" size="15" class="mr-2" />Claves foráneas
         </v-tab>
+        <v-tab v-if="isPg" value="constraints" data-test="tab-constraints">
+          <v-icon icon="mdi-shield-check-outline" size="15" class="mr-2" />Restricciones
+        </v-tab>
         <v-tab value="options" data-test="tab-options">
           <v-icon icon="mdi-tune-variant" size="15" class="mr-2" />Opciones
         </v-tab>
@@ -323,10 +436,24 @@ defineExpose({ draft, previewSql, save })
         />
         <v-window v-model="section" class="designer__body">
           <v-window-item value="fields" class="fill">
-            <ColumnsEditor v-model="draft.columns" />
+            <PgColumnsEditor
+              v-if="isPg"
+              v-model="draft.columns"
+              v-model:enum-additions="pgEnumAdditions"
+              :data-types="dataTypes"
+              :original="original"
+            />
+            <ColumnsEditor v-else v-model="draft.columns" />
           </v-window-item>
           <v-window-item value="indexes" class="fill">
-            <IndexesEditor v-model="draft.indexes" :column-names="columnNames" />
+            <IndexesEditor
+              v-if="isPg"
+              v-model="draft.indexes"
+              :column-names="columnNames"
+              :types="PG_INDEX_METHODS"
+              allow-expressions
+            />
+            <IndexesEditor v-else v-model="draft.indexes" :column-names="columnNames" />
           </v-window-item>
           <v-window-item value="fks" class="fill">
             <ForeignKeysEditor
@@ -335,6 +462,9 @@ defineExpose({ draft, previewSql, save })
               :schemas="schemas"
               :default-schema="schema"
             />
+          </v-window-item>
+          <v-window-item v-if="isPg" value="constraints" class="fill">
+            <ConstraintsEditor v-model="pgConstraints" />
           </v-window-item>
           <v-window-item value="options" class="fill">
             <div class="designer__options">
@@ -347,7 +477,51 @@ defineExpose({ draft, previewSql, save })
                     data-test="table-name"
                   />
                 </v-col>
-                <v-col cols="12" md="6">
+                <template v-if="isPg">
+                  <v-col cols="12" md="6" class="d-flex align-center">
+                    <v-checkbox
+                      :model-value="draft.options?.unlogged === true"
+                      label="UNLOGGED (sin registro WAL: más rápida, se vacía tras una caída)"
+                      density="compact"
+                      hide-details
+                      data-test="pg-unlogged"
+                      @update:model-value="
+                        draft = { ...draft, options: { ...draft.options, unlogged: !!$event } }
+                      "
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      :model-value="String(draft.options?.owner ?? '')"
+                      label="Propietario"
+                      readonly
+                      hint="Solo lectura"
+                      persistent-hint
+                      data-test="pg-owner"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      :model-value="String(draft.options?.tablespace ?? '')"
+                      label="Tablespace"
+                      placeholder="Predeterminado"
+                      readonly
+                      hint="Solo lectura"
+                      persistent-hint
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      :model-value="String(draft.options?.partitionKey ?? '')"
+                      label="Clave de partición"
+                      placeholder="Sin particiones"
+                      readonly
+                      hint="Solo lectura"
+                      persistent-hint
+                    />
+                  </v-col>
+                </template>
+                <v-col v-if="!isPg" cols="12" md="6">
                   <v-combobox
                     v-model="draft.engine"
                     :items="tableEngines"
@@ -357,7 +531,7 @@ defineExpose({ draft, previewSql, save })
                     hide-details
                   />
                 </v-col>
-                <v-col cols="12" md="6">
+                <v-col v-if="!isPg" cols="12" md="6">
                   <v-select
                     :model-value="charset"
                     :items="charsets.map((c) => c.charset)"
@@ -366,7 +540,7 @@ defineExpose({ draft, previewSql, save })
                     @update:model-value="setCharset"
                   />
                 </v-col>
-                <v-col cols="12" md="6">
+                <v-col v-if="!isPg" cols="12" md="6">
                   <v-combobox
                     v-model="draft.collation"
                     :items="collationItems"
@@ -376,7 +550,7 @@ defineExpose({ draft, previewSql, save })
                     hide-details
                   />
                 </v-col>
-                <v-col cols="12" md="6">
+                <v-col v-if="!isPg" cols="12" md="6">
                   <v-text-field
                     :model-value="draft.autoIncrement ?? ''"
                     label="Auto incremento"

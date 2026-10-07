@@ -16,6 +16,30 @@ export interface ColumnDraft {
   unsigned: boolean
   collation: string | null
   comment: string
+  /** PostgreSQL-only column attributes (absent for MySQL). */
+  pg?: PgColumnDraft
+}
+
+/** PostgreSQL column attributes the MySQL draft cannot express. */
+export interface PgColumnDraft {
+  /** Identity column (autoIncrement on PostgreSQL means identity unless `serial`). */
+  identity: 'always' | 'by-default' | null
+  /** Existing serial column: its default is nextval('…'); never converted to identity silently. */
+  serial: boolean
+  /** Expression of a GENERATED ALWAYS AS (…) STORED column, null otherwise. */
+  generated: string | null
+  /** USING expression for a type change; empty/absent = `"col"::<new type>`. */
+  using?: string
+}
+
+/** PostgreSQL unique / check / exclusion constraint of the draft (definition as SQL text). */
+export interface ConstraintDraft {
+  id: string
+  originalName: string | null
+  name: string
+  type: 'unique' | 'check' | 'exclusion'
+  /** pg_get_constraintdef text, e.g. `UNIQUE (email)` or `CHECK ((price > 0))`. */
+  definition: string
 }
 
 export interface IndexDraft {
@@ -49,6 +73,12 @@ export interface TableDraft {
   columns: ColumnDraft[]
   indexes: IndexDraft[]
   foreignKeys: ForeignKeyDraft[]
+  /** PostgreSQL table options: unlogged (boolean); owner, tablespace, partitionKey (read-only). */
+  options?: Record<string, string | number | boolean>
+  /** PostgreSQL unique / check / exclusion constraints (absent for MySQL). */
+  constraints?: ConstraintDraft[]
+  /** PostgreSQL: enum labels to add, keyed by type ('schema.type' or 'type'). */
+  enumAdditions?: Record<string, string[]>
 }
 
 let seq = 0

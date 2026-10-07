@@ -1,6 +1,6 @@
 # Multi-engine architecture (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB)
 
-Status: **design, P1a implemented on branch `v2`. Revision 3** (2026-10-07): the product is now
+Status: **design; P1a, P1b, P2a and P2b implemented on branch `v2` (PostgreSQL still behind the preview flag). Revision 3** (2026-10-07): the product is now
 called **Vortaq** (formerly ElectronDB, and Navidog before that); revision 3 renames it, removes
 the Navicat Keychain recovery (section 12.3) and limits the sources to the ones in section 19.
 Revision 2 (2026-10-05, at `c147306`) answered two reviews: an adversarial review (guard bypasses,
