@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isAllowedReleaseUrl, parseRelease, pickAssets, truncateNotes } from './release'
+import {
+  isAllowedReleaseUrl,
+  parseRelease,
+  pickAssets,
+  releaseRepo,
+  truncateNotes
+} from './release'
 import { apiRelease, LEGACY_RELEASES_BASE, RELEASE_ASSETS, RELEASES_BASE } from './testing'
 
 const BASE = RELEASES_BASE
@@ -130,5 +136,18 @@ describe('pickAssets', () => {
     expect(pickAssets(ASSETS, 'linux', 'arm64')).toEqual({ download: null, alternatives: [] })
     expect(pickAssets(ASSETS, 'freebsd', 'x64')).toEqual({ download: null, alternatives: [] })
     expect(pickAssets([], 'darwin', 'arm64').download).toBeNull()
+  })
+})
+
+describe('releaseRepo', () => {
+  it('names the repository a release was found under, else the current one', () => {
+    const vortaq = { owner: 'Y0rshB3', name: 'Vortaq' }
+    expect(releaseRepo(`${LEGACY_RELEASES_BASE}/tag/v2.0.1`)).toEqual({
+      owner: 'Y0rshB3',
+      name: 'ElectronDB'
+    })
+    expect(releaseRepo(`${RELEASES_BASE}/tag/v2.0.1`)).toEqual(vortaq)
+    expect(releaseRepo('https://github.com/someone/else/releases/tag/v9.0.0')).toEqual(vortaq)
+    expect(releaseRepo(null)).toEqual(vortaq)
   })
 })

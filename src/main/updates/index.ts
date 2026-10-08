@@ -2,7 +2,6 @@ import { app, net, shell } from 'electron'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { UpdateInstallMode, WhatsNewInfo } from '@shared/types'
-import { UPDATE_REPO } from '../brand'
 import type { AppContext } from '../context'
 import { envVar } from '../env'
 import { getLogger } from '../log'
@@ -11,7 +10,7 @@ import { fixtureFetch } from './fixture'
 import { detectInstallMode } from './installMode'
 import { UpdateInstaller, type UpdaterLike } from './installer'
 import type { DownloadStream } from './macDmg'
-import { isAllowedReleaseUrl } from './release'
+import { isAllowedReleaseUrl, releaseRepo, type ParsedRelease } from './release'
 import { UpdateService, type FetchLike } from './service'
 
 export { isAllowedReleaseUrl } from './release'
@@ -107,15 +106,20 @@ function assertReleaseUrl(url: string): void {
 
 let CancellationTokenClass: (new () => import('electron-updater').CancellationToken) | null = null
 
-/** electron-updater for this OS, restricted to the GitHub releases of UPDATE_REPO. */
-async function createElectronUpdater(): Promise<UpdaterLike> {
+/**
+ * electron-updater for this OS, restricted to the GitHub releases of this repository: the name the
+ * checked release was found under (UpdateService asks UPDATE_REPO first, then its earlier name),
+ * else UPDATE_REPO.
+ */
+async function createElectronUpdater(release: ParsedRelease | null): Promise<UpdaterLike> {
   const { NsisUpdater, AppImageUpdater, CancellationToken } = await import('electron-updater')
   // The token class electron-updater checks for (re-exported from builder-util-runtime).
   CancellationTokenClass = CancellationToken
+  const repo = releaseRepo(release?.htmlUrl)
   const feed = {
     provider: 'github' as const,
-    owner: UPDATE_REPO.owner,
-    repo: UPDATE_REPO.name,
+    owner: repo.owner,
+    repo: repo.name,
     releaseType: 'release' as const
   }
   const updater = process.platform === 'win32' ? new NsisUpdater(feed) : new AppImageUpdater(feed)
@@ -167,7 +171,7 @@ export function getUpdateInstaller(ctx: AppContext): UpdateInstaller {
     arch: process.arch,
     ...(mode === 'auto'
       ? {
-          createUpdater: createElectronUpdater,
+          createUpdater: () => createElectronUpdater(getUpdateService(ctx).latestRelease()),
           createToken: () => {
             if (!CancellationTokenClass) throw new Error('electron-updater is not loaded')
             return new CancellationTokenClass()

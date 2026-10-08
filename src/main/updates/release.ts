@@ -30,10 +30,9 @@ export interface ParsedRelease {
   assets: ReleaseAsset[]
 }
 
+const KNOWN_REPOS = [UPDATE_REPO, ...LEGACY_UPDATE_REPOS]
 /** /<owner>/<repo>/releases/ of the repository, under its current and earlier names. */
-const REPO_PATHS = [UPDATE_REPO, ...LEGACY_UPDATE_REPOS].map((r) =>
-  `/${r.owner}/${r.name}/releases/`.toLowerCase()
-)
+const REPO_PATHS = KNOWN_REPOS.map((r) => `/${r.owner}/${r.name}/releases/`.toLowerCase())
 
 /**
  * True for https://github.com/<owner>/<repo>/releases/... (release pages and
@@ -58,6 +57,17 @@ export function isAllowedReleaseUrl(raw: unknown): raw is string {
       (path) => url.pathname.toLowerCase().startsWith(path) && url.pathname.length > path.length
     )
   )
+}
+
+/**
+ * The repository name a release URL uses (current or earlier name), for electron-updater's feed:
+ * a release found under the earlier name (published before the rename) is downloaded from there.
+ * UPDATE_REPO for anything else.
+ */
+export function releaseRepo(htmlUrl: string | null | undefined): { owner: string; name: string } {
+  if (!isAllowedReleaseUrl(htmlUrl)) return UPDATE_REPO
+  const path = new URL(htmlUrl).pathname.toLowerCase()
+  return KNOWN_REPOS.find((_, i) => path.startsWith(REPO_PATHS[i])) ?? UPDATE_REPO
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)

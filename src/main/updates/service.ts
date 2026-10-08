@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import type { UpdateCheckResult, UpdateInstallMode, WhatsNewInfo } from '@shared/types'
 import { whatsNewBetween, whatsNewFor } from '@shared/whatsNew'
-import { UPDATE_REPO } from '../brand'
+import { LEGACY_UPDATE_REPOS, UPDATE_REPO } from '../brand'
 import { JsonStore } from '../storage/jsonStore'
 import { isAllowedReleaseUrl, parseRelease, pickAssets, type ParsedRelease } from './release'
 import type { RunModeInfo } from './runMode'
@@ -18,7 +18,16 @@ import { compareVersions, isNewer, parseVersion } from './semver'
  */
 
 export const UPDATES_FILE = 'updates.json'
-export const LATEST_RELEASE_URL = `https://api.github.com/repos/${UPDATE_REPO.owner}/${UPDATE_REPO.name}/releases/latest`
+const latestReleaseUrl = (r: { owner: string; name: string }): string =>
+  `https://api.github.com/repos/${r.owner}/${r.name}/releases/latest`
+export const LATEST_RELEASE_URL = latestReleaseUrl(UPDATE_REPO)
+/**
+ * Asked in order; the next one only when GitHub answers 404. Vortaq 2.0.0 is published while the
+ * repository still has its earlier name (so ElectronDB 0.1.x copies, which accept only that name,
+ * see it) and the repository is renamed later: until then Y0rshB3/Vortaq does not exist. After the
+ * rename the first URL answers and the legacy one is never asked.
+ */
+export const LATEST_RELEASE_URLS = [UPDATE_REPO, ...LEGACY_UPDATE_REPOS].map(latestReleaseUrl)
 export const AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 export const FETCH_TIMEOUT_MS = 10_000
 /** A release payload is a few KB; anything far larger is not what we asked for. */
@@ -267,23 +276,12 @@ export class UpdateService {
   }
 
   private async fetchLatest(): Promise<ParsedRelease | null> {
-    let response: FetchResponseLike
-    try {
-      response = await this.options.fetch(LATEST_RELEASE_URL, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': `Vortaq/${this.options.currentVersion}`,
-          'X-GitHub-Api-Version': '2022-11-28'
-        },
-        signal: AbortSignal.timeout(this.options.timeoutMs ?? FETCH_TIMEOUT_MS)
-      })
-    } catch (err) {
-      const name = err instanceof Error ? err.name : ''
-      throw new CheckError({
-        kind: name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network'
-      })
+    let response: FetchResponseLike | null = null
+    for (const url of LATEST_RELEASE_URLS) {
+      response = await this.request(url)
+      if (response.status !== 404) break
     }
+    if (!response) throw new CheckError({ kind: 'not-found' })
     if (response.status === 403 || response.status === 429)
       throw new CheckError({ kind: 'rate-limited' })
     if (response.status === 404) throw new CheckError({ kind: 'not-found' })
@@ -311,6 +309,25 @@ export class UpdateService {
       s.release = release
     })
     return release
+  }
+
+  private async request(url: string): Promise<FetchResponseLike> {
+    try {
+      return await this.options.fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': `Vortaq/${this.options.currentVersion}`,
+          'X-GitHub-Api-Version': '2022-11-28'
+        },
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? FETCH_TIMEOUT_MS)
+      })
+    } catch (err) {
+      const name = err instanceof Error ? err.name : ''
+      throw new CheckError({
+        kind: name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network'
+      })
+    }
   }
 
   private runMode(): RunModeInfo {

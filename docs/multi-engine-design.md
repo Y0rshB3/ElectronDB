@@ -2373,7 +2373,9 @@ refused by `navicatBlockReason` too. Tested with synthetic files only; never a c
   repository is renamed before 2.0.0 is published, GitHub's API answers the old URL with the new
   `html_url` (`/Y0rshB3/Vortaq/…`) and 0.1.9 would not offer the update. Publishing 2.0.0 while the
   repository still has the ElectronDB name (then renaming it), or a 0.1.x bridge release that accepts the
-  new name, avoids that.
+  new name, avoids that. Until the rename `Y0rshB3/Vortaq` does not exist: 2.0.x asks
+  `Y0rshB3/ElectronDB` when the Vortaq API answers 404 (`LATEST_RELEASE_URLS`), and electron-updater
+  downloads from the repository name the checked release was found under (`releaseRepo`).
 
 ---
 

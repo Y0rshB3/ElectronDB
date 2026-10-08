@@ -11,7 +11,7 @@ import {
   UpdateService,
   type FetchLike
 } from './service'
-import { apiRelease } from './testing'
+import { apiRelease, LEGACY_RELEASES_BASE } from './testing'
 
 const HOUR = 60 * 60 * 1000
 const T0 = Date.parse('2026-10-06T09:00:00Z')
@@ -69,6 +69,33 @@ describe('UpdateService', () => {
       'X-GitHub-Api-Version': '2022-11-28'
     })
     expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('asks the earlier repository name only when the current one does not exist (404)', async () => {
+    const legacy = apiRelease({
+      html_url: `${LEGACY_RELEASES_BASE}/tag/v0.1.3`,
+      assets: []
+    })
+    const fetch = vi.fn(async (url: string) =>
+      url === LATEST_RELEASE_URL
+        ? { status: 404, text: async () => '{}' }
+        : { status: 200, text: async () => JSON.stringify(legacy) }
+    )
+    const result = await service(fetch as unknown as FetchLike).check(true)
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual([
+      'https://api.github.com/repos/Y0rshB3/Vortaq/releases/latest',
+      'https://api.github.com/repos/Y0rshB3/ElectronDB/releases/latest'
+    ])
+    expect(result).toMatchObject({
+      status: 'available',
+      latestVersion: '0.1.3',
+      releaseUrl: `${LEGACY_RELEASES_BASE}/tag/v0.1.3`
+    })
+    const both404 = vi.fn(async () => ({ status: 404, text: async () => '{}' }))
+    expect((await service(both404 as unknown as FetchLike).check(true)).error).toMatch(
+      /ninguna versión publicada/
+    )
+    expect(both404).toHaveBeenCalledTimes(2)
   })
 
   it('reports how this copy installs updates and keeps the release for the installer', async () => {
