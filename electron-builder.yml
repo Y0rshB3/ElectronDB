@@ -45,13 +45,14 @@ toolsets:
 # In-app updates (electron-updater, Windows NSIS and Linux AppImage): builds write latest.yml,
 # latest-linux.yml, latest-mac.yml and .blockmap files next to the installers, and the packaged
 # app gets resources/app-update.yml pointing at this repository. Building never uploads anything:
-# every dist script passes `--publish never`; the release is uploaded by hand. The repository keeps
-# the ElectronDB name for now: installed copies read their feed from it (GitHub redirects a renamed
-# repository, so renaming it later keeps updates working, but keep owner/repo here in sync).
+# every dist script passes `--publish never`; the release is uploaded by hand. From Vortaq 2.0.0 the
+# feed is Y0rshB3/Vortaq (keep it in sync with UPDATE_REPO in src/main/brand.ts). ElectronDB 0.1.x
+# copies read Y0rshB3/ElectronDB, which GitHub redirects once the repository is renamed; the
+# unchanged appId above makes the 2.0.0 installer upgrade them in place.
 publish:
   provider: github
   owner: Y0rshB3
-  repo: ElectronDB
+  repo: Vortaq
   releaseType: release
 mac:
   # Windows and Linux builds already ship Electron's notices next to the executable

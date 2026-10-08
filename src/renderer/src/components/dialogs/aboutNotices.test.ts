@@ -3,7 +3,7 @@ import { filterNotices, splitNotices } from './aboutNotices'
 
 const RULE = '='.repeat(78)
 const sample = [
-  'Vortaq 0.2.0 — Licencias de terceros\n\nComponentes: 2',
+  'Vortaq 2.0.0 — Licencias de terceros\n\nComponentes: 2',
   `${RULE}\nvue 3.5.42\nLicencia: MIT\n\n--- LICENSE ---\n\nCopyright (c) Evan You`,
   `${RULE}\nvuetify 3.13.4\nLicencia: MIT\n\nSection title\n==========================\n\nbody`,
   `${RULE}\n`

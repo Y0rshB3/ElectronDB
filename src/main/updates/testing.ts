@@ -1,7 +1,9 @@
 import type { ReleaseAsset } from './release'
 
 /** Test data for the updates module (never the real GitHub API). */
-export const RELEASES_BASE = 'https://github.com/Y0rshB3/ElectronDB/releases'
+export const RELEASES_BASE = 'https://github.com/Y0rshB3/Vortaq/releases'
+/** Releases published under the repository's earlier name (still accepted). */
+export const LEGACY_RELEASES_BASE = 'https://github.com/Y0rshB3/ElectronDB/releases'
 
 export const releaseAsset = (name: string, size = 100, tag = 'v0.1.3'): ReleaseAsset => ({
   name,

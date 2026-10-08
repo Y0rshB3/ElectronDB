@@ -32,7 +32,7 @@ describe('whatsNewBetween', () => {
   })
 
   it('skips versions without entries (unknown versions)', () => {
-    expect(whatsNewBetween('0.1.4', '0.2.0', entries)).toEqual([])
+    expect(whatsNewBetween('0.1.4', '2.0.0', entries)).toEqual([])
     expect(versions(whatsNewBetween('0.1.3', '1.0.0', entries))).toEqual(['0.1.4'])
   })
 
@@ -88,14 +88,15 @@ describe('WHATS_NEW (curated list)', () => {
     ])
   })
 
-  it('0.2.0 announces the Vortaq name, .vqb copies, imports and .sql export, PostgreSQL, SQLite and MongoDB, MariaDB and the data move', () => {
-    const entry = whatsNewFor('0.2.0-alpha.1')
+  it('2.0.0 announces the Vortaq name, .vqb copies, imports and .sql export, PostgreSQL, SQLite and MongoDB, MariaDB and the data move', () => {
+    const entry = whatsNewFor('2.0.0')
+    expect(whatsNewFor('2.0.0-alpha.1')).toBe(entry)
     expect(entry?.highlights).toEqual([
       'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
       'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
       'PostgreSQL, SQLite y MongoDB (vista previa): actívalos en Ajustes › Motores en vista previa',
-      'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
+      'MariaDB como motor propio: secuencias, tablas versionadas y cuentas ed25519/parsec'
     ])
     expect(entry?.important).toEqual(['Tus datos se trasladan automáticamente a Vortaq'])
     expect(entry?.tour?.map((s) => s.target)).toEqual([
@@ -104,9 +105,13 @@ describe('WHATS_NEW (curated list)', () => {
       'toolbar-more',
       'toolbar-backup',
       'toolbar-connection',
-      'toolbar-connection'
+      'toolbar-connection',
+      'toolbar-connection',
+      'toolbar-ai'
     ])
-    expect(versions(whatsNewBetween('0.1.9', '0.2.0-alpha.1'))).toEqual(['0.2.0'])
+    // ElectronDB ended at 0.1.9: updating to Vortaq 2.0.0 shows this entry once.
+    expect(versions(whatsNewBetween('0.1.9', '2.0.0'))).toEqual(['2.0.0'])
+    expect(versions(whatsNewBetween('0.1.9', '2.0.0-alpha.1'))).toEqual(['2.0.0'])
   })
 
   it('0.1.8 announces connections without a password', () => {

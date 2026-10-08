@@ -25,14 +25,14 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
-    version: '0.2.0',
+    version: '2.0.0',
     date: '2026-10-07',
     highlights: [
       'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
       'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
       'PostgreSQL, SQLite y MongoDB (vista previa): actívalos en Ajustes › Motores en vista previa',
-      'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
+      'MariaDB como motor propio: secuencias, tablas versionadas y cuentas ed25519/parsec'
     ],
     important: ['Tus datos se trasladan automáticamente a Vortaq'],
     tour: [
@@ -65,6 +65,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         target: 'toolbar-connection',
         title: 'MongoDB (vista previa)',
         text: 'Conexión › Nueva conexión MongoDB (con «Pegar URI»): documentos en tabla, árbol o JSON que se editan sin cambiar sus tipos, consultas con órdenes del shell como db.pedidos.find({...}) o aggregate([...]), índices, validador y copias .vqb.'
+      },
+      {
+        target: 'toolbar-connection',
+        title: 'MariaDB',
+        text: 'Conexión › Nueva conexión MariaDB: secuencias en el árbol, tablas versionadas en el diseñador, tipos UUID e INET6 y cuentas ed25519 o parsec. Tus conexiones MySQL a servidores MariaDB pasan a ser MariaDB al abrirlas, con sus copias y tareas.'
+      },
+      {
+        target: 'toolbar-ai',
+        title: 'El asistente ve toda la conexión',
+        text: 'En el panel de IA, el nombre de la base de datos es un menú: «Solo <base de datos>» o «Toda la conexión», para preguntas que cruzan bases de datos (en PostgreSQL, todos los esquemas de la base de datos). Solo se envía la estructura.'
       }
     ]
   },
@@ -182,8 +192,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
 
 /**
  * Entries newer than `previous` (exclusive) up to `current` (inclusive), newest
- * first. A pre-release of `current` (0.2.0-alpha.1) includes the entry of the
- * release it leads to (0.2.0), which is written before tagging. Empty for a
+ * first. A pre-release of `current` (2.0.0-alpha.1) includes the entry of the
+ * release it leads to (2.0.0), which is written before tagging. Empty for a
  * fresh profile (no previous version), the same version, a downgrade or
  * invalid versions.
  */

@@ -61,7 +61,7 @@ describe('UpdateService', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     const [url, init] = fetch.mock.calls[0] as Parameters<FetchLike>
     expect(url).toBe(LATEST_RELEASE_URL)
-    expect(url).toBe('https://api.github.com/repos/Y0rshB3/ElectronDB/releases/latest')
+    expect(url).toBe('https://api.github.com/repos/Y0rshB3/Vortaq/releases/latest')
     expect(init.method).toBe('GET')
     expect(init.headers).toEqual({
       Accept: 'application/vnd.github+json',
@@ -86,7 +86,7 @@ describe('UpdateService', () => {
       currentVersion: '0.1.2',
       latestVersion: '0.1.3',
       releaseName: 'Vortaq v0.1.3',
-      releaseUrl: 'https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.3',
+      releaseUrl: 'https://github.com/Y0rshB3/Vortaq/releases/tag/v0.1.3',
       publishedAt: '2026-10-01T10:00:00Z',
       notes: '## Novedades\n\n- Algo nuevo',
       runMode: 'packaged',
@@ -318,7 +318,7 @@ describe('UpdateService', () => {
       const info = svcAt('0.1.4').whatsNew({ profileHadData: true })
       expect(info?.previousVersion).toBeNull()
       expect(info?.entries.map((e) => e.version)).toEqual(['0.1.4'])
-      expect(info?.releaseUrl).toBe('https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.4')
+      expect(info?.releaseUrl).toBe('https://github.com/Y0rshB3/Vortaq/releases/tag/v0.1.4')
     })
 
     it('upgrade over several versions lists each one, newest first, until marked seen', () => {

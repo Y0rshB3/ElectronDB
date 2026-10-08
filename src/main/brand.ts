@@ -27,8 +27,17 @@ export const LEGACY_APPS: readonly LegacyApp[] = [LEGACY_ELECTRONDB, LEGACY_NAVI
 
 /**
  * GitHub repository whose Releases are checked for new versions
- * (src/main/updates) and that electron-builder's `publish` points at. It keeps
- * the ElectronDB name until the repository itself is renamed; GitHub
- * redirects the old name afterwards, so installed copies keep finding updates.
+ * (src/main/updates) and that electron-builder's `publish` points at (Vortaq
+ * 2.0.0 onwards). Copies of ElectronDB (≤ 0.1.9) read the old repository name;
+ * GitHub redirects it once the repository is renamed.
  */
-export const UPDATE_REPO = { owner: 'Y0rshB3', name: 'ElectronDB' } as const
+export const UPDATE_REPO = { owner: 'Y0rshB3', name: 'Vortaq' } as const
+
+/**
+ * Earlier names of the same repository. Release pages and downloads under
+ * them are still accepted (isAllowedReleaseUrl), so links to ElectronDB
+ * releases (and GitHub's answers before the rename) keep working.
+ */
+export const LEGACY_UPDATE_REPOS: readonly { owner: string; name: string }[] = [
+  { owner: 'Y0rshB3', name: 'ElectronDB' }
+]

@@ -18,7 +18,7 @@ describe('licenses', () => {
       license: 'MIT License',
       thirdParty: 'vue 3',
       thirdPartyPath: join(dir, 'THIRD_PARTY_LICENSES.txt'),
-      repositoryUrl: 'https://github.com/Y0rshB3/ElectronDB'
+      repositoryUrl: 'https://github.com/Y0rshB3/Vortaq'
     })
   })
 
@@ -42,9 +42,9 @@ describe('licenses', () => {
   })
 
   it('fills the native About panel', () => {
-    expect(aboutPanelOptions({ version: '0.2.0', electron: '44.3.0' })).toMatchObject({
+    expect(aboutPanelOptions({ version: '2.0.0', electron: '44.3.0' })).toMatchObject({
       applicationName: 'Vortaq',
-      applicationVersion: '0.2.0',
+      applicationVersion: '2.0.0',
       version: 'Electron 44.3.0',
       copyright: expect.stringContaining('MIT'),
       website: REPOSITORY_URL
@@ -52,6 +52,6 @@ describe('licenses', () => {
   })
 
   it('points at the project repository', () => {
-    expect(REPOSITORY_URL).toBe('https://github.com/Y0rshB3/ElectronDB')
+    expect(REPOSITORY_URL).toBe('https://github.com/Y0rshB3/Vortaq')
   })
 })

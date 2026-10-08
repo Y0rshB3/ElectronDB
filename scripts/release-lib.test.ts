@@ -52,7 +52,7 @@ describe('release artifacts', () => {
     expect(yml).toMatch(/^appId: dev\.y0rshb3\.electrondb$/m)
     expect(yml).toMatch(/^productName: Vortaq$/m)
     expect(yml).toMatch(
-      /^publish:\n {2}provider: github\n {2}owner: Y0rshB3\n {2}repo: ElectronDB$/m
+      /^publish:\n {2}provider: github\n {2}owner: Y0rshB3\n {2}repo: Vortaq$/m
     )
     expect(yml).toMatch(/^nsis:\n(?: {2}.*\n)*? {2}oneClick: true$/m)
     expect(yml).toMatch(/^ {2}perMachine: false$/m)
@@ -68,7 +68,7 @@ describe('release artifacts', () => {
     const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'))
     expect(pkg.name).toBe('vortaq')
     expect(pkg.productName).toBe('Vortaq')
-    expect(pkg.homepage).toBe('https://github.com/Y0rshB3/ElectronDB')
+    expect(pkg.homepage).toBe('https://github.com/Y0rshB3/Vortaq')
     for (const script of ['dist', 'dist:mac', 'dist:win', 'dist:linux'])
       expect(pkg.scripts[script]).toContain('--publish never')
   })

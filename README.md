@@ -202,8 +202,8 @@ sea 24 o superior.
 ## Inicio rápido
 
 ```sh
-git clone https://github.com/Y0rshB3/ElectronDB.git
-cd ElectronDB
+git clone https://github.com/Y0rshB3/Vortaq.git
+cd Vortaq
 npm ci
 npm run dev
 ```
@@ -1200,7 +1200,7 @@ paquete `electrondb`, y la AppImage actualizada aparece con el nombre nuevo en l
 ## Actualizaciones
 
 Vortaq comprueba si hay una versión nueva en las
-[versiones publicadas en GitHub](https://github.com/Y0rshB3/ElectronDB/releases). Solo hace una consulta
+[versiones publicadas en GitHub](https://github.com/Y0rshB3/Vortaq/releases). Solo hace una consulta
 anónima a la API pública de GitHub (sin cuenta ni datos tuyos). **No descarga nada hasta que pulsas
 Descargar y actualizar** (salvo que actives **Descargar actualizaciones automáticamente**) y nunca instala sin
 que lo pidas o cierres la app. Cómo se instala depende del sistema: ver
@@ -1231,9 +1231,10 @@ que lo pidas o cierres la app. Cómo se instala depende del sistema: ver
 
 Tus conexiones, trabajos y ajustes están en el perfil y no se tocan al actualizar ni al reinstalar.
 
-**Desde ElectronDB.** Una instalación de ElectronDB 0.1.9 (Windows o AppImage) encuentra Vortaq con su
-actualización integrada, porque las versiones se siguen publicando en el mismo repositorio, y al instalarla queda
-Vortaq en su lugar; en el primer arranque Vortaq copia tu perfil (ver
+**Desde ElectronDB.** ElectronDB terminó en la 0.1.9; esta app es **Vortaq 2.0.0**, publicada en el mismo
+repositorio de GitHub (ahora `Y0rshB3/Vortaq`). Una instalación de ElectronDB 0.1.9 (Windows o AppImage) la
+instala con su actualización integrada y queda Vortaq en su lugar (el instalador conserva la identidad de la app,
+así que actualiza esa instalación en vez de crear otra); en el primer arranque Vortaq copia tu perfil (ver
 [Si venías de ElectronDB o de Navidog](#si-venías-de-electrondb-o-de-navidog)). En Mac descarga el `.dmg` de
 Vortaq: arrastra Vortaq a Aplicaciones y, cuando lo compruebes, borra ElectronDB.
 

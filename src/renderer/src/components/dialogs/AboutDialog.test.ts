@@ -6,7 +6,7 @@ import { calls, freshPinia, mockVortaq, mountWith, settle } from './testing'
 
 const RULE = '='.repeat(78)
 const notices = [
-  'Vortaq 0.2.0-alpha.1 — Licencias de terceros\n\nComponentes: 2',
+  'Vortaq 2.0.0 — Licencias de terceros\n\nComponentes: 2',
   `${RULE}\n@mdi/font 7.4.47\nLicencia: Apache-2.0\n\n--- LICENSE ---\n\nPictogrammers Free License`,
   `${RULE}\nvue 3.5.42\nLicencia: MIT\n\n--- LICENSE ---\n\nCopyright (c) Evan You`,
   RULE
@@ -18,7 +18,7 @@ describe('AboutDialog', () => {
 
   beforeEach(() => {
     invoke = mockVortaq({
-      'app:info': () => ({ name: 'Vortaq', version: '0.2.0-alpha.1', electron: '44.3.0' }),
+      'app:info': () => ({ name: 'Vortaq', version: '2.0.0', electron: '44.3.0' }),
       'app:licenses': () => ({
         license: 'MIT License\n\nCopyright (c) 2026 Y0rshB3',
         thirdParty: notices,
@@ -39,7 +39,7 @@ describe('AboutDialog', () => {
 
   it('shows the version, the licence and the trademark note', async () => {
     const w = await openDialog()
-    expect(w.get('[data-test="about-version"]').text()).toContain('Versión 0.2.0-alpha.1')
+    expect(w.get('[data-test="about-version"]').text()).toContain('Versión 2.0.0')
     expect(w.text()).toContain('licencia MIT')
     expect(w.text()).toContain('no está afiliado, patrocinado ni respaldado por')
     await w.get('[data-test="about-show-license"]').trigger('click')
@@ -71,7 +71,7 @@ describe('AboutDialog', () => {
     invoke.mockImplementation(async (channel: string) =>
       channel === 'app:licenses'
         ? { license: 'MIT', thirdParty: null, thirdPartyPath: null, repositoryUrl: '' }
-        : { version: '0.2.0', electron: '44.3.0' }
+        : { version: '2.0.0', electron: '44.3.0' }
     )
     const w = await openDialog()
     await w.get('[data-test="about-third-party"]').trigger('click')

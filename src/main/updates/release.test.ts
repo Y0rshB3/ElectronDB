@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { isAllowedReleaseUrl, parseRelease, pickAssets, truncateNotes } from './release'
-import { apiRelease, RELEASE_ASSETS, RELEASES_BASE } from './testing'
+import { apiRelease, LEGACY_RELEASES_BASE, RELEASE_ASSETS, RELEASES_BASE } from './testing'
 
 const BASE = RELEASES_BASE
 const ASSETS = RELEASE_ASSETS
 
 describe('isAllowedReleaseUrl', () => {
-  it('accepts release pages and downloads of the repository', () => {
-    expect(isAllowedReleaseUrl(`${BASE}/tag/v0.1.3`)).toBe(true)
-    expect(isAllowedReleaseUrl(`${BASE}/download/v0.1.3/Vortaq-0.1.3-arm64.dmg`)).toBe(true)
+  it('accepts release pages and downloads of the repository, under both of its names', () => {
+    expect(BASE).toBe('https://github.com/Y0rshB3/Vortaq/releases')
+    expect(isAllowedReleaseUrl(`${BASE}/tag/v2.0.0`)).toBe(true)
+    expect(isAllowedReleaseUrl(`${BASE}/download/v2.0.0/Vortaq-2.0.0-arm64.dmg`)).toBe(true)
+    expect(isAllowedReleaseUrl('https://github.com/y0rshb3/vortaq/releases/latest')).toBe(true)
+    // ElectronDB, the repository's earlier name (0.1.x releases, redirects).
+    expect(isAllowedReleaseUrl(`${LEGACY_RELEASES_BASE}/tag/v0.1.9`)).toBe(true)
     expect(isAllowedReleaseUrl('https://github.com/y0rshb3/electrondb/releases/latest')).toBe(true)
   })
 
@@ -24,6 +28,10 @@ describe('isAllowedReleaseUrl', () => {
       'https://github.com/Other/Vortaq/releases/tag/v1',
       'https://github.com/Y0rshB3/ElectronDB/releases/../../../evil/repo/releases/x',
       'https://github.com/Y0rshB3/ElectronDBX/releases/tag/v1',
+      'https://github.com/Y0rshB3/VortaqX/releases/tag/v1',
+      'http://github.com/Y0rshB3/Vortaq/releases/tag/v1',
+      'https://github.com/Y0rshB3/Vortaq/releases/',
+      'https://github.com/Y0rshB3/Vortaq/pulls',
       'file:///etc/passwd',
       'javascript:alert(1)',
       'not a url',

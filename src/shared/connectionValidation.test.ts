@@ -91,15 +91,15 @@ describe('engine availability', () => {
     expect(engineAvailabilityError({ engine: 'oracle' as EngineId })).toBe(
       'Motor de base de datos desconocido: "oracle".'
     )
-    // PostgreSQL ships a driver (preview) since 0.2.0.
+    // PostgreSQL ships a driver (preview) since 2.0.0.
     expect(engineAvailabilityError({ engine: 'postgresql' })).toBeNull()
     // MariaDB ships the mysql2 driver since 2.0.0 (P5).
     expect(engineAvailabilityError({ engine: 'mariadb' })).toBeNull()
-    // SQLite ships a driver (preview) since 0.2.0: a file is required instead.
+    // SQLite ships a driver (preview) since 2.0.0: a file is required instead.
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
       'SQLite: selecciona el archivo de la base de datos.'
     )
-    // MongoDB ships a driver (preview) since 0.2.0: its own block rules apply.
+    // MongoDB ships a driver (preview) since 2.0.0: its own block rules apply.
     expect(engineAvailabilityError({ engine: 'mongodb' })).toBeNull()
   })
 })

@@ -98,7 +98,7 @@ password).
 {
   "format": "vortaq-backup",
   "formatVersion": 1,
-  "app": { "name": "Vortaq", "version": "0.2.0" },
+  "app": { "name": "Vortaq", "version": "2.0.0" },
   "engine": { "id": "mysql", "flavor": "mysql", "serverVersion": "8.4.3" },
   "source": {
     "connectionName": "Staging",

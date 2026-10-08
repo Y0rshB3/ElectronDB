@@ -1,5 +1,5 @@
 import type { UpdateAsset } from '@shared/types'
-import { UPDATE_REPO } from '../brand'
+import { LEGACY_UPDATE_REPOS, UPDATE_REPO } from '../brand'
 import { formatVersion, parseVersion } from './semver'
 
 /**
@@ -30,11 +30,15 @@ export interface ParsedRelease {
   assets: ReleaseAsset[]
 }
 
-const REPO_PATH = `/${UPDATE_REPO.owner}/${UPDATE_REPO.name}/releases/`.toLowerCase()
+/** /<owner>/<repo>/releases/ of the repository, under its current and earlier names. */
+const REPO_PATHS = [UPDATE_REPO, ...LEGACY_UPDATE_REPOS].map((r) =>
+  `/${r.owner}/${r.name}/releases/`.toLowerCase()
+)
 
 /**
  * True for https://github.com/<owner>/<repo>/releases/... (release pages and
- * asset downloads of this repository). The only URLs main opens in the browser.
+ * asset downloads of this repository, Y0rshB3/Vortaq or its earlier name
+ * Y0rshB3/ElectronDB). The only URLs main opens in the browser.
  */
 export function isAllowedReleaseUrl(raw: unknown): raw is string {
   if (typeof raw !== 'string' || raw.length > 2048) return false
@@ -50,8 +54,9 @@ export function isAllowedReleaseUrl(raw: unknown): raw is string {
     url.port === '' &&
     url.username === '' &&
     url.password === '' &&
-    url.pathname.toLowerCase().startsWith(REPO_PATH) &&
-    url.pathname.length > REPO_PATH.length
+    REPO_PATHS.some(
+      (path) => url.pathname.toLowerCase().startsWith(path) && url.pathname.length > path.length
+    )
   )
 }
 

@@ -1093,7 +1093,7 @@ export interface BackupMeta {
   engine?: EngineId
   engineFlavor?: string
   serverVersion?: string
-  /** .vqb: app that wrote it, e.g. «Vortaq 0.2.0». */
+  /** .vqb: app that wrote it, e.g. «Vortaq 2.0.0». */
   writtenBy?: string
   /** .vqb: source connection name, absent when the user left it out. */
   connectionName?: string | null
