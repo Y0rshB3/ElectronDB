@@ -88,11 +88,13 @@ describe('TourHost + tour store', () => {
     await settle()
     expect(q('[data-test="tour-title"]')!.textContent).toBe('Uno')
     expect(q('[data-test="tour-counter"]')!.textContent).toBe('Paso 1 de 3')
-    expect(q<HTMLButtonElement>('[data-test="tour-prev"]')!.disabled).toBe(true)
+    // No «Atrás» on the first step.
+    expect(q('[data-test="tour-prev"]')).toBeNull()
 
     click('[data-test="tour-next"]')
     await settle()
     expect(q('[data-test="tour-title"]')!.textContent).toBe('Dos')
+    expect(q<HTMLButtonElement>('[data-test="tour-prev"]')!.disabled).toBe(false)
     click('[data-test="tour-prev"]')
     await settle()
     expect(q('[data-test="tour-title"]')!.textContent).toBe('Uno')

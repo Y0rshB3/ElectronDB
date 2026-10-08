@@ -282,7 +282,7 @@ const cardStyle = computed(() => ({
               variant="text"
               size="small"
               prepend-icon="mdi-arrow-left"
-              :disabled="tour.isFirst"
+              v-if="!tour.isFirst"
               data-test="tour-prev"
               @click="tour.prev()"
               >Atrás</v-btn
@@ -304,7 +304,7 @@ const cardStyle = computed(() => ({
             variant="text"
             size="small"
             prepend-icon="mdi-arrow-left"
-            :disabled="tour.isFirst"
+            v-if="!tour.isFirst"
             data-test="tour-prev"
             @click="tour.prev()"
             >Atrás</v-btn
