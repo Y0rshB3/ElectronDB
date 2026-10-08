@@ -94,8 +94,8 @@ export interface WorkerOps {
   query: { args: [sql: string, params: unknown[]]; result: QueryResult }
   /** Several internal statements in one round trip (stops at the first error). */
   batch: { args: [statements: BatchStatement[]]; result: BatchResult }
-  /** VACUUM INTO a new file (refused when the target exists). */
-  vacuumInto: { args: [targetPath: string]; result: { sizeBytes: number } }
+  /** VACUUM [schema] INTO a new file (refused when the target exists); schema defaults to main. */
+  vacuumInto: { args: [targetPath: string, schema?: string]; result: { sizeBytes: number } }
   /** Liveness check used by tests and the smoke run. */
   ping: { args: []; result: { pid: number } }
   close: { args: []; result: null }

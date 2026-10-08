@@ -342,6 +342,83 @@ describe('SQLite driver (integration, real files)', () => {
     expect(tags.primaryKey).toEqual(['k', 'v'])
   })
 
+  it('fills NULL cells with an inferred class, inserts a typed rowid, needs the whole WITHOUT ROWID key', async () => {
+    ok(
+      await exec(
+        "CREATE TABLE loose (a, b BLOB, c TEXT); INSERT INTO loose VALUES (NULL, NULL, 'x')"
+      )
+    )
+    const page = await lite.tableData(id, { schema: 'main', table: 'loose', limit: 10, offset: 0 })
+    expect(page.columns[0].name).toBe('rowid')
+    const rowid = page.rows[0][0]
+    await lite.applyRowChanges(id, 'main', 'loose', [
+      {
+        kind: 'update',
+        key: { rowid },
+        values: { a: '5', b: '0xAB' },
+        storage: { a: 'null', b: 'null' }
+      },
+      { kind: 'insert', values: { rowid: '42', c: 'nuevo' } }
+    ])
+    const [check] = ok(
+      await exec('SELECT rowid, typeof(a), typeof(b), c FROM loose ORDER BY rowid')
+    )
+    expect(check.resultSet?.rows).toEqual([
+      [rowid, 'integer', 'blob', 'x'],
+      [42, 'null', 'null', 'nuevo']
+    ])
+    const [partial] = ok(await exec('SELECT k FROM tag'))
+    const src = resultSource(partial.resultSet!.columns, partial.sql, 'sqlite')
+    const tagStructure = await lite.tableStructure(id, 'main', 'tag')
+    expect(
+      src.ok
+        ? decideEditability(
+            partial.resultSet!.columns,
+            src.source,
+            tagStructure,
+            partial.resultSet!.rows,
+            {
+              aliasMetadata: false,
+              keyFromColumns: true
+            }
+          ).editable
+        : true
+    ).toBe(false)
+  })
+
+  it('copies an attached database (not main) and copies under query_only', async () => {
+    const attId = ctx.connections.save(
+      input(mainPath, {
+        name: 'Copy aux',
+        environment: 'production',
+        sqlite: {
+          ...defaultSqliteOptions(true),
+          filePath: mainPath,
+          readOnly: false,
+          attached: [{ alias: 'aux', filePath: auxPath }]
+        }
+      })
+    ).id
+    ok(
+      await lite.execute(attId, 'CREATE TABLE IF NOT EXISTS aux.only_aux (x)', {
+        sessionKey: 't',
+        confirmProduction: true
+      })
+    )
+    const connection = await manager.connection(attId)
+    const target = join(files, 'aux-copy.db')
+    await (
+      connection as unknown as { vacuumInto(p: string, s: string): Promise<unknown> }
+    ).vacuumInto(target, 'aux')
+    const checkId = ctx.connections.save(input(target, { name: 'Check copy' })).id
+    expect((await lite.tables(checkId, 'main')).map((t) => t.name)).toContain('only_aux')
+    // Guarded connection (query_only on): the main copy works too.
+    const mainCopy = join(files, 'main-copy-guarded.db')
+    expect((await lite.copyFile(attId, mainCopy)).sizeBytes).toBeGreaterThan(0)
+    await manager.close(attId)
+    await manager.close(checkId)
+  })
+
   it('filters with the SQLite WHERE builder and counts', async () => {
     const page = await lite.tableData(id, {
       schema: 'main',
@@ -416,7 +493,7 @@ describe('SQLite driver (integration, real files)', () => {
     ).id
     ok(await lite.execute(attId, 'CREATE TABLE aux.notes (n TEXT)', { sessionKey: 't' }))
     expect((await lite.databases(attId)).map((d) => d.name)).toEqual(['main', 'aux'])
-    expect((await lite.tables(attId, 'aux')).map((t) => t.name)).toEqual(['notes'])
+    expect((await lite.tables(attId, 'aux')).map((t) => t.name)).toContain('notes')
     const [denied] = await lite.execute(attId, `ATTACH '${join(files, 'nope.db')}' AS x`, {
       sessionKey: 't'
     })

@@ -74,6 +74,11 @@ const CORPUS: [string, string[], boolean][] = [
   ['DETACH aux', ['DETACH'], true],
   ['PRAGMA query_only = 0', ['PRAGMA de escritura: query_only'], true],
   ['PRAGMA query_only(0)', ['PRAGMA de escritura: query_only'], true],
+  // A signed value must still read as an assignment (`=-` is two tokens, as in SQLite).
+  ['PRAGMA query_only=-1', ['PRAGMA de escritura: query_only'], true],
+  ['PRAGMA user_version=-1', ['PRAGMA de escritura: user_version'], true],
+  ['PRAGMA cache_size=+2000', ['PRAGMA de escritura: cache_size'], true],
+  ['PRAGMA journal_mode WAL', ['PRAGMA de escritura: journal_mode'], true],
   ['PRAGMA main.foreign_keys = ON', ['PRAGMA de escritura: foreign_keys'], true],
   ["PRAGMA journal_mode = 'wal'", ['PRAGMA de escritura: journal_mode'], true],
   ['PRAGMA user_version = 3', ['PRAGMA de escritura: user_version'], true],

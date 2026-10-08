@@ -261,6 +261,10 @@ export function createSqliteDbHandlers(
       }
     },
     maintenance: async (id, action, options) => {
+      if (
+        !['integrityCheck', 'quickCheck', 'foreignKeyCheck', 'vacuum', 'optimize'].includes(action)
+      )
+        throw new SqliteUserError('Acción de mantenimiento desconocida.', 'E_SQLITE_ACTION')
       if (action === 'vacuum' || action === 'optimize')
         assertProductionWriteConfirmed(
           ctx,

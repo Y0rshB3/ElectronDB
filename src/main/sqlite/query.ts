@@ -219,6 +219,8 @@ export async function executeSqliteScript(
               last.transactionStatus = 'idle'
             }
           }
+          // The tab was closed while this script ran or waited: never leave its transaction.
+          if (key !== NO_TAB) await connection.rollbackIfClosed(key)
           await connection.restoreGuard(lifted)
         }
       }

@@ -121,7 +121,7 @@ export async function replaceSqliteDatabase(
       await mkdir(dir, { recursive: true })
       const path = await uniqueTarget(dir, (deps.now ?? (() => new Date()))(), SAFETY_LABEL, '.db')
       const started = performance.now()
-      const copy = await connection.vacuumInto(path)
+      const copy = await connection.vacuumInto(path, target)
       safety = {
         path,
         sizeBytes: copy.sizeBytes,

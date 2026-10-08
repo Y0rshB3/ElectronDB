@@ -74,7 +74,9 @@ function cellTitle(row: EditableRow, col: number): string {
   if (storage && !isCellChanged(row, col)) parts.push(`Almacenado como ${STORAGE_LABELS[storage]}`)
   const locked = props.columns[col]?.locked
   if (locked && isLocked(row, col))
-    parts.push(locked === 'rowid' ? 'rowid: identifica la fila (no editable)' : `No editable: ${locked}`)
+    parts.push(
+      locked === 'rowid' ? 'rowid: identifica la fila (no editable)' : `No editable: ${locked}`
+    )
   return parts.join(' · ')
 }
 const nullable = (col: number): boolean => props.columnInfo?.[col]?.nullable ?? true

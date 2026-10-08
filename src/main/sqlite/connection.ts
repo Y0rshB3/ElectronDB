@@ -94,6 +94,10 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
   private writableOverride = false
   /** executionId of the statement running now. */
   private runningExecution: string | null = null
+  /** Query tab of the running execution. */
+  private runningKey: string | null = null
+  /** Tabs closed while one of their scripts was still running or queued. */
+  private readonly closedTabs = new Set<string>()
   private readonly cancelledExecutions = new Set<string>()
   /** The process was killed (cancel): the next operation reopens the file first. */
   private needsReopen = false
@@ -239,13 +243,34 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
     key: string,
     executionId?: string
   ): Promise<RunResult> {
-    if (executionId) this.runningExecution = executionId
+    if (executionId) {
+      this.runningExecution = executionId
+      this.runningKey = key
+    }
     try {
       const result = await this.client.call('run', sql, maxRows)
       this.followTransaction(result.inTransaction, key)
       return result
+    } catch (err) {
+      // A failing statement may still have ended the transaction (ON CONFLICT ROLLBACK,
+      // RAISE(ROLLBACK), a full disk): read the real state back.
+      if (!(err instanceof CancelledError)) await this.syncTransaction(key)
+      throw err
     } finally {
-      if (executionId && this.runningExecution === executionId) this.runningExecution = null
+      if (executionId && this.runningExecution === executionId) {
+        this.runningExecution = null
+        this.runningKey = null
+      }
+    }
+  }
+
+  /** Re-reads DatabaseSync.isTransaction after an error (inside `exclusive`). */
+  private async syncTransaction(key: string): Promise<void> {
+    try {
+      const r = await this.client.call('query', 'SELECT 1', [])
+      this.followTransaction(r.inTransaction, key)
+    } catch {
+      /* the worker is gone: the next operation reopens it */
     }
   }
 
@@ -299,6 +324,7 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
       return false
     }
     if (!confirmed) {
+      // Also while a confirmed transaction is open: every unconfirmed script runs guarded.
       if (!this.guardQueryOnly) {
         await this.client.call('query', 'PRAGMA query_only = ON', [])
         this.guardQueryOnly = true
@@ -306,6 +332,7 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
       return false
     }
     await this.client.call('query', 'PRAGMA query_only = OFF', [])
+    this.guardQueryOnly = false
     return true
   }
 
@@ -329,6 +356,7 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
 
   touchTab(key: string): void {
     this.tabs.add(key)
+    this.closedTabs.delete(key)
   }
 
   tabState(key: string): TabSessionState & { transactionElsewhere: boolean } {
@@ -351,22 +379,36 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
           'La transacción abierta pertenece a otra pestaña de consulta: confírmala o deshazla desde allí.',
           'E_SQLITE_TX_OTHER_TAB'
         )
-      const r = await this.client.call('query', command, [])
-      this.followTransaction(r.inTransaction, key)
+      try {
+        const r = await this.client.call('query', command, [])
+        this.followTransaction(r.inTransaction, key)
+      } catch (err) {
+        await this.syncTransaction(key)
+        if (this.txOwner !== null) throw err
+      }
       await this.restoreGuard(false)
     })
   }
 
-  /** Closing a tab rolls back the transaction it owns. */
+  /**
+   * Closing a tab rolls back the transaction it owns. A statement of that tab
+   * still running is cancelled; a script still queued sees the tab closed and
+   * rolls back whatever it opened (see `rollbackIfClosed`).
+   */
   async closeTab(key: string): Promise<void> {
     this.tabs.delete(key)
-    if (this.txOwner !== key) return
-    await this.exclusive(async () => {
-      if (this.txOwner !== key) return
-      const r = await this.client.call('query', 'ROLLBACK', [])
-      this.followTransaction(r.inTransaction, key)
-      await this.restoreGuard(false)
-    })
+    if (key === NO_TAB) return
+    this.closedTabs.add(key)
+    if (this.runningKey === key && this.runningExecution) await this.cancel(this.runningExecution)
+    await this.exclusive(async () => this.rollbackIfClosed(key)).catch(() => undefined)
+  }
+
+  /** Inside `exclusive`: a closed tab never keeps a transaction. */
+  async rollbackIfClosed(key: string): Promise<void> {
+    if (!this.closedTabs.has(key) || this.txOwner !== key) return
+    const r = await this.client.call('query', 'ROLLBACK', [])
+    this.followTransaction(r.inTransaction, key)
+    await this.restoreGuard(false)
   }
 
   /** «Reabrir en modo escritura»: reopens the file read-write for this session. */
@@ -442,11 +484,11 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
     }
   }
 
-  /** Copies the open database to a new file with VACUUM INTO (WAL content included). */
-  async vacuumInto(targetPath: string): Promise<{ sizeBytes: number }> {
+  /** Copies one database (main or an attachment) to a new file with VACUUM INTO (WAL content included). */
+  async vacuumInto(targetPath: string, schema = 'main'): Promise<{ sizeBytes: number }> {
     return this.exclusive(async () => {
       this.assertCanWrite(NO_TAB, 'Copiar el archivo')
-      return this.client.call('vacuumInto', targetPath)
+      return this.client.call('vacuumInto', targetPath, schema)
     })
   }
 

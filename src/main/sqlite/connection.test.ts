@@ -193,6 +193,44 @@ describe('shared transaction across query tabs', () => {
     expect(r.resultSet?.rows).toEqual([[0]])
   })
 
+  it('a tab closed while its script runs never keeps the transaction', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => (release = r))
+    const base = inProcessSpawner()
+    // Hold the BEGIN answer until the tab has been closed.
+    const spawner: ProcessSpawner = () => {
+      const p = base()
+      const post = p.postMessage.bind(p)
+      p.postMessage = (m) => {
+        if (m.op === 'run' && String(m.args[0]).startsWith('BEGIN')) void gate.then(() => post(m))
+        else post(m)
+      }
+      return p
+    }
+    const c = await connect(config(seed('race.db', 'CREATE TABLE t (x)')), { spawner })
+    const pending = run(c, 'BEGIN; INSERT INTO t VALUES (1)', 'tabA')
+    await new Promise((r) => setTimeout(r, 20))
+    const closing = c.closeTab('tabA')
+    release()
+    await pending
+    await closing
+    expect(c.transactionOwner).toBeNull()
+    const [r] = await run(c, 'SELECT count(*) FROM t', 'tabB')
+    expect(r.resultSet?.rows).toEqual([[0]])
+  })
+
+  it('a failing statement that rolled back the transaction frees the owner', async () => {
+    const c = await connect(
+      config(seed('implicit.db', 'CREATE TABLE u (a UNIQUE ON CONFLICT ROLLBACK)'))
+    )
+    await run(c, 'BEGIN; INSERT INTO u VALUES (1)', 'tabA')
+    expect(c.transactionOwner).toBe('tabA')
+    const [dup] = await run(c, 'INSERT INTO u VALUES (1)', 'tabA')
+    expect(dup.error).toBeTruthy()
+    expect(dup.transactionStatus).toBe('idle')
+    expect(c.transactionOwner).toBeNull()
+  })
+
   it('never leaves a transaction open for a run without a tab', async () => {
     const c = await connect(config(seed('keyless.db', 'CREATE TABLE t (x)')))
     const results = await executeSqliteScript(c, 'BEGIN; INSERT INTO t VALUES (1)', {})
@@ -212,11 +250,18 @@ describe('guarded connections run with query_only', () => {
     const [ok] = await run(c, 'INSERT INTO t VALUES (1)', 'tabA', { confirmProduction: true })
     expect(ok.error).toBeNull()
     expect(await qo()).toBe(1)
-    // A confirmed transaction keeps writes possible until it ends.
+    // Inside a confirmed transaction, unconfirmed scripts still run guarded…
     await run(c, 'BEGIN; INSERT INTO t VALUES (2)', 'tabA', { confirmProduction: true })
-    expect(await qo()).toBe(0)
+    expect(await qo()).toBe(1)
+    const [inTx] = await run(c, 'INSERT INTO t VALUES (3)')
+    expect(inTx.error).toMatch(/readonly|solo lectura/i)
+    // …and the owner's next confirmed write works.
+    const [again] = await run(c, 'INSERT INTO t VALUES (4)', 'tabA', { confirmProduction: true })
+    expect(again.error).toBeNull()
     await c.endTransaction('tabA', 'COMMIT')
     expect(await qo()).toBe(1)
+    const [count] = await run(c, 'SELECT count(*) FROM t')
+    expect(count.resultSet?.rows).toEqual([[3]])
   })
 })
 

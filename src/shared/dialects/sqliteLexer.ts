@@ -38,6 +38,8 @@ export interface SqliteToken {
 }
 
 const OP_CHARS = new Set('+-*/<>=~!&|%^'.split(''))
+/** Two-character operators of SQLite's tokenizer. */
+const MULTI_OPS = new Set(['||', '<=', '>=', '==', '!=', '<>', '<<', '>>', '->'])
 
 function isWordStart(c: number): boolean {
   return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c >= 0x80
@@ -186,16 +188,13 @@ export function tokenizeSqlite(src: string): SqliteToken[] {
       continue
     }
     if (OP_CHARS.has(ch)) {
-      let j = i
-      while (
-        j < n &&
-        OP_CHARS.has(src[j]) &&
-        !(src[j] === '-' && src[j + 1] === '-') &&
-        !(src[j] === '/' && src[j + 1] === '*')
-      )
-        j++
-      push('op', i, j, src.slice(i, j))
-      i = j
+      // Only SQLite's own multi-character operators (tokenize.c); anything else is one
+      // character, so `x=-1` is `=` then `-` (a run like `=-` would hide an assignment).
+      const three = src.slice(i, i + 3)
+      const two = src.slice(i, i + 2)
+      const len = three === '->>' ? 3 : MULTI_OPS.has(two) ? 2 : 1
+      push('op', i, i + len, src.slice(i, i + len))
+      i += len
       continue
     }
     push('punct', i, i + 1, ch)

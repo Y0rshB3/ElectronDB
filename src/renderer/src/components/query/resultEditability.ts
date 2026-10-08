@@ -111,7 +111,7 @@ export function decideEditability(
   source: ResultSource,
   structure:
     | (Pick<TableStructure, 'indexes' | 'tableType'> &
-        Partial<Pick<TableStructure, 'columns' | 'kind'>>)
+        Partial<Pick<TableStructure, 'columns' | 'kind' | 'options'>>)
     | null,
   rows: CellValue[][] = [],
   /**
@@ -157,8 +157,13 @@ export function decideEditability(
     seen.add(key)
   }
 
+  // SQLite: the rowid, or the whole key of a WITHOUT ROWID table (its declared key).
+  const marked = columns.filter((c) => c.primaryKey).map((c) => c.sourceName!)
+  const withoutRowid = structure.options?.withoutRowid === true
   const pk = options.keyFromColumns
-    ? columns.filter((c) => c.primaryKey).map((c) => c.sourceName!)
+    ? withoutRowid
+      ? primaryKeyOf(structure)
+      : marked
     : primaryKeyOf(structure)
   if (!pk.length) return { editable: false, reason: 'la tabla no tiene clave primaria', ...where }
 

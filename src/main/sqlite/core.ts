@@ -367,7 +367,7 @@ export class SqliteCore {
   }
 
   /** VACUUM INTO a new file: a consistent copy, WAL content included. */
-  vacuumInto(targetPath: string): { sizeBytes: number } {
+  vacuumInto(targetPath: string, schema = 'main'): { sizeBytes: number } {
     if (!targetPath || !isAbsolute(targetPath))
       throw new SqliteCoreError('Elige dónde guardar la copia.', 'E_SQLITE_PATH')
     if (existsSync(targetPath))
@@ -381,12 +381,18 @@ export class SqliteCore {
         'Hay una transacción abierta: confírmala o deshazla antes de copiar el archivo.',
         'E_SQLITE_IN_TRANSACTION'
       )
-    // VACUUM INTO attaches its target internally: let it past the ATTACH check.
+    // VACUUM INTO attaches its target internally: let it past the ATTACH check. It never
+    // changes the source, but SQLite refuses it under query_only: lift that for the copy.
+    const [{ q }] = db.prepare('SELECT query_only AS q FROM pragma_query_only').all() as {
+      q: number
+    }[]
+    if (q) db.exec('PRAGMA query_only = OFF')
     this.internalAttach = true
     try {
-      db.prepare('VACUUM INTO ?').run(targetPath)
+      db.prepare(`VACUUM "${schema.replace(/"/g, '""')}" INTO ?`).run(targetPath)
     } finally {
       this.internalAttach = false
+      if (q) db.exec('PRAGMA query_only = ON')
     }
     return { sizeBytes: statSync(targetPath).size }
   }

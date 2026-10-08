@@ -107,7 +107,14 @@ const base = {
   savePassword: false,
   customDatabases: [],
   initialQueries: '',
-  ssh: { enabled: false, host: '', port: 22, username: '', authType: 'password', savePassword: false },
+  ssh: {
+    enabled: false,
+    host: '',
+    port: 22,
+    username: '',
+    authType: 'password',
+    savePassword: false
+  },
   ssl: { enabled: false, verifyServer: false },
   backupDir: join(PROFILE, 'backups'),
   extraBackupDirs: [],

@@ -285,7 +285,9 @@ function pragmaParts(tokens: SqliteToken[]): PragmaParts | null {
     if (name === null) return null
   }
   const next = tokens[i + 1]
-  return { name, assigns: isPunct(next, '='), call: isPunct(next, '(') }
+  const call = isPunct(next, '(')
+  // Anything after the name other than `(…)` is an argument: treat it as an assignment.
+  return { name, assigns: !!next && !call, call }
 }
 
 function pragmaWrites(tokens: SqliteToken[]): string | null {

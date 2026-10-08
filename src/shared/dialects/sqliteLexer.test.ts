@@ -37,7 +37,19 @@ describe('SQLite lexer', () => {
       ['word', 'b'],
       ['comment', '/* c /* d */'],
       ['word', 'e'],
-      ['op', '*/']
+      ['op', '*'],
+      ['op', '/']
+    ])
+    // Operators follow SQLite's tokenizer: `=-1` is `=` and `-`, `->>` and `||` stay whole.
+    expect(kinds("x=-1 || a->>'$'").map((t) => t[1])).toEqual([
+      'x',
+      '=',
+      '-',
+      '1',
+      '||',
+      'a',
+      '->>',
+      "'$'"
     ])
     expect(kinds('a /* open')).toEqual([
       ['word', 'a'],

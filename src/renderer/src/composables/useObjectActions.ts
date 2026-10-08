@@ -694,7 +694,8 @@ export function useObjectActions() {
 
   /* ---------- SQLite (preview) ---------- */
 
-  const isLite = (connectionId: string): boolean => connections.get(connectionId)?.engine === 'sqlite'
+  const isLite = (connectionId: string): boolean =>
+    connections.get(connectionId)?.engine === 'sqlite'
 
   async function dropLiteObject(node: TreeNode): Promise<void> {
     const type = sqliteObjectTypeOf(node)
@@ -755,7 +756,10 @@ export function useObjectActions() {
     else notify.success(`Tabla ${node.name} vaciada`)
   }
 
-  async function liteMaintenance(connectionId: string, action: SqliteMaintenanceAction): Promise<void> {
+  async function liteMaintenance(
+    connectionId: string,
+    action: SqliteMaintenanceAction
+  ): Promise<void> {
     const writes = action === 'vacuum' || action === 'optimize'
     if (writes) {
       const ok = await confirmDestructive({

@@ -45,9 +45,11 @@ const HEX = /^0x([0-9a-f]{2})*$/i
 export function bindCell(
   value: CellValue,
   column: Pick<ColumnInfo, 'columnType'> | undefined,
-  storage?: StorageClass
+  loaded?: StorageClass
 ): unknown {
   if (value === null) return null
+  // A cell that was NULL has no class to keep: infer it like a new cell.
+  const storage = loaded === 'null' ? undefined : loaded
   if (typeof value === 'boolean') return value ? 1 : 0
   if (typeof value === 'number')
     return Number.isInteger(value) && storage !== 'real' ? { $int: value } : value
@@ -114,17 +116,31 @@ export function buildSqliteRowStatement(
       .join(' AND ')
 
   if (change.kind === 'insert') {
-    // The rowid column the grid shows is not a table column: an empty one is left out.
+    // The rowid column the grid shows is not a table column: a typed rowid is inserted as
+    // `rowid`, an empty one is left out (SQLite assigns it).
     const rowidName = identity.kind === 'rowid' && identity.column === null ? identity.alias : null
+    const rowidKey = rowidName
+      ? Object.keys(change.values).find((n) => n.toLowerCase() === rowidName)
+      : undefined
     const names = Object.keys(change.values).filter((n) => {
-      if (rowidName && n.toLowerCase() === rowidName) return false
+      if (n === rowidKey) return false
       const c = byName.get(n.toLowerCase())
       return !(change.values[n] === null && c?.autoIncrement)
     })
-    if (!names.length) return { sql: `INSERT INTO ${target} DEFAULT VALUES`, params }
+    const cols = names.map((n) => quoteIdent(column(n).name, true))
     const values = names.map((n) => bind(n, change.values[n]))
+    const rowid = rowidKey !== undefined ? change.values[rowidKey] : null
+    if (rowid !== null && rowid !== '') {
+      const text = String(rowid).trim()
+      if (!/^[+-]?\d+$/.test(text))
+        throw new SqliteUserError('El rowid de una fila nueva debe ser un número entero')
+      cols.unshift(rowidName!)
+      params.unshift({ $int: text })
+      values.unshift('?')
+    }
+    if (!cols.length) return { sql: `INSERT INTO ${target} DEFAULT VALUES`, params }
     return {
-      sql: `INSERT INTO ${target} (${names.map((n) => quoteIdent(column(n).name, true)).join(', ')}) VALUES (${values.join(', ')})`,
+      sql: `INSERT INTO ${target} (${cols.join(', ')}) VALUES (${values.join(', ')})`,
       params
     }
   }
