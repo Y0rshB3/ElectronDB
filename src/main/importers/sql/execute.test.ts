@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SQL_IMPORT_CANCELLED, type SqlDumpImportOptions } from '@shared/importers'
 import type { ProgressEvent } from '@shared/types'
-import { importSqlDump, IMPORT_PRODUCTION_MESSAGE } from './execute'
+import { importSqlDump, IMPORT_PRODUCTION_MESSAGE, safetyFormatOf } from './execute'
 import { testDeps, type DumpSession, type TestDeps } from './testing'
 
 const FIXTURES = join(__dirname, '../../../../tests/fixtures/importers/sql')
@@ -291,6 +291,18 @@ describe('importSqlDump', () => {
     expect(deps.timeline[dropAt + 1]).toBe(
       'CREATE DATABASE `destino` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci'
     )
+  })
+
+  it('takes the safety copy in the format chosen in Ajustes', async () => {
+    expect(safetyFormatOf(undefined)).toBe('vqb')
+    expect(safetyFormatOf('sql')).toBe('vqb')
+    expect(safetyFormatOf('nb3')).toBe('nb3')
+    for (const format of ['vqb', 'nb3'] as const) {
+      const deps = { ...testDeps(), safetyFormat: () => format }
+      configure(deps, (s) => s.schemas.add('destino'))
+      await run(deps, { replaceSchema: true })
+      expect(deps.backupCalls[0].format).toBe(format === 'vqb' ? 'vqb' : undefined)
+    }
   })
 
   it('touches nothing when the safety copy fails', async () => {

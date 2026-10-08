@@ -351,6 +351,14 @@ describeMysql('SQL dump import (integration)', ({ url, is57 }) => {
     expect(result.errors).toEqual([])
     expect(result.safetyBackupPath).toMatch(/previo-importacion\.nb3$/)
     expect(await snapshot(session, DST)).toEqual(expected)
+    // With .vqb chosen in Ajustes the safety copy is a .vqb.
+    const again = await importSqlDump(
+      { ...deps, safetyFormat: () => 'vqb' },
+      options({ safetyBackup: true })
+    )
+    expect(again.errors).toEqual([])
+    expect(again.safetyBackupPath).toMatch(/previo-importacion\.vqb$/)
+    expect(await snapshot(session, DST)).toEqual(expected)
   }, 180_000)
 
   it('imports a folder of dumps as a package, one database per file', async () => {

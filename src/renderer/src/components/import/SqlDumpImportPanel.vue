@@ -39,6 +39,10 @@ const emit = defineEmits<{ back: []; close: []; busy: [value: boolean] }>()
 
 const connections = useConnectionsStore()
 const settings = useSettingsStore()
+/** Safety copies follow Ajustes › Copias (a .sql default means .vqb, like main). */
+const safetyExt = computed(() =>
+  settings.settings.defaultBackupFormat === 'nb3' ? '.nb3' : '.vqb'
+)
 const tree = useTreeStore()
 const notify = useNotify()
 const { ask } = useConfirm()
@@ -141,7 +145,7 @@ async function run(): Promise<void> {
       message: [
         `«${schema}» se borrará en «${target.value.name}» y se creará de nuevo con el contenido de ${inspection.value.fileName}.`,
         safetyBackup.value
-          ? 'Antes se guarda una copia previa (.nb3, etiqueta «previo-importacion»).'
+          ? `Antes se guarda una copia previa (${safetyExt.value}, etiqueta «previo-importacion»).`
           : 'SIN copia previa: los datos actuales se perderán.'
       ].join('\n\n'),
       confirmText: 'Vaciar e importar',
@@ -339,7 +343,7 @@ defineExpose({ pick })
         <v-checkbox
           v-if="mode === 'intoSchema' && replaceSchema"
           v-model="safetyBackup"
-          label="Guardar antes una copia previa (.nb3)"
+          :label="`Guardar antes una copia previa (${safetyExt})`"
           density="compact"
           hide-details
           class="ml-6"

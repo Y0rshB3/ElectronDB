@@ -585,8 +585,9 @@ rutinas, triggers y eventos crea. Eliges la conexión de destino (por defecto la
 - **Importar todo en `<esquema>`**: todo va al esquema que elijas (por defecto, el del archivo o su nombre). Los
   `CREATE DATABASE` del archivo se omiten y sus `USE` apuntan al destino; si el archivo tiene varias bases de
   datos, el asistente lo avisa (los nombres calificados `base.tabla` no se cambian). Con **Vaciar … antes de
-  importar** el esquema se borra y se crea de nuevo, con una **copia previa** `.nb3` (etiqueta
-  `previo-importacion`) si ya existía.
+  importar** el esquema se borra y se crea de nuevo, con una **copia previa** (etiqueta
+  `previo-importacion`) si ya existía, en el formato elegido en **Ajustes › Copias** (`.vqb` por defecto;
+  `.nb3` si lo eliges).
 
 El archivo se lee por partes (no se carga entero en memoria, sirve para volcados de varios GB) y se ejecuta
 sentencia a sentencia en una sola sesión, respetando `DELIMITER`, comentarios, comillas y los

@@ -21,6 +21,7 @@ import {
   importSqlFolder,
   inspectSqlDump,
   previewSqlFolder,
+  safetyFormatOf,
   type SqlImportDeps
 } from '../importers/sql/index'
 import { assertProductionWriteConfirmed } from './productionGuard'
@@ -61,7 +62,9 @@ export function registerImportersHandlers(ctx: AppContext): void {
         return {
           connections: ctx.connections,
           sessions,
-          backups: createBackupService(ctx, sessions)
+          backups: createBackupService(ctx, sessions),
+          // Safety copies follow the format chosen in Ajustes › Copias (read at each import).
+          safetyFormat: () => safetyFormatOf(ctx.settings.get().defaultBackupFormat)
         }
       }
     )

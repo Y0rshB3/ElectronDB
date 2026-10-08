@@ -39,8 +39,18 @@ import { dumpFileInfo, readDumpChunks } from './reader'
 export interface SqlImportDeps {
   connections: { get(id: string): ConnectionConfig | null }
   sessions: SessionFactory
-  /** Safety copies (.nb3) before a database is replaced. */
+  /** Safety copies before a database is replaced. */
   backups: Pick<BackupService, 'create'>
+  /**
+   * Format of those safety copies: the one chosen in Ajustes (defaultBackupFormat;
+   * `.sql` is not restorable by «Deshacer», so it means `.vqb`). Absent: `.nb3`.
+   */
+  safetyFormat?(): 'vqb' | 'nb3'
+}
+
+/** Safety-copy format for a «Nueva copia» default ('sql' and absent mean .vqb, the default). */
+export function safetyFormatOf(defaultFormat: string | undefined): 'vqb' | 'nb3' {
+  return defaultFormat === 'nb3' ? 'nb3' : 'vqb'
 }
 
 export const IMPORT_SAFETY_LABEL = 'previo-importacion'
@@ -188,7 +198,8 @@ export async function importSqlDump(
           connectionId: options.connectionId,
           schema: target,
           includeData: true,
-          label: IMPORT_SAFETY_LABEL
+          label: IMPORT_SAFETY_LABEL,
+          ...(deps.safetyFormat?.() === 'vqb' ? { format: 'vqb' as const } : {})
         }
         let copy
         try {

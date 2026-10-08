@@ -28,6 +28,10 @@ const emit = defineEmits<{ back: []; close: []; busy: [value: boolean] }>()
 
 const connections = useConnectionsStore()
 const settings = useSettingsStore()
+/** Safety copies follow Ajustes › Copias (a .sql default means .vqb, like main). */
+const safetyExt = computed(() =>
+  settings.settings.defaultBackupFormat === 'nb3' ? '.nb3' : '.vqb'
+)
 const tree = useTreeStore()
 const notify = useNotify()
 const { ask } = useConfirm()
@@ -128,7 +132,7 @@ async function run(): Promise<void> {
           .map((r) => r.schema.trim())
           .join(', ')}.`,
         safetyBackup.value
-          ? 'Antes se guarda una copia previa (.nb3) de cada una.'
+          ? `Antes se guarda una copia previa (${safetyExt.value}) de cada una.`
           : 'SIN copia previa: los datos actuales se perderán.'
       ].join('\n\n'),
       confirmText: 'Reemplazar e importar',
@@ -268,7 +272,7 @@ defineExpose({ pick })
           density="compact"
           hide-details
           class="ml-6"
-          label="Guardar antes una copia previa (.nb3) de cada una"
+          :label="`Guardar antes una copia previa (${safetyExt}) de cada una`"
         />
         <v-checkbox
           v-model="continueOnError"
