@@ -421,8 +421,9 @@ describe('restore error hints (5.7 staging -> 8.x local)', () => {
       errno: 1418
     }
     const text = describeRestoreError(err)
+    // The Spanish hint first, then the marked server text and its code.
     expect(text).toMatch(
-      /^Mensaje del servidor: This function has none of DETERMINISTIC.*\(ER_BINLOG_UNSAFE_ROUTINE 1418\)\. Pista: /
+      /^Pista: el servidor de destino tiene el binlog activado.* Mensaje del servidor: This function has none of DETERMINISTIC.*\(ER_BINLOG_UNSAFE_ROUTINE 1418\)$/
     )
     expect(text).toContain('SET GLOBAL log_bin_trust_function_creators = 1')
     expect(restoreErrorHint({ message: 'x', errno: 1273 })).toMatch(/utf8mb4_0900_ai_ci/)

@@ -558,7 +558,7 @@ describe.skipIf(!url84 || !url57)('rollback of a run: MySQL 5.7 -> 8.4 (integrat
       /restaura la copia previa \d{14}-previo-rollback\.nb3 \(Copias de seguridad › Local 8\.4 › rb_c\)/
     )
     const log = readFileSync(run.logPath, 'utf8')
-    expect(log).toMatch(/Función f_nd \.+ +ERROR: This function has none of DETERMINISTIC/)
+    expect(log).toMatch(/Función f_nd \.+ +ERROR: Pista: el servidor de destino tiene el binlog activado.*Mensaje del servidor: This function has none of DETERMINISTIC/)
     expect(log).toMatch(/ {4}rb_c en Local 8\.4: \d{14}-previo-rollback\.nb3/)
   }, 180_000)
 })

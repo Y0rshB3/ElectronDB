@@ -1,6 +1,10 @@
 import { performance } from 'node:perf_hooks'
 import type { ConnectionConfig, RestoreOptions, RestoreResult } from '@shared/types'
-import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
+import {
+  CAPABILITY_MESSAGES,
+  requireConnectionCapability,
+  SERVER_MESSAGE_LABEL
+} from '../db/errors'
 import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
@@ -60,11 +64,16 @@ export function restoreErrorHint(err: unknown): string | null {
   }
 }
 
-/** describeError plus the restore hint, if any. */
+/**
+ * describeError, with the restore hint (when there is one) first, in place of
+ * the generic explanation: "Pista: …. Mensaje del servidor: … (CODE)".
+ */
 export function describeRestoreError(err: unknown): string {
   const message = describeError(err)
   const hint = restoreErrorHint(err)
-  return hint ? `${message}. ${hint}` : message
+  if (!hint) return message
+  const marked = message.indexOf(`${SERVER_MESSAGE_LABEL}: `)
+  return `${hint} ${marked >= 0 ? message.slice(marked) : message}`
 }
 
 /** `AUTO_INCREMENT=N` table option of SHOW CREATE TABLE (after ENGINE, or right after the column list). */
