@@ -1009,6 +1009,28 @@ const STEPS: Step[] = [
       close?.click()`
   },
   {
+    // «Qué ve el asistente»: only the selected database or the whole connection.
+    name: '20b2-ai-scope-menu',
+    script: `
+      await H.click('[data-test="ai-scope"]', 5000)
+      await H.waitFor('[data-test="ai-scope-connection"]', 5000)
+      await H.sleep(400)`,
+    cleanup: `
+      document.querySelector('[data-test="ai-scope-connection"]')?.click()
+      await H.sleep(300)`
+  },
+  {
+    name: '20b3-ai-context-whole-connection',
+    script: `
+      await H.click('[data-test="ai-context"]', 5000)
+      await H.until(() => /Conexión completa/.test(H.$('[data-test="ai-context-text"]')?.textContent || ''), 15000)
+      await H.sleep(500)`,
+    cleanup: `
+      const close = [...document.querySelectorAll('[data-test="ai-context-dialog"] button')].find((b) => /Cerrar/.test(b.textContent))
+      close?.click()
+      S.ai.scope = 'database'`
+  },
+  {
     name: '20c-ai-generate-sql',
     script: `
       await H.click('[data-test="ai-generate"]', 5000)
@@ -1303,6 +1325,71 @@ const ENGINE_STEPS: Step[] = [
       await H.settle(S, 2000)`
   },
   {
+    // Partitioned table with its partitions (and a sub-partitioned one) nested in the tree.
+    name: '40f-pg-partitions',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.tree.expand(S.tree.parse('c:${PG_ID}'))
+      await S.tree.expand(S.tree.parse('d:${PG_ID}:${PG_DB}'))
+      S.tree.setExpanded('s:${PG_ID}:tienda:${PG_DB}', true)
+      S.tree.setExpanded('g:${PG_ID}:tienda:functions:${PG_DB}', false)
+      S.tree.setExpanded('g:${PG_ID}:tienda:materializedViews:${PG_DB}', false)
+      await S.tree.loadGroup('${PG_ID}', 'tienda', 'tables', true, '${PG_DB}')
+      await S.tree.expand(S.tree.parse('g:${PG_ID}:tienda:tables:${PG_DB}'))
+      S.tree.setExpanded('o:${PG_ID}:tienda:tables:ventas:${PG_DB}', true)
+      S.tree.setExpanded('o:${PG_ID}:tienda:tables:ventas_2026:${PG_DB}', true)
+      S.tree.select('o:${PG_ID}:tienda:tables:ventas_2026:${PG_DB}')
+      S.workspace.openTableData('${PG_ID}', 'tienda', 'ventas', '${PG_DB}')
+      await H.settle(S, 1500)`
+  },
+  {
+    // «Cerrar base de datos» on an open database (not the initial one).
+    name: '40g-pg-close-database',
+    script: `
+      await S.tree.expand(S.tree.parse('d:${PG_ID}:tienda_archivo'))
+      await H.settle(S, 600)
+      const row = document.querySelector('[data-node-id="d:${PG_ID}:tienda_archivo"] .tree-node__row')
+      if (!row) throw new Error('database node not rendered')
+      const r = row.getBoundingClientRect()
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 120, clientY: r.top + 14 }))
+      await H.until(() => [...document.querySelectorAll('.v-overlay--active .v-list-item')].some((i) => /Cerrar base de datos/.test(i.textContent)), 5000)
+      await H.sleep(500)`,
+    cleanup: `
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await H.sleep(200)
+      await S.tree.closeDatabase('${PG_ID}', 'tienda_archivo')`
+  },
+  {
+    // AI scope on PostgreSQL: «Toda la conexión» means every schema of the tab's database.
+    name: '40h-pg-ai-scope',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.workspace.openQuery('${PG_ID}', 'tienda', { sql: 'SELECT * FROM ventas;', name: 'Ventas' }, '${PG_DB}')
+      await H.sleep(900)
+      S.ui.toggleAiPanel(true)
+      await S.ai.loadProviders()
+      S.ai.scope = 'connection'
+      await H.waitFor('[data-test="ai-panel"]', 5000)
+      await H.click('[data-test="ai-scope"]', 5000)
+      await H.waitFor('[data-test="ai-scope-connection"]', 5000)
+      await H.sleep(500)`,
+    cleanup: `
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await H.sleep(200)`
+  },
+  {
+    name: '40i-pg-ai-context',
+    script: `
+      await H.click('[data-test="ai-context"]', 5000)
+      await H.until(() => /todos sus esquemas/.test(H.$('[data-test="ai-context-text"]')?.textContent || ''), 15000)
+      await H.sleep(500)`,
+    cleanup: `
+      const close = [...document.querySelectorAll('[data-test="ai-context-dialog"] button')].find((b) => /Cerrar/.test(b.textContent))
+      close?.click()
+      S.ai.scope = 'database'
+      S.ui.toggleAiPanel(false)`
+  },
+  {
     name: '41a-mariadb-versioned-table',
     script: `
       await S.tree.expand(S.tree.parse('c:${MARIA_ID}'))
@@ -1313,6 +1400,64 @@ const ENGINE_STEPS: Step[] = [
       S.workspace.openTableData('${MARIA_ID}', 'shots_maria', 'precios')
       await H.waitFor('.v-window-item--active table tbody tr, table tbody tr', 15000).catch(() => null)
       await H.settle(S, 1600)`
+  },
+  {
+    name: '41b-mariadb-connection-dialog',
+    script: `
+      S.ui.openConnectionDialog(null, 'mariadb')
+      await H.waitFor('[data-test="conn-engine-mariadb"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    // Sequences group (MariaDB engine) in the tree and the objects list.
+    name: '41c-mariadb-tree-sequences',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.ui.toggleInfoPanel(true)
+      await S.tree.expand(S.tree.parse('c:${MARIA_ID}'))
+      S.tree.setExpanded('s:${MARIA_ID}:shots_maria', true)
+      await S.tree.expand(S.tree.parse('g:${MARIA_ID}:shots_maria:tables'))
+      await S.tree.expand(S.tree.parse('g:${MARIA_ID}:shots_maria:sequences'))
+      S.tree.select('g:${MARIA_ID}:shots_maria:sequences')
+      S.workspace.showObjects()
+      await H.settle(S, 1200)`
+  },
+  {
+    // Designer: the MariaDB types (uuid, json, inet6, inet4) and the type list filtered to INET.
+    name: '41d-mariadb-designer-types',
+    script: `
+      S.workspace.openTableDesigner('${MARIA_ID}', 'shots_maria', 'catalogo')
+      await H.settle(S, 1500)
+      const combo = document.querySelectorAll('.designer-combo input')[4]
+      if (!combo) throw new Error('type combobox not found')
+      combo.closest('.v-field')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      combo.focus()
+      combo.click()
+      // The list starts at the top: scroll to json, uuid, inet4, inet6.
+      const list = await H.waitFor('.v-overlay--active .v-list', 5000)
+      for (let i = 0; i < 10 && ![...list.querySelectorAll('.v-list-item')].some((x) => /inet6/.test(x.textContent)); i++) {
+        list.scrollTop += 240
+        await H.sleep(120)
+      }
+      await H.until(() => [...document.querySelectorAll('.v-overlay--active .v-list-item')].some((i) => /inet6/.test(i.textContent)), 5000)
+      await H.sleep(500)`,
+    cleanup: `
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await H.sleep(200)`
+  },
+  {
+    // Designer «Opciones» of a system-versioned table.
+    name: '41e-mariadb-designer-versioning',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable && t.kind === 'tableDesigner') S.tabs.close(t.id)
+      S.workspace.openTableDesigner('${MARIA_ID}', 'shots_maria', 'precios')
+      await H.settle(S, 1500)
+      const tab = [...document.querySelectorAll('.v-tab')].find((t) => /Opciones/.test(t.textContent))
+      if (!tab) throw new Error('Opciones tab not found')
+      tab.click()
+      await H.waitFor('[data-test="mariadb-system-versioning"]', 5000)
+      await H.sleep(600)`
   }
 ]
 STEPS.push(...ENGINE_STEPS)

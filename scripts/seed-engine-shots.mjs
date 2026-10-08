@@ -6,7 +6,7 @@
  *   node scripts/seed-engine-shots.mjs
  *   npm run build
  *   VORTAQ_USER_DATA=$TMPDIR/vortaq-engine-shots/profile VORTAQ_PLAIN_SECRETS=1 \
- *   VORTAQ_SCREENSHOTS=$TMPDIR/vortaq-engine-shots VORTAQ_SHOTS_ONLY=40,41 npx electron .
+ *   VORTAQ_AI_FIXTURE=1 VORTAQ_SCREENSHOTS=$TMPDIR/vortaq-engine-shots VORTAQ_SHOTS_ONLY=40,41 npx electron .
  *
  * Env: VORTAQ_SHOTS_ENGINE_PROFILE (scratch profile, wiped; must end in /profile),
  * VORTAQ_TEST_PG_URL, VORTAQ_TEST_MARIADB_URL (default: the compose containers).
@@ -93,7 +93,22 @@ await client.query(`
   CREATE FUNCTION tienda.total_cliente(cliente integer) RETURNS numeric LANGUAGE sql STABLE AS
     $$ SELECT coalesce(sum(total), 0) FROM tienda.pedidos WHERE cliente_id = cliente $$;
   CREATE SEQUENCE tienda.facturas START 1000;
+  CREATE TABLE tienda.ventas (id bigint, fecha date NOT NULL, zona text NOT NULL, importe numeric(10,2))
+    PARTITION BY RANGE (fecha);
+  CREATE TABLE tienda.ventas_2025 PARTITION OF tienda.ventas
+    FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+  CREATE TABLE tienda.ventas_2026 PARTITION OF tienda.ventas
+    FOR VALUES FROM ('2026-01-01') TO ('2027-01-01') PARTITION BY LIST (zona);
+  CREATE TABLE tienda.ventas_2026_norte PARTITION OF tienda.ventas_2026 FOR VALUES IN ('norte');
+  CREATE TABLE tienda.ventas_2026_sur PARTITION OF tienda.ventas_2026 FOR VALUES IN ('sur');
+  CREATE TABLE tienda.ventas_otras PARTITION OF tienda.ventas DEFAULT;
+  INSERT INTO tienda.ventas VALUES
+    (1, '2025-11-03', 'norte', 310.00), (2, '2026-01-15', 'norte', 120.50),
+    (3, '2026-02-02', 'sur', 89.90), (4, '2026-03-21', 'sur', 1450.00), (5, '2027-05-01', 'este', 42.00);
 `)
+// A second database for «Cerrar base de datos» (CREATE DATABASE cannot run in a transaction).
+await client.query('DROP DATABASE IF EXISTS tienda_archivo')
+await client.query('CREATE DATABASE tienda_archivo')
 await client.end()
 
 const maria = await mysql.createConnection({
@@ -117,6 +132,14 @@ await maria.query(`
   UPDATE precios SET importe = 1.30 WHERE id = 1;
   CREATE TABLE clientes (id INT AUTO_INCREMENT PRIMARY KEY, nombre VARCHAR(40));
   CREATE SEQUENCE seq_facturas START WITH 500;
+  CREATE SEQUENCE seq_tickets START WITH 1 INCREMENT BY 10 CYCLE;
+  CREATE TABLE catalogo (
+    id UUID NOT NULL DEFAULT uuid() PRIMARY KEY,
+    nombre VARCHAR(60) NOT NULL,
+    ficha JSON NULL,
+    servidor INET6 NULL,
+    red INET4 NULL
+  );
 `)
 await maria.end()
 
@@ -169,7 +192,7 @@ const connections = [
     name: 'MariaDB Local',
     color: '#a78bfa',
     environment: 'local',
-    engine: 'mysql',
+    engine: 'mariadb',
     host: MARIA_URL.hostname,
     port: Number(MARIA_URL.port),
     username: decodeURIComponent(MARIA_URL.username),
@@ -185,8 +208,30 @@ write('credentials.json', {
   codec: 'plain',
   items: {
     'mysql:shot-pg': b64(decodeURIComponent(PG_URL.password)),
-    'mysql:shot-maria': b64(decodeURIComponent(MARIA_URL.password))
+    'mysql:shot-maria': b64(decodeURIComponent(MARIA_URL.password)),
+    // Fake key for the AI screens (answered by VORTAQ_AI_FIXTURE, never sent anywhere).
+    'ai:shot-ai-claude': b64('sk-ant-fixture-not-a-real-key')
   }
 })
-write('settings.json', { previewEngines: true, theme: 'dark', checkUpdatesOnStartup: false })
+write('settings.json', {
+  previewEngines: true,
+  theme: 'dark',
+  checkUpdatesOnStartup: false,
+  aiEnabled: true,
+  aiDefaultProviderId: 'shot-ai-claude'
+})
+write('ai-providers.json', {
+  version: 1,
+  items: [
+    {
+      id: 'shot-ai-claude',
+      name: 'Claude',
+      type: 'anthropic',
+      baseUrl: '',
+      model: 'claude-opus-5-5',
+      createdAt: iso,
+      updatedAt: iso
+    }
+  ]
+})
 console.log(`Seeded ${PROFILE} (PostgreSQL schema tienda, MariaDB database shots_maria)`)
