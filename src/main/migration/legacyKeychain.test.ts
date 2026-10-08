@@ -43,6 +43,15 @@ describe('legacy keychain read', () => {
       reason: 'denied'
     })
     expect(await run(exitError('ENOENT'))).toMatchObject({ ok: false, reason: 'failed' })
+    // Other failures name the exit code only, never execFile's message (command line, paths).
+    const other = Object.assign(new Error('Command failed: security … /Users/x/k.keychain-db'), {
+      code: 152
+    })
+    expect(await run(other)).toEqual({
+      ok: false,
+      reason: 'failed',
+      detail: 'el comando security terminó con el código 152'
+    })
   })
 
   it('tries each legacy service name until one exists, and stops at a denial', async () => {

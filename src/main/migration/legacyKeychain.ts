@@ -68,8 +68,16 @@ function classifySecurityError(err: unknown): KeychainReadResult {
     return { ok: false, reason: 'denied', detail: 'sin respuesta al aviso del llavero' }
   if (e.code === 'ENOENT')
     return { ok: false, reason: 'failed', detail: 'comando security no encontrado' }
-  const message = err instanceof Error ? err.message : String(err)
-  return { ok: false, reason: 'failed', detail: message.split('\n')[0].slice(0, 200) }
+  // Never the raw error: its message is execFile's "Command failed: security … <keychain path>",
+  // which ends up in a user-facing notice.
+  return {
+    ok: false,
+    reason: 'failed',
+    detail:
+      typeof e.code === 'number'
+        ? `el comando security terminó con el código ${e.code}`
+        : 'el comando security falló'
+  }
 }
 
 /**
