@@ -61,7 +61,24 @@ const RESERVED_OPTIONS = new Set(
     'srvservicename',
     'loadbalanced',
     'proxyhost',
-    'proxyport'
+    'proxyport',
+    // TLS and auth are set from the form only: an extra option must never turn verification off.
+    'rejectunauthorized',
+    'checkserveridentity',
+    'ca',
+    'cert',
+    'key',
+    'passphrase',
+    'servername',
+    'crl',
+    'tlscrlfile',
+    'tlscertificatefile',
+    'auth',
+    'authmechanismproperties',
+    'promotevalues',
+    'promotelongs',
+    'bsonregexp',
+    'raw'
   ].map((k) => k.toLowerCase())
 )
 

@@ -66,7 +66,7 @@ export async function listMongoObjects(
   database: string
 ): Promise<{ collections: ListedMongoCollection[]; views: ListedMongoCollection[] }> {
   const all = (
-    await conn.db(database).listCollections({}, { authorizedCollections: true }).toArray()
+    await conn.rawDb(database).listCollections({}, { authorizedCollections: true }).toArray()
   )
     .map((c) => ({
       name: String(c.name),
@@ -222,7 +222,7 @@ export async function createMongoBackup(
             }
           }
           const indexes = await conn
-            .coll(database, c.name)
+            .rawColl(database, c.name)
             .listIndexes()
             .toArray()
             .catch(() => [] as Document[])

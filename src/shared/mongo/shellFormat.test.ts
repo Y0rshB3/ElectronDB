@@ -23,6 +23,7 @@ import {
   parseEjson,
   plainValue,
   quote,
+  shellLossReasons,
   shellText,
   typedValue,
   type EjsonValue
@@ -96,6 +97,26 @@ describe('shellFormat round trip', () => {
       const parsed = parseShell(`{ v: ${quote(s)} }`, { mode: 'strict' }) as { v: string }
       expect(parsed.v).toBe(s)
     }
+  })
+})
+
+describe('shellLossReasons', () => {
+  it('names the values the shell editor would change', () => {
+    const doc = parseEjson(
+      canonical({
+        ok: new BSONRegExp('^ab$', 'i'),
+        slash: new BSONRegExp('a/b', ''),
+        x: new BSONRegExp('a b', 'x'),
+        nested: [{ code: new Code('f()', { a: 1 }) }]
+      })
+    )
+    const reasons = shellLossReasons(doc)
+    expect(reasons).toHaveLength(2)
+    expect(reasons.join(' ')).toMatch(/expresión regular/)
+    expect(reasons.join(' ')).toMatch(/ámbito/)
+    expect(shellLossReasons(parseEjson(canonical({ ok: new BSONRegExp('^ab$', 'im') })))).toEqual(
+      []
+    )
   })
 })
 

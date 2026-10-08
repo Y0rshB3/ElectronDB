@@ -55,6 +55,14 @@ describe('parseShellScript: grammar', () => {
     expect(all[4]).toMatchObject({ what: 'dbs' })
   })
 
+  it('ignores use/show lines inside comments and strings', () => {
+    const all = parseShellScript(
+      '/*\nuse staging\nshow dbs\n*/\ndb.c.find({ note: `\nuse other\n` })\nuse real'
+    )
+    expect(all.map((s) => s.type)).toEqual(['collection', 'use'])
+    expect(all[1]).toMatchObject({ database: 'real' })
+  })
+
   it('keeps statement order and offsets', () => {
     const script = 'db.a.find()\nuse x\ndb.b.find({ n: 1 });'
     const all = parseShellScript(script)

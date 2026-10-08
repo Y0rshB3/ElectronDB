@@ -499,3 +499,50 @@ export function ejsonText(v: EjsonValue): string {
 export function parseEjson(text: string): EjsonValue {
   return JSON.parse(text) as EjsonValue
 }
+
+/**
+ * Values the shell-text editor cannot write back unchanged: a regex whose
+ * pattern has `/` or a line break, or flags JavaScript lacks (x, l), comes back
+ * rewritten by JS RegExp; symbol, undefined, DBPointer and code with scope have
+ * no exact shell form. Spanish reasons, one per kind; empty when the document
+ * round-trips (shellFormat.test.ts checks every other type).
+ */
+export function shellLossReasons(v: EjsonValue, depth = 0): string[] {
+  const out = new Set<string>()
+  const walk = (x: EjsonValue, d: number): void => {
+    if (d > 100 || x === null || typeof x !== 'object') return
+    if (Array.isArray(x)) {
+      for (const el of x) walk(el, d + 1)
+      return
+    }
+    switch (bsonTypeOf(x)) {
+      case 'regex': {
+        const r = (x as EjsonObject).$regularExpression as EjsonObject
+        const pattern = String(r?.pattern ?? '')
+        const options = String(r?.options ?? '')
+        if (/[/\n\r]/.test(pattern) || /[^imsu]/.test(options))
+          out.add('una expresión regular con «/», saltos de línea u opciones x/l')
+        return
+      }
+      case 'symbol':
+        out.add('un símbolo (tipo obsoleto)')
+        return
+      case 'undefined':
+        out.add('un valor undefined (tipo obsoleto)')
+        return
+      case 'dbPointer':
+        out.add('un DBPointer (tipo obsoleto)')
+        return
+      case 'javascript':
+        if ((x as EjsonObject).$scope !== undefined) out.add('código JavaScript con ámbito')
+        return
+      case 'object':
+        for (const val of Object.values(x as EjsonObject)) walk(val, d + 1)
+        return
+      default:
+        return
+    }
+  }
+  walk(v, depth)
+  return [...out]
+}

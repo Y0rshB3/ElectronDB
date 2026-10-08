@@ -12,7 +12,7 @@
  * Pure (acorn only), so the renderer and main share it: the renderer's
  * production-guard dialog and main's guard read the same parse.
  */
-import { parse as acornParse } from 'acorn'
+import { parse as acornParse, tokenizer } from 'acorn'
 import type {
   CallExpression,
   Expression,
@@ -208,15 +208,45 @@ interface Masked {
   specials: MongoStatement[]
 }
 
+/**
+ * Ranges of comments, strings and template literals: a `use x` line inside one
+ * of them is text, not a command. Best effort: when the script does not even
+ * tokenize, nothing is excluded (the parse then reports the syntax error).
+ */
+function quotedRanges(script: string): [number, number][] {
+  const ranges: [number, number][] = []
+  try {
+    const tokens = tokenizer(script, {
+      ecmaVersion: 'latest',
+      onComment: (_block, _text, start, end) => {
+        ranges.push([start, end])
+      }
+    })
+    for (const token of tokens) {
+      const label = token.type.label
+      if (label === 'string' || label === 'template' || label === '`' || label === 'regexp')
+        ranges.push([token.start, token.end])
+    }
+  } catch {
+    // Unterminated comment or string: treat the rest of the script as quoted from its start.
+    const open = /\/\*|`/.exec(script)
+    if (open) ranges.push([open.index, script.length])
+  }
+  return ranges
+}
+
 /** Blanks out `use`/`show` lines (same length, so offsets stay valid) and records them. */
 function maskSpecialLines(script: string): Masked {
   const specials: MongoStatement[] = []
+  const quoted = quotedRanges(script)
+  const inQuoted = (at: number): boolean => quoted.some(([a, b]) => at > a && at < b)
   let out = ''
   let offset = 0
   for (const line of script.split('\n')) {
     const use = USE_LINE.exec(line)
     const show = use ? null : SHOW_LINE.exec(line)
-    if (use || show) {
+    const lineStart = offset + (line.length - line.trimStart().length)
+    if ((use || show) && !inQuoted(lineStart)) {
       const lead = line.length - line.trimStart().length
       const text = line.trim()
       const base = { text, start: offset + lead, end: offset + lead + text.length }

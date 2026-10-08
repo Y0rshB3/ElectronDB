@@ -86,7 +86,8 @@ export function createMongoHandlers(
       admin.listCollectionInfos(await connectionOf(id), database(db)),
     'mongo:collectionDetails': async (id, db, coll) =>
       admin.collectionDetails(await connectionOf(id), database(db), coll),
-    'mongo:find': async (id, query) => findPage(await connectionOf(id), query),
+    'mongo:find': async (id, query) =>
+      findPage(await connectionOf(id), query, `browser:${query.owner ?? ''}`),
     'mongo:getMore': async (id, resultId, count) =>
       getMore(await connectionOf(id), resultId, count),
     'mongo:closeCursor': async (id, resultId) => {

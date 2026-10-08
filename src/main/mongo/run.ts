@@ -75,6 +75,7 @@ export function prepareMongoScript(script: string): PreparedStatement[] {
         statement.type === 'collection' && statement.explain?.verbosity
           ? argValue(statement.explain.verbosity, 'explain')
           : undefined
+      if (statement.type === 'collection') checkReadOptions(statement.method, args)
       const writes =
         statementIsObviousWrite(statement) ||
         (statement.type === 'collection' &&
@@ -87,6 +88,19 @@ export function prepareMongoScript(script: string): PreparedStatement[] {
       throw err
     }
   })
+}
+
+/** Refuses unknown options of read methods before anything runs (see READ_OPTIONS). */
+function checkReadOptions(method: string, args: unknown[]): void {
+  const opt = (i: number): Document | null => {
+    const v = args[i]
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Document) : null
+  }
+  if (method === 'aggregate' && opt(1)) readOptions(opt(1)!, 'aggregate')
+  if (method === 'find' && opt(2)) readOptions(opt(2)!, 'find')
+  if ((method === 'countDocuments' || method === 'count') && opt(1)) readOptions(opt(1)!, 'count')
+  if (method === 'estimatedDocumentCount' && opt(0)) readOptions(opt(0)!, 'count')
+  if (method === 'distinct' && opt(2)) readOptions(opt(2)!, 'distinct')
 }
 
 function methodName(s: MongoStatement): string {
@@ -137,11 +151,54 @@ function withOurs(
   comment: string | null
 ): Document {
   const out: Document = { ...user }
+  // Never a driver shortcut to a write (aggregate's `out`), whatever the method.
+  delete out.out
   delete out.session
   if (session) out.session = session
   else delete out.session
   if (comment) out.comment = comment
   return out
+}
+
+/**
+ * Options a read method may take. Anything else is refused: the driver turns
+ * some options into writes (aggregate's `out` becomes a `$out` stage), so read
+ * methods accept only this allowlist and never a user's whole options object.
+ */
+const READ_OPTIONS: Record<string, readonly string[]> = {
+  find: [
+    'sort',
+    'limit',
+    'skip',
+    'projection',
+    'hint',
+    'collation',
+    'maxTimeMS',
+    'batchSize',
+    'allowDiskUse',
+    'min',
+    'max',
+    'returnKey',
+    'showRecordId',
+    'let',
+    'readConcern'
+  ],
+  aggregate: ['allowDiskUse', 'maxTimeMS', 'collation', 'hint', 'batchSize', 'let', 'readConcern'],
+  count: ['maxTimeMS', 'collation', 'hint', 'skip', 'limit', 'readConcern'],
+  distinct: ['maxTimeMS', 'collation', 'readConcern']
+}
+
+/** The user's options of a read method, checked against READ_OPTIONS. */
+export function readOptions(user: Document, method: keyof typeof READ_OPTIONS): Document {
+  const allowed = READ_OPTIONS[method]
+  for (const key of Object.keys(user))
+    if (!allowed.includes(key))
+      throw new MongoInputError(
+        key === 'out'
+          ? 'La opción «out» de aggregate no se admite: escribe una etapa { $out: … } (es una escritura y pide confirmación en producción).'
+          : `La opción «${key}» no se admite en ${method}(). Opciones admitidas: ${allowed.join(', ')}.`
+      )
+  return user
 }
 
 function valueResult(
@@ -328,6 +385,10 @@ async function runDbMethod(
       return writeResult(base, { acknowledged: true })
     }
     case 'dropDatabase':
+      if (['admin', 'local', 'config'].includes(database))
+        throw new MongoUserError(
+          `La base de datos de sistema «${database}» no se elimina desde Vortaq.`
+        )
       await db.dropDatabase(withOurs({}, session, comment))
       return writeResult(base, { acknowledged: true })
     default:
@@ -384,20 +445,29 @@ async function runCollectionMethod(
       if (p.explain !== undefined || s.explain)
         return valueResult(
           base,
-          await conn
-            .db(database)
-            .command(
-              {
-                explain: { count: s.collection, query: optDoc(a0, 'Filtro') },
-                verbosity: explainVerbosity()
-              },
-              { session }
-            )
+          await conn.db(database).command(
+            {
+              explain: { count: s.collection, query: optDoc(a0, 'Filtro') },
+              verbosity: explainVerbosity()
+            },
+            { session }
+          )
         )
-      return valueResult(base, await coll.countDocuments(optDoc(a0, 'Filtro'), ours(a1)))
+      return valueResult(
+        base,
+        await coll.countDocuments(
+          optDoc(a0, 'Filtro'),
+          withOurs(readOptions(optDoc(a1, 'Opciones'), 'count'), session, comment)
+        )
+      )
     }
     case 'estimatedDocumentCount':
-      return valueResult(base, await coll.estimatedDocumentCount(ours(a0)))
+      return valueResult(
+        base,
+        await coll.estimatedDocumentCount(
+          withOurs(readOptions(optDoc(a0, 'Opciones'), 'count'), session, comment)
+        )
+      )
     case 'distinct': {
       if (typeof a0 !== 'string')
         throw new MongoInputError('distinct necesita el nombre del campo como texto.')
@@ -412,7 +482,14 @@ async function runCollectionMethod(
             { session }
           )
         )
-      return valueResult(base, await raw.distinct(a0, optDoc(a1, 'Filtro'), ours(a2)))
+      return valueResult(
+        base,
+        await raw.distinct(
+          a0,
+          optDoc(a1, 'Filtro'),
+          withOurs(readOptions(optDoc(a2, 'Opciones'), 'distinct'), session, comment)
+        )
+      )
     }
     case 'getIndexes':
       return valueResult(base, await coll.listIndexes({ session }).toArray())
@@ -557,7 +634,11 @@ async function runFind(
   const filter = optDoc(p.args[0], 'Filtro')
   let projection: Document | null =
     p.args[1] === undefined || p.args[1] === null ? null : doc(p.args[1], 'Proyección')
-  const options: Document = withOurs(optDoc(p.args[2], 'Opciones'), session, comment)
+  const options: Document = withOurs(
+    readOptions(optDoc(p.args[2], 'Opciones'), 'find'),
+    session,
+    comment
+  )
   let limit: number | null = s.method === 'findOne' ? 1 : null
   let count = false
   for (const c of p.chain) {
@@ -652,7 +733,11 @@ async function runAggregate(
 ): Promise<MongoCommandResult> {
   const s = p.statement as Extract<MongoStatement, { type: 'collection' }>
   const pipeline = p.args[0] === undefined ? [] : docs(p.args[0])
-  const options = withOurs(optDoc(p.args[1], 'Opciones'), session, comment)
+  const options = withOurs(
+    readOptions(optDoc(p.args[1], 'Opciones'), 'aggregate'),
+    session,
+    comment
+  )
   if (s.explain) {
     const verbosity = typeof p.explain === 'string' && p.explain ? p.explain : 'queryPlanner'
     return valueResult(base, await coll.aggregate(pipeline, options).explain(verbosity as never))

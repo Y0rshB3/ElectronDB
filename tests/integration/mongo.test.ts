@@ -340,6 +340,12 @@ describeServer(MONGO_TARGET, 'MongoDB driver (integration)', (url) => {
     await expect(prod("db.people.aggregate([{ $merge: { into: 'copy' } }])")).rejects.toThrow(
       /confirmación/
     )
+    // The driver turns aggregate's `out` option into a $out stage: refused everywhere.
+    await expect(prod("db.people.aggregate([], { out: 'copy' })")).rejects.toThrow(/«out»/)
+    await expect(run("db.people.aggregate([], { out: 'copy' })")).rejects.toThrow(/«out»/)
+    await expect(run('db.people.find({}, {}, { writeConcern: { w: 1 } })')).rejects.toThrow(
+      /no se admite/
+    )
     expect((await h.channels['mongo:collections'](prodId, DB)).map((c) => c.name)).not.toContain(
       'copy'
     )

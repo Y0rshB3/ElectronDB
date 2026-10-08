@@ -91,7 +91,8 @@ async function load(): Promise<void> {
       projection: projection.value,
       skip: skip.value,
       limit: limit.value,
-      executionId
+      executionId,
+      owner: props.tab.id
     })
     history.value = rememberHistory(connectionId.value, database.value, collection.value, {
       filter: filter.value,

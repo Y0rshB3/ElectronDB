@@ -889,6 +889,8 @@ export interface MongoDocumentQuery {
   skip: number
   limit: number
   executionId?: string
+  /** Who owns the open cursor (the view's tab id): each view keeps its own «Cargar más». */
+  owner?: string
 }
 
 export interface MongoDocumentPage {

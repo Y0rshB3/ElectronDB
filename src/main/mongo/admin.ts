@@ -207,7 +207,7 @@ export async function listIndexes(
   collection: string
 ): Promise<MongoIndexInfo[]> {
   try {
-    return (await conn.coll(database, collection).listIndexes().toArray()).map(indexInfo)
+    return (await conn.rawColl(database, collection).listIndexes().toArray()).map(indexInfo)
   } catch (err) {
     if ((err as { code?: unknown }).code === 26) return []
     throw conn.errorOf(err)
@@ -261,7 +261,7 @@ export async function collectionDetails(
   collection: string
 ): Promise<MongoCollectionDetails> {
   const found = (await conn
-    .db(database)
+    .rawDb(database)
     .listCollections({ name: collection }, { authorizedCollections: true })
     .toArray()
     .catch((err) => {

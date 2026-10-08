@@ -9,7 +9,10 @@
 import { computed, ref, shallowRef, triggerRef, watch } from 'vue'
 import type { MongoDocumentChange, MongoDocumentPage } from '@shared/types'
 import {
+  bsonTypeOf,
   isContainer,
+  isEditableType,
+  shellLossReasons,
   largeValue,
   parseEjson,
   shellText,
@@ -153,7 +156,12 @@ function editPath(index: number, path: PathSegment[]): void {
   const value = valueAt(docs.value[index], path)
   const problem = pathProblem(path)
   if (problem) return notify.warning(problem)
-  if (value !== undefined && (isContainer(value) || largeValue(value))) {
+  // Documents, arrays, large values and types without a plain editor (binary, timestamp…)
+  // are edited in the whole-document editor, which keeps their exact type.
+  if (
+    value !== undefined &&
+    (isContainer(value) || largeValue(value) || !isEditableType(bsonTypeOf(value)))
+  ) {
     void openEditor(index)
     return
   }
@@ -235,12 +243,15 @@ async function openEditor(index: number): Promise<void> {
   }
   if (!whole) return
   const id = whole.doc._id
-  editorReadonly.value = readonly.value || id === undefined
+  const lossy = shellLossReasons(whole.doc)
+  editorReadonly.value = readonly.value || id === undefined || lossy.length > 0
   editorTitle.value = editorReadonly.value ? 'Ver documento' : 'Editar documento'
   editorSubtitle.value = `${props.collection} · _id ${id === undefined ? '—' : shellText(id)}`
   editorText.value = shellText(whole.doc, { indent: 2 })
   editorAction = { kind: 'replace', id: JSON.stringify(id ?? null), original: whole.text }
-  editorError.value = null
+  editorError.value = lossy.length
+    ? `Solo lectura: el documento contiene ${lossy.join(', ')}, que el editor no puede guardar sin cambiarlo. Edita los demás campos en la rejilla o en el árbol.`
+    : null
   editorOpen.value = true
 }
 
@@ -257,6 +268,13 @@ function openInsert(): void {
 async function openDuplicate(index: number): Promise<void> {
   const whole = await wholeDoc(index).catch(() => null)
   if (!whole) return
+  const lossy = shellLossReasons(whole.doc)
+  if (lossy.length) {
+    notify.warning(
+      `No se puede duplicar desde el editor: el documento contiene ${lossy.join(', ')}.`
+    )
+    return
+  }
   editorReadonly.value = false
   editorTitle.value = 'Duplicar documento'
   editorSubtitle.value = `${props.collection} · el _id se genera al insertar`

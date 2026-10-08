@@ -112,7 +112,8 @@ export function isObviousMongoWrite(script: string): boolean {
 
 /** True when a parsed value (an aggregate pipeline) has a $out/$merge key at any depth. */
 export function valueHasWriteStage(value: unknown, depth = 0): boolean {
-  if (depth > 200 || value === null || typeof value !== 'object') return false
+  if (depth > 200) return true // fail closed
+  if (value === null || typeof value !== 'object') return false
   if (ArrayBuffer.isView(value)) return false
   if (Array.isArray(value)) return value.some((v) => valueHasWriteStage(v, depth + 1))
   for (const [key, v] of Object.entries(value as Record<string, unknown>)) {

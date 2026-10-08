@@ -147,6 +147,12 @@ export class MongoDriverConnection implements DocumentDriverConnection {
     return this.db(database).collection(name)
   }
 
+  /** A database whose listings keep every BSON type (validators, index options). */
+  rawDb(name: string): Db {
+    if (!name) throw new MongoUserError('Falta la base de datos.')
+    return this.client.db(name, RAW_BSON)
+  }
+
   /** The same collection for reads that return documents: every BSON type kept. */
   rawColl(database: string, name: string): Collection<Document> {
     if (!name) throw new MongoUserError('Falta el nombre de la colección.')
@@ -380,7 +386,11 @@ export class MongoDriverConnection implements DocumentDriverConnection {
     try {
       ops = await find(true)
     } catch {
-      ops = await find(false).catch(() => [])
+      try {
+        ops = await find(false)
+      } catch {
+        return false // $currentOp not allowed: nothing could be stopped on the server
+      }
     }
     let killed = false
     for (const op of ops) {
