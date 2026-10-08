@@ -1,4 +1,10 @@
-import type { EngineId, Environment, SshConfig, SslConfig } from '@shared/types'
+import type {
+  EngineId,
+  Environment,
+  SqliteAttachedDatabase,
+  SshConfig,
+  SslConfig
+} from '@shared/types'
 
 /**
  * Secrets a connections file carried, already decoded. They go only to
@@ -30,7 +36,16 @@ export interface ParsedConnection {
   warnings: string[]
   /** Navicat only: the connection type as Navicat's plist names it ('MySQL', 'MariaDB'…). */
   navicatType?: string
+  /**
+   * SQLite: the database file as the source wrote it. `pathNeedsReview` when it is not an
+   * absolute path on this OS or the file does not exist here: the connection is saved but
+   * cannot open until the user picks the file. The file is never opened or created.
+   */
+  sqlite?: { filePath: string; pathNeedsReview: boolean; attached: SqliteAttachedDatabase[] }
 }
+
+/** Existence check for SQLite files named by an import (injected in tests). */
+export type FileExists = (path: string) => boolean
 
 export interface ParsedConnectionFile {
   connections: ParsedConnection[]
@@ -48,6 +63,11 @@ export const NO_SSH: SshConfig = {
 }
 
 export const NO_SSL: SslConfig = { enabled: false, verifyServer: false }
+
+export const sqliteFileReviewWarning = (name: string): string =>
+  `«${name}»: el archivo SQLite no está en este equipo; elígelo al editar la conexión`
+export const SQLITE_ENCRYPTED_REASON =
+  'Archivo SQLite cifrado: Vortaq no puede abrir bases de datos SQLite cifradas'
 
 export const FOREIGN_PATH_WARNING = 'Ruta de otro equipo: revísala'
 export const MARIADB_AS_MYSQL_WARNING = 'MariaDB se importa como conexión MySQL'

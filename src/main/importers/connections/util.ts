@@ -1,6 +1,14 @@
+import { isAbsolutePathFor } from '@shared/connectionValidation'
 import { engineOf } from '@shared/engines'
 import type { EngineId, SslConfig, SslMode } from '@shared/types'
-import { FOREIGN_PATH_WARNING, MARIADB_AS_MYSQL_WARNING, unsupportedEngine } from './types'
+import {
+  FOREIGN_PATH_WARNING,
+  MARIADB_AS_MYSQL_WARNING,
+  sqliteFileReviewWarning,
+  unsupportedEngine,
+  type FileExists,
+  type ParsedConnection
+} from './types'
 
 /** A path written on another OS: a drive/UNC path on macOS/Linux, a POSIX path on Windows. */
 export function isForeignPath(path: string, platform: NodeJS.Platform): boolean {
@@ -176,3 +184,29 @@ export function firstHost(raw: string, warnings: string[]): { host: string; port
 
 export const previewEngineReason = (label: string): string =>
   `${label} está en vista previa: actívalo en Ajustes › Motores en vista previa`
+
+/* ---------- SQLite ---------- */
+
+export const SQLITE_CHOICE: EngineChoice = {
+  engine: 'sqlite',
+  unsupportedReason: null,
+  warning: null
+}
+
+/**
+ * SQLite block of an imported connection. Only the path text is looked at
+ * (absolute on this OS, and an existence check): the file is never opened or
+ * created. A path that needs review adds a warning naming the connection.
+ */
+export function sqliteBlock(
+  name: string,
+  filePath: string,
+  platform: NodeJS.Platform,
+  exists: FileExists,
+  warnings: string[]
+): NonNullable<ParsedConnection['sqlite']> {
+  const path = filePath.trim()
+  const pathNeedsReview = !path || !isAbsolutePathFor(path, platform) || !exists(path)
+  if (pathNeedsReview) warnings.push(sqliteFileReviewWarning(name))
+  return { filePath: path, pathNeedsReview, attached: [] }
+}

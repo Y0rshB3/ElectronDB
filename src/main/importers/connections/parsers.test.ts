@@ -7,7 +7,8 @@ import {
   DBEAVER_USER_WARNING,
   parseDbeaverDataSources,
   parseJdbcUrl,
-  parsePostgresJdbcUrl
+  parsePostgresJdbcUrl,
+  parseSqliteJdbcUrl
 } from './dbeaver'
 import {
   HTTP_TUNNEL_WARNING,
@@ -18,7 +19,12 @@ import {
   parseNcx
 } from './ncx'
 import { IMPORT_FIXTURES } from './testing'
-import { FOREIGN_PATH_WARNING, MARIADB_AS_MYSQL_WARNING } from './types'
+import {
+  FOREIGN_PATH_WARNING,
+  MARIADB_AS_MYSQL_WARNING,
+  SQLITE_ENCRYPTED_REASON,
+  sqliteFileReviewWarning
+} from './types'
 import {
   isForeignPath,
   multiHostWarning,
@@ -224,7 +230,17 @@ describe('parseDbeaverDataSources', () => {
       port: 5432,
       database: 'warehouse'
     })
-    expect(byName.get('Local notes')).toMatchObject({ engine: null, engineLabel: 'SQLite' })
+    expect(byName.get('Local notes')).toMatchObject({
+      engine: 'sqlite',
+      engineLabel: 'SQLite',
+      unsupportedReason: null,
+      host: '',
+      port: 0,
+      database: '/home/tester/notes.db',
+      // The fixture path does not exist on the test machine.
+      sqlite: { filePath: '/home/tester/notes.db', pathNeedsReview: true, attached: [] },
+      warnings: [sqliteFileReviewWarning('Local notes')]
+    })
     expect(byName.get('Warehouse')!.warnings).toEqual([DBEAVER_USER_WARNING])
   })
 
@@ -480,5 +496,96 @@ describe('PostgreSQL entries', () => {
     expect(ledger.secrets).toEqual({ mysql: 'pg-secret', ssh: 'ssh-pw' })
     expect(pair).toMatchObject({ host: 'a.example.test', port: 5440 })
     expect(pair.warnings).toEqual([multiHostWarning('a.example.test')])
+  })
+})
+
+describe('SQLite entries', () => {
+  const dbeaver = (cfg: Record<string, unknown>, driver = 'sqlite_jdbc'): string =>
+    JSON.stringify({
+      connections: { lite: { provider: 'generic', driver, name: 'Lite', configuration: cfg } }
+    })
+
+  it('maps DBeaver SQLite paths: existing, missing and from another OS', () => {
+    const exists = (p: string): boolean => p === '/data/app.db'
+    const ok = parseDbeaverDataSources(dbeaver({ database: '/data/app.db' }), 'darwin', exists)
+    expect(ok.connections[0]).toMatchObject({
+      engine: 'sqlite',
+      sqlite: { filePath: '/data/app.db', pathNeedsReview: false },
+      warnings: [],
+      secrets: {}
+    })
+    const fromUrl = parseDbeaverDataSources(
+      dbeaver({ url: 'jdbc:sqlite:/data/app.db' }),
+      'darwin',
+      exists
+    )
+    expect(fromUrl.connections[0].sqlite).toMatchObject({
+      filePath: '/data/app.db',
+      pathNeedsReview: false
+    })
+    const missing = parseDbeaverDataSources(
+      dbeaver({ database: '/data/gone.db' }),
+      'darwin',
+      exists
+    )
+    expect(missing.connections[0].sqlite!.pathNeedsReview).toBe(true)
+    expect(missing.connections[0].warnings).toEqual([sqliteFileReviewWarning('Lite')])
+    // A Windows path on macOS is flagged even if a same-named check said it exists.
+    const win = parseDbeaverDataSources(
+      dbeaver({ database: 'C:\\data\\app.db' }),
+      'darwin',
+      () => true
+    )
+    expect(win.connections[0].sqlite!.pathNeedsReview).toBe(true)
+    const empty = parseDbeaverDataSources(dbeaver({}), 'darwin', () => true)
+    expect(empty.connections[0].sqlite).toMatchObject({ filePath: '', pathNeedsReview: true })
+    // The provider id alone also identifies SQLite.
+    const byProvider = parseDbeaverDataSources(
+      JSON.stringify({
+        connections: { x: { provider: 'sqlite', driver: '', name: 'P', configuration: {} } }
+      }),
+      'linux',
+      () => true
+    )
+    expect(byProvider.connections[0].engine).toBe('sqlite')
+  })
+
+  it('parses jdbc:sqlite URLs without touching the file', () => {
+    expect(parseSqliteJdbcUrl('jdbc:sqlite:/a/b.db')).toBe('/a/b.db')
+    expect(parseSqliteJdbcUrl('jdbc:sqlite:C:\\a\\b.db')).toBe('C:\\a\\b.db')
+    expect(parseSqliteJdbcUrl('jdbc:sqlite:file:///home/x/my%20db.db?mode=ro')).toBe(
+      '/home/x/my db.db'
+    )
+    expect(parseSqliteJdbcUrl('jdbc:sqlite:file:///C:/x/a.db')).toBe('C:/x/a.db')
+    expect(parseSqliteJdbcUrl('jdbc:sqlite::memory:')).toBeNull()
+    expect(parseSqliteJdbcUrl('jdbc:mysql://h/x')).toBeNull()
+  })
+
+  it('maps .ncx SQLite entries; encrypted files are not importable and their password is ignored', () => {
+    const xml = `<Connections Ver="1.5">
+      <Connection ConnectionName="Plain" ConnType="SQLITE" DatabaseFileName="/data/app.db" />
+      <Connection ConnectionName="Win" ConnType="sqlite" DatabaseFileName="C:\\data\\app.db" />
+      <Connection ConnectionName="Enc" ConnType="SQLITE" DatabaseFileName="/data/app.db"
+        SQLiteEncrypt="true" SQLiteEncryptPassword="${encryptNcxAes('enc-secret')}" />
+      <Connection ConnectionName="Old" ConnType="SQLITE" DatabaseFileName="/data/app.db" SQLiteEncryption="true" />
+    </Connections>`
+    const file = parseNcx(xml, 'darwin', (p) => p === '/data/app.db')
+    const byName = new Map(file.connections.map((c) => [c.name, c]))
+    expect(byName.get('Plain')).toMatchObject({
+      engine: 'sqlite',
+      engineLabel: 'SQLite',
+      navicatType: 'SQLite',
+      unsupportedReason: null,
+      host: '',
+      port: 0,
+      username: '',
+      secrets: {},
+      sqlite: { filePath: '/data/app.db', pathNeedsReview: false, attached: [] }
+    })
+    expect(byName.get('Win')!.sqlite!.pathNeedsReview).toBe(true)
+    expect(byName.get('Enc')!.unsupportedReason).toBe(SQLITE_ENCRYPTED_REASON)
+    expect(byName.get('Old')!.unsupportedReason).toBe(SQLITE_ENCRYPTED_REASON)
+    expect(JSON.stringify(file)).not.toContain('enc-secret')
+    expect(file.notes).toEqual([NCX_NO_PASSWORDS_NOTE])
   })
 })

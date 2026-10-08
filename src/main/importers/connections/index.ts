@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
@@ -9,7 +10,7 @@ import type {
   ImportSourceId
 } from '@shared/importers'
 import { engineAvailabilityError } from '@shared/connectionValidation'
-import { engineOf } from '@shared/engines'
+import { defaultSqliteOptions, engineOf } from '@shared/engines'
 import type { ConnectionConfig, ConnectionInput, EngineId, Environment } from '@shared/types'
 import type { AppContext } from '../../context'
 import type { ConnectionSecretKind } from '../../credentials/store'
@@ -17,7 +18,7 @@ import { safeDirName } from '../../navicat/importer'
 import { nowIso } from '../../storage/ids'
 import { parseDbeaverDataSources } from './dbeaver'
 import { parseNcx } from './ncx'
-import type { ConnectionSecrets, ParsedConnection, ParsedConnectionFile } from './types'
+import type { ConnectionSecrets, FileExists, ParsedConnection, ParsedConnectionFile } from './types'
 import { previewEngineReason } from './util'
 import { parseWorkbenchConnections } from './workbench'
 
@@ -29,7 +30,7 @@ type SourceApp = NonNullable<ConnectionConfig['source']>['app']
 interface ConnectionFileSource {
   app: SourceApp
   format: 'ncx' | 'json' | 'xml'
-  parse(text: string, platform: NodeJS.Platform): ParsedConnectionFile
+  parse(text: string, platform: NodeJS.Platform, fileExists: FileExists): ParsedConnectionFile
 }
 
 const SOURCES: Partial<Record<ImportSourceId, ConnectionFileSource>> = {
@@ -50,7 +51,8 @@ function sourceOf(id: ImportSourceId): ConnectionFileSource {
 async function readConnectionFile(
   source: ConnectionFileSource,
   path: string,
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform,
+  fileExists: FileExists
 ): Promise<ParsedConnectionFile> {
   let text: string
   try {
@@ -66,7 +68,7 @@ async function readConnectionFile(
       throw new Error(`Sin permisos para leer el archivo: ${path}`)
     throw err
   }
-  return source.parse(text, platform)
+  return source.parse(text, platform, fileExists)
 }
 
 /**
@@ -140,10 +142,11 @@ export async function previewConnectionFile(
   ctx: Pick<AppContext, 'connections' | 'settings'>,
   sourceId: ImportSourceId,
   path: string,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  fileExists: FileExists = existsSync
 ): Promise<ImportConnectionsPreview> {
   const source = sourceOf(sourceId)
-  const file = await readConnectionFile(source, path, platform)
+  const file = await readConnectionFile(source, path, platform, fileExists)
   const existing = ctx.connections.list()
   const preview = previewOn(ctx)
   const items = file.connections.map((c) =>
@@ -181,6 +184,33 @@ function postgresBlock(
   }
 }
 
+/**
+ * SQLite block: the file's path (flagged for review when it is not usable here) and the
+ * defaults, keeping the options of an earlier import. Imported files keep foreign keys off
+ * (design §20). connections:save refuses `pathNeedsReview` for the dialog; the importer
+ * saves through ConnectionsRepo directly, so such a record is stored and the connection
+ * dialog asks for the file before it can be saved or opened.
+ */
+function sqliteBlock(
+  parsed: ParsedConnection,
+  existing: ConnectionConfig | null,
+  environment: Environment
+): Pick<ConnectionInput, 'sqlite'> {
+  const file = parsed.sqlite ?? { filePath: '', pathNeedsReview: true, attached: [] }
+  const base = existing?.sqlite ?? {
+    ...defaultSqliteOptions(environment === 'production'),
+    foreignKeys: false
+  }
+  const sqlite = {
+    ...base,
+    filePath: file.filePath,
+    attached: file.attached.length ? file.attached : base.attached
+  }
+  if (file.pathNeedsReview) sqlite.pathNeedsReview = true
+  else delete sqlite.pathNeedsReview
+  return { sqlite }
+}
+
 function toInput(
   parsed: ParsedConnection,
   source: ConnectionFileSource,
@@ -189,17 +219,20 @@ function toInput(
   importedAt: string
 ): ConnectionInput {
   const engine: EngineId = parsed.engine ?? 'mysql'
+  const environment = mergeEnvironment(existing, parsed.environment)
   return {
     id: existing?.id,
     engine,
     ...(engine === 'postgresql' ? postgresBlock(parsed, existing) : {}),
+    ...(engine === 'sqlite' ? sqliteBlock(parsed, existing, environment) : {}),
     name: existing?.name ?? parsed.name,
     color: parsed.color ?? existing?.color ?? null,
-    environment: mergeEnvironment(existing, parsed.environment),
+    environment,
     host: parsed.host,
     port: parsed.port,
     username: parsed.username,
-    authMode: existing?.authMode ?? 'password',
+    // SQLite has no password: never ask for one.
+    authMode: engine === 'sqlite' ? 'none' : (existing?.authMode ?? 'password'),
     savePassword: parsed.secrets.mysql !== undefined || (existing?.savePassword ?? false),
     customDatabases: existing?.customDatabases ?? [],
     initialQueries: existing?.initialQueries ?? '',
@@ -264,11 +297,12 @@ function validateRequest(request: ImportConnectionsRequest): {
 export async function importConnectionFile(
   ctx: ConnectionImportContext,
   request: ImportConnectionsRequest,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  fileExists: FileExists = existsSync
 ): Promise<ImportConnectionsResult> {
   const { keys, mode } = validateRequest(request)
   const source = sourceOf(request.source)
-  const file = await readConnectionFile(source, request.path, platform)
+  const file = await readConnectionFile(source, request.path, platform, fileExists)
   const byKey = new Map(file.connections.map((c) => [c.key, c]))
   const result: ImportConnectionsResult = {
     created: [],

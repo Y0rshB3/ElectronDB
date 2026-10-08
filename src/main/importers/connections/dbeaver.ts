@@ -1,6 +1,13 @@
+import { existsSync } from 'node:fs'
 import type { Environment, SshConfig, SslConfig } from '@shared/types'
 import { inferEnvironment } from '../../navicat/connPlist'
-import { NO_SSH, type ParsedConnection, type ParsedConnectionFile } from './types'
+import {
+  NO_SSH,
+  NO_SSL,
+  type FileExists,
+  type ParsedConnection,
+  type ParsedConnectionFile
+} from './types'
 import {
   applySslMode,
   checkForeignPaths,
@@ -10,6 +17,8 @@ import {
   normalizeColor,
   positiveInt,
   postgresFamily,
+  SQLITE_CHOICE,
+  sqliteBlock,
   stripBom,
   uniqueKey,
   unsupported,
@@ -69,6 +78,29 @@ export function parsePostgresJdbcUrl(
   }
 }
 
+/**
+ * Database file of a `jdbc:sqlite:<path>` URL (also `jdbc:sqlite:file:<path>?…`); null for
+ * anything else, including in-memory databases.
+ */
+export function parseSqliteJdbcUrl(url: string): string | null {
+  const m = /^jdbc:sqlite:(.*)$/i.exec(url.trim())
+  if (!m) return null
+  let path = m[1].trim()
+  if (/^file:/i.test(path)) {
+    path = path.replace(/^file:/i, '').replace(/[?#].*$/, '')
+    // file:///C:/x and file:///home/x
+    if (/^\/\/\//.test(path)) path = path.slice(2)
+    if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1)
+    try {
+      path = decodeURIComponent(path)
+    } catch {
+      /* keep the raw text */
+    }
+  }
+  if (!path || path === ':memory:') return null
+  return path
+}
+
 const LABELS: Record<string, string> = {
   postgresql: 'PostgreSQL',
   postgres: 'PostgreSQL',
@@ -94,6 +126,7 @@ function engineFor(provider: string, driver: string): { choice: EngineChoice; la
   if (p === 'mysql' || p === 'mariadb' || (p === 'generic' && /^(mysql|maria)/.test(d)))
     return { choice: mysqlFamily(maria), label: maria ? 'MariaDB' : 'MySQL' }
   if (isPostgres(p, d)) return { choice: postgresFamily(`${p} ${d}`), label: 'PostgreSQL' }
+  if (p === 'sqlite' || d.includes('sqlite')) return { choice: SQLITE_CHOICE, label: 'SQLite' }
   const known = Object.keys(LABELS).find((k) => p.includes(k) || d.includes(k))
   const label = known ? LABELS[known] : driver || provider || 'Desconocido'
   return { choice: unsupported(label), label }
@@ -177,7 +210,8 @@ function typeColors(root: Json): Map<string, string> {
 
 export function parseDbeaverDataSources(
   text: string,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  fileExists: FileExists = existsSync
 ): ParsedConnectionFile {
   let root: unknown
   try {
@@ -198,6 +232,29 @@ export function parseDbeaverDataSources(
     const { choice, label } = engineFor(str(raw.provider), str(raw.driver))
     const warnings: string[] = []
     if (choice.warning) warnings.push(choice.warning)
+
+    if (label === 'SQLite') {
+      const filePath = str(cfg.database) || parseSqliteJdbcUrl(str(cfg.url)) || ''
+      connections.push({
+        key: uniqueKey(id, used),
+        name,
+        engine: choice.engine,
+        engineLabel: label,
+        unsupportedReason: choice.unsupportedReason,
+        host: '',
+        port: 0,
+        username: '',
+        database: filePath || null,
+        color: normalizeColor(cfg.color) ?? colors.get(str(cfg.type)) ?? null,
+        environment: environmentFor(str(cfg.type), name, '', false),
+        ssh: { ...NO_SSH },
+        ssl: { ...NO_SSL },
+        secrets: {},
+        warnings,
+        sqlite: sqliteBlock(name, filePath, platform, fileExists, warnings)
+      })
+      continue
+    }
 
     const postgres = label === 'PostgreSQL'
     let host: string

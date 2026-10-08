@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,6 +10,7 @@ import { ConnectionsRepo, JobsRepo, SettingsRepo } from '../../storage/repos'
 import { encryptNcxAes } from '../navicat/ncxCipher'
 import { importConnectionFile, previewConnectionFile, type ConnectionImportContext } from './index'
 import { IMPORT_FIXTURES } from './testing'
+import { SQLITE_ENCRYPTED_REASON, sqliteFileReviewWarning } from './types'
 import { previewEngineReason } from './util'
 
 const DBEAVER = join(IMPORT_FIXTURES, 'dbeaver', 'data-sources.json')
@@ -69,7 +70,7 @@ describe('connection file import', () => {
     expect(result.passwordsSaved).toBe(0)
     expect(result.warnings).toEqual([
       `«Warehouse» no se ha importado: ${previewEngineReason('PostgreSQL')}`,
-      '«Local notes» no se ha importado: Motor no soportado en esta versión: SQLite'
+      `«Local notes» no se ha importado: ${previewEngineReason('SQLite')}`
     ])
     const prod = result.created.find((c) => c.name === 'Shop production')!
     expect(prod).toMatchObject({
@@ -406,6 +407,131 @@ describe('PostgreSQL connection import', () => {
       port: 5432,
       postgres: { initialDatabase: 'warehouse' },
       source: { app: 'dbeaver', format: 'json' }
+    })
+  })
+
+  describe('SQLite entries', () => {
+    const ncxEntry = (name: string, file: string, extra = ''): string =>
+      `<Connection ConnectionName="${name}" ConnType="SQLITE" DatabaseFileName="${file}" ${extra}/>`
+
+    it('lists SQLite rows as disabled while previews are off, and main refuses them', async () => {
+      const db = join(dir, 'app.db')
+      writeFileSync(db, '')
+      const path = writeNcx(ncxEntry('Notes', db))
+      const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
+      expect(preview.items[0]).toMatchObject({
+        engine: 'sqlite',
+        engineLabel: 'SQLite',
+        unsupportedReason: previewEngineReason('SQLite')
+      })
+      const result = await importConnectionFile(ctx, {
+        source: 'navicat-ncx',
+        path,
+        keys: ['SQLite:Notes'],
+        existingMode: 'replace'
+      })
+      expect(result.created).toEqual([])
+      expect(result.warnings).toEqual([
+        `«Notes» no se ha importado: ${previewEngineReason('SQLite')}`
+      ])
+    })
+
+    it('imports an .ncx SQLite file with previews on: no password, FKs off, path kept', async () => {
+      settings.update({ previewEngines: true })
+      const db = join(dir, 'app.db')
+      writeFileSync(db, '')
+      const missing = join(dir, 'gone.db')
+      const path = writeNcx(
+        ncxEntry('Notes', db) +
+          ncxEntry('Gone', missing) +
+          ncxEntry('Windows', 'C:\\data\\x.db') +
+          ncxEntry('Locked', db, 'SQLiteEncrypt="true" SQLiteEncryptPassword="ABCDEF"')
+      )
+      const preview = await previewConnectionFile(ctx, 'navicat-ncx', path, 'darwin')
+      const byName = new Map(preview.items.map((i) => [i.name, i]))
+      expect(byName.get('Notes')).toMatchObject({ unsupportedReason: null, warnings: [] })
+      expect(byName.get('Gone')!.warnings).toEqual([sqliteFileReviewWarning('Gone')])
+      expect(byName.get('Windows')!.warnings).toEqual([sqliteFileReviewWarning('Windows')])
+      expect(byName.get('Locked')!.unsupportedReason).toBe(SQLITE_ENCRYPTED_REASON)
+      expect(preview.containsPasswords).toBe(false)
+      // Warnings name the connection, never the path.
+      expect(JSON.stringify(preview.items.map((i) => i.warnings))).not.toContain(dir)
+
+      const result = await importConnectionFile(
+        ctx,
+        {
+          source: 'navicat-ncx',
+          path,
+          keys: ['SQLite:Notes', 'SQLite:Gone', 'SQLite:Windows', 'SQLite:Locked'],
+          existingMode: 'replace'
+        },
+        'darwin'
+      )
+      expect(result.warnings).toEqual([`«Locked» no se ha importado: ${SQLITE_ENCRYPTED_REASON}`])
+      const created = new Map(result.created.map((c) => [c.name, c]))
+      expect(created.get('Notes')).toMatchObject({
+        engine: 'sqlite',
+        host: '',
+        port: 0,
+        username: '',
+        authMode: 'none',
+        savePassword: false,
+        sqlite: { filePath: db, foreignKeys: false, readOnly: false, attached: [] },
+        source: { app: 'navicat', name: 'Notes', navicatType: 'SQLite', format: 'ncx' }
+      })
+      expect(created.get('Notes')!.sqlite!.pathNeedsReview).toBeUndefined()
+      expect(created.get('Gone')!.sqlite).toMatchObject({
+        filePath: missing,
+        pathNeedsReview: true
+      })
+      expect(created.get('Windows')!.sqlite).toMatchObject({
+        filePath: 'C:\\data\\x.db',
+        pathNeedsReview: true
+      })
+      expect(credentials.has('mysql', created.get('Notes')!.id)).toBe(false)
+      // Nothing was created on disk for the missing file.
+      expect(existsSync(missing)).toBe(false)
+      expect(readdirSync(dir).filter((f) => f.endsWith('.db'))).toEqual(['app.db'])
+    })
+
+    it('a production SQLite import opens read-only by default', async () => {
+      settings.update({ previewEngines: true })
+      const db = join(dir, 'prod.db')
+      writeFileSync(db, '')
+      const path = writeNcx(ncxEntry('Shop production', db))
+      const result = await importConnectionFile(ctx, {
+        source: 'navicat-ncx',
+        path,
+        keys: ['SQLite:Shop production'],
+        existingMode: 'replace'
+      })
+      expect(result.created[0]).toMatchObject({
+        environment: 'production',
+        sqlite: { readOnly: true, foreignKeys: false }
+      })
+    })
+
+    it('imports DBeaver SQLite entries; existence check is injected', async () => {
+      settings.update({ previewEngines: true })
+      const result = await importConnectionFile(
+        ctx,
+        {
+          source: 'dbeaver',
+          path: DBEAVER,
+          keys: ['sqlite_jdbc-18a2b3c4d62-5d6e7f8091a2b3c4'],
+          existingMode: 'replace'
+        },
+        'linux',
+        (p) => p === '/home/tester/notes.db'
+      )
+      expect(result.warnings).toEqual([])
+      expect(result.created[0]).toMatchObject({
+        name: 'Local notes',
+        engine: 'sqlite',
+        authMode: 'none',
+        sqlite: { filePath: '/home/tester/notes.db', foreignKeys: false }
+      })
+      expect(result.created[0].sqlite!.pathNeedsReview).toBeUndefined()
     })
   })
 })

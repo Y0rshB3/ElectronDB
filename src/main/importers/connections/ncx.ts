@@ -1,9 +1,13 @@
+import { existsSync } from 'node:fs'
 import type { SshConfig, SslConfig } from '@shared/types'
 import { decryptNcxAes, decryptNcxBlowfish } from '../navicat/ncxCipher'
 import { inferEnvironment } from '../../navicat/connPlist'
 import {
   NO_SSH,
+  NO_SSL,
+  SQLITE_ENCRYPTED_REASON,
   type ConnectionSecrets,
+  type FileExists,
   type ParsedConnection,
   type ParsedConnectionFile
 } from './types'
@@ -16,6 +20,8 @@ import {
   normalizeColor,
   positiveInt,
   postgresFamily,
+  SQLITE_CHOICE,
+  sqliteBlock,
   uniqueKey,
   unsupported,
   type EngineChoice
@@ -89,13 +95,15 @@ function engineFor(connType: string, serviceProvider: string): EngineChoice {
   if (key === 'MYSQL') return mysqlFamily(false)
   if (key === 'MARIADB') return mysqlFamily(true)
   if (key === 'POSTGRESQL') return postgresFamily(serviceProvider)
+  if (key === 'SQLITE') return SQLITE_CHOICE
   return unsupported(navicatTypeLabel(connType))
 }
 
 /** Parses .ncx text. Throws NCX_INVALID_MESSAGE when it is not an .ncx file. */
 export function parseNcx(
   xml: string,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  fileExists: FileExists = existsSync
 ): ParsedConnectionFile {
   const doc = parseXml(xml, NCX_INVALID_MESSAGE)
   const root = doc.documentElement!
@@ -115,6 +123,34 @@ export function parseNcx(
     const choice = engineFor(connType, (get('ServiceProvider') ?? '').trim())
     const warnings: string[] = []
     if (choice.warning) warnings.push(choice.warning)
+
+    if (choice.engine === 'sqlite') {
+      // DatabaseFileName: the file on the source machine. SQLiteEncrypt (Ver 1.4+) or
+      // SQLiteEncryption (Ver 1.1) mark Navicat's encrypted files, which cannot be opened.
+      // Their passwords (SQLiteEncryptPassword) are never read.
+      const filePath = (get('DatabaseFileName') ?? '').trim()
+      const encrypted = bool(get('SQLiteEncrypt')) || bool(get('SQLiteEncryption'))
+      connections.push({
+        key: uniqueKey(`${navicatType}:${name}`, used),
+        name,
+        engine: choice.engine,
+        engineLabel: navicatType,
+        unsupportedReason: encrypted ? SQLITE_ENCRYPTED_REASON : null,
+        host: '',
+        port: 0,
+        username: '',
+        database: filePath || null,
+        color: normalizeColor(get('Color') ?? get('ConnectionColor')),
+        environment: inferEnvironment(name, '', false),
+        ssh: { ...NO_SSH },
+        ssl: { ...NO_SSL },
+        secrets: {},
+        warnings,
+        navicatType,
+        sqlite: sqliteBlock(name, filePath, platform, fileExists, warnings)
+      })
+      continue
+    }
     // PostgreSQL may list several hosts (failover): only the first one is used.
     const hostList = postgres
       ? firstHost(get('Host') ?? '', warnings)

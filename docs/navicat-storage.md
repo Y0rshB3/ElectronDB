@@ -168,9 +168,9 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   attributes**, so every attribute is optional (MySQL port 3306, SSH port 22, flags off).
 - `ConnType` (case-insensitive): `MYSQL`, `MARIADB` (imported as a MySQL connection while
   MariaDB has no driver of its own), `POSTGRESQL`, `SQLITE`, `MONGODB`, `SQLSERVER`,
-  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL` is
-  importable while «Motores en vista previa» is on (otherwise listed and disabled with
-  «PostgreSQL está en vista previa…»); the rest are listed with «Motor no soportado en esta
+  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL` and
+  `SQLITE` are importable while «Motores en vista previa» is on (otherwise listed and
+  disabled with «PostgreSQL/SQLite está en vista previa…»); the rest are listed with «Motor no soportado en esta
   versión». The import identity is
   `(type, ConnectionName)`, the same as for `conn.plist` imports, so an `.ncx` merges into
   connections imported from the folder.
@@ -182,6 +182,15 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   5432, `ServiceProvider` (`Redshift`, `GaussDB`/`openGauss`, `KingbaseES` stay unsupported
   with a reason), `Host` lists such as `h1:5432,h2:5433` (only the first host is used, with a
   warning).
+- SQLite: `DatabaseFileName` (the file path on the machine that exported it; attribute name
+  from public parsers, not from a sample of the user's). `Host`, `Port` and `UserName` are
+  empty. The path is kept as written and flagged for review (the connection cannot open until
+  the user picks the file) when it is not absolute on this OS or the file does not exist
+  here; the file is never opened or created by the import. `SQLiteEncrypt="true"` (Ver 1.4+)
+  or `SQLiteEncryption="true"` (Ver 1.1; only the `true` value is assumed) marks Navicat's
+  encrypted files: listed as not importable, and `SQLiteEncryptPassword` is never read.
+  Imported SQLite connections keep foreign keys off and use no password. No attached
+  databases are imported (no documented attribute).
 - **Unverified** (accepted when present, never required): `SSL_VerifyCA`, a colour attribute
   (`Color` / `ConnectionColor`), and the PostgreSQL SSL mode attribute (`SSL_Mode` /
   `SSLMode`, any libpq spelling); no sample confirms how Navicat writes them.
