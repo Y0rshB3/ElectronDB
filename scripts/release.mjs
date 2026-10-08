@@ -29,6 +29,7 @@ import {
   hashFile,
   parseUpdateYml,
   PLATFORMS,
+  PRODUCT,
   sha256SumsText
 } from './release-lib.mjs'
 
@@ -56,6 +57,36 @@ function run(cmd, args, env) {
   console.log(`\n$ ${cmd} ${args.join(' ')}`)
   const res = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit', env })
   if (res.status !== 0) throw new Error(`${cmd} failed (exit ${res.status ?? res.signal})`)
+}
+
+/**
+ * The mac build copies Electron's LICENSE and LICENSES.chromium.html from node_modules/electron/dist
+ * (electron-builder.yml, mac.extraResources). Electron 44 downloads that folder on first use, not at
+ * `npm ci`, and electron-builder only warns when an extraResources source is missing: from a clean
+ * export the .app would ship without the notices THIRD_PARTY_LICENSES.txt points to.
+ */
+const ELECTRON_NOTICES = ['LICENSE', 'LICENSES.chromium.html']
+
+function ensureElectronDist(env) {
+  const dist = join(ROOT, 'node_modules', 'electron', 'dist')
+  if (ELECTRON_NOTICES.every((f) => existsSync(join(dist, f)))) return
+  // Requiring the package downloads the binary (and its notices) into dist.
+  run(process.execPath, ['-e', "require('electron')"], env)
+  for (const f of ELECTRON_NOTICES)
+    if (!existsSync(join(dist, f))) throw new Error(`Electron's ${f} is missing in ${dist}`)
+}
+
+function verifyMacNotices(outDir) {
+  for (const arch of ['mac-arm64', 'mac'])
+    for (const f of [
+      'LICENSE.electron.txt',
+      'LICENSES.chromium.html',
+      'THIRD_PARTY_LICENSES.txt'
+    ]) {
+      const file = join(outDir, arch, `${PRODUCT}.app`, 'Contents', 'Resources', f)
+      if (!existsSync(file)) throw new Error(`Missing ${file}`)
+    }
+  console.log('  ✓ macOS bundles ship the Electron/Chromium notices')
 }
 
 async function verifyFeed(outDir, platform, version) {
@@ -90,6 +121,7 @@ async function main() {
   const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
   if (opts.build) run(npm, ['run', 'build'], env)
+  if (opts.platforms.includes('mac')) ensureElectronDist(env)
   for (const platform of opts.platforms)
     run(npx, ['electron-builder', ...builderArgs(platform, outDir)], env)
 
@@ -102,6 +134,7 @@ async function main() {
     for (const name of [...a.binaries, a.updateInfo, ...a.blockmaps])
       if (!existsSync(join(outDir, name))) throw new Error(`Missing ${name} in ${outDir}`)
     await verifyFeed(outDir, platform, version)
+    if (platform === 'mac') verifyMacNotices(outDir)
     for (const name of a.binaries)
       sums.push({ name, sha256: await hashFile(join(outDir, name), 'sha256', 'hex') })
     upload.push(...a.binaries, a.updateInfo, ...a.blockmaps)
