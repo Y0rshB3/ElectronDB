@@ -92,7 +92,7 @@ export const MARIADB_USERS_SQL = `SELECT User AS user, Host AS host,
       WHERE COALESCE(JSON_VALUE(Priv, '$.is_role'), 'false') NOT IN ('true', '1')
       ORDER BY User, Host`
 
-/** Objects a .nb3 backup leaves out on MariaDB (the format has no slot for them). */
+/** MariaDB objects an .nb3 backup cannot hold whole (sequences; history of versioned tables). */
 export interface SkippedBackupObject {
   kind: 'system-versioned' | 'sequence'
   name: string
@@ -117,38 +117,55 @@ export function skippedFromTableTypes(
   return out
 }
 
+/** How the safety copy of a REPLACE must be taken so nothing is lost (MariaDB objects). */
+export interface SafetyCopyPlan {
+  /**
+   * The copy must be a .vqb: the database has sequences or system-versioned
+   * tables, which an .nb3 cannot hold (or holds without history).
+   */
+  vqb: boolean
+  /**
+   * Why the database is not replaced behind a safety copy: transaction-precise
+   * system-versioned tables, whose history no backup can carry. null = fine.
+   */
+  refusal: string | null
+}
+
+type PlanQueryable = {
+  serverVersion?: string
+  query<T>(sql: string, params?: unknown[]): Promise<T[]>
+}
+
+const quoteMysqlId = (name: string): string => '`' + name.replace(/`/g, '``') + '`'
+
 /**
- * Refusal of a REPLACE whose safety copy would leave MariaDB objects out
- * (sequences, system-versioned tables): dropping the database would lose
- * them for good. null on MySQL servers or when nothing would be left out.
+ * Safety copy rules of a REPLACE (restore or `.sql` import) on `schema`.
+ * A MySQL server is never queried beyond what it was before (no query at all).
  */
-export async function replaceSafetyRefusal(
-  session: { serverVersion?: string; query<T>(sql: string, params?: unknown[]): Promise<T[]> },
+export async function replaceSafetyPlan(
+  session: PlanQueryable,
   schema: string
-): Promise<string | null> {
-  if (!isMariaDbSession(session)) return null
+): Promise<SafetyCopyPlan> {
+  if (!isMariaDbSession(session)) return { vqb: false, refusal: null }
   const rows = await session.query<{ name: unknown; type: unknown }>(MARIADB_SKIPPED_OBJECTS_SQL, [
     schema
   ])
-  const skipped = describeSkippedObjects(skippedFromTableTypes(rows))
-  return skipped
-    ? `No se reemplaza «${schema}»: su copia previa no podría guardarlo todo. ${skipped} Desactiva la copia previa solo si de verdad quieres reemplazarla sin ellos.`
-    : null
-}
-
-/**
- * "La copia no incluye 1 tabla versionada y 2 secuencias: a, s1, s2" (names
- * only, never data); null when nothing is skipped.
- */
-export function describeSkippedObjects(objects: SkippedBackupObject[]): string | null {
-  if (!objects.length) return null
-  const versioned = objects.filter((o) => o.kind === 'system-versioned').length
-  const sequences = objects.length - versioned
-  const parts: string[] = []
-  if (versioned)
-    parts.push(`${versioned} ${versioned === 1 ? 'tabla versionada' : 'tablas versionadas'}`)
-  if (sequences) parts.push(`${sequences} ${sequences === 1 ? 'secuencia' : 'secuencias'}`)
-  return `La copia no incluye ${parts.join(' y ')} (MariaDB): ${objects.map((o) => o.name).join(', ')}. Copia esos objetos con otra herramienta si los necesitas.`
+  const objects = skippedFromTableTypes(rows)
+  if (!objects.length) return { vqb: false, refusal: null }
+  const trx: string[] = []
+  for (const o of objects) {
+    if (o.kind !== 'system-versioned') continue
+    const ddlRows = await session.query<Record<string, unknown>>(
+      `SHOW CREATE TABLE ${quoteMysqlId(schema)}.${quoteMysqlId(o.name)}`
+    )
+    if (isTrxIdVersionedDdl(String(ddlRows[0]?.['Create Table'] ?? ''))) trx.push(o.name)
+  }
+  return {
+    vqb: true,
+    refusal: trx.length
+      ? `No se reemplaza «${schema}»: ninguna copia puede guardar el historial de ${trx.length === 1 ? 'la tabla versionada por transacción' : 'las tablas versionadas por transacción'} ${trx.join(', ')} (MariaDB), así que se perdería. Desactiva la copia previa solo si de verdad quieres reemplazarla sin ese historial.`
+      : null
+  }
 }
 
 /* ---------- Sequences (MariaDB engine, P5) ---------- */
@@ -207,4 +224,67 @@ export async function listMariaDbSequences(
       comment: r.comment ? String(r.comment) : undefined
     }))
   }
+}
+
+/* ---------- Backups of sequences and system-versioned tables (MariaDB) ---------- */
+
+/** Period columns of a system-versioned table, from its SHOW CREATE TABLE. */
+export interface SystemVersioningColumns {
+  start: string
+  end: string
+  /** Explicit `PERIOD FOR SYSTEM_TIME` columns (false: the hidden row_start/row_end). */
+  explicit: boolean
+}
+
+const PERIOD_RE = /\bPERIOD\s+FOR\s+SYSTEM_TIME\s*\(\s*`((?:[^`]|``)+)`\s*,\s*`((?:[^`]|``)+)`\s*\)/i
+
+/**
+ * Period columns of a system-versioned table: the explicit ones named in
+ * `PERIOD FOR SYSTEM_TIME (s, e)`, or MariaDB's hidden `row_start`/`row_end`.
+ */
+export function systemVersioningColumns(ddl: string): SystemVersioningColumns {
+  const m = PERIOD_RE.exec(ddl)
+  if (!m) return { start: 'row_start', end: 'row_end', explicit: false }
+  const unq = (s: string): string => s.replace(/``/g, '`')
+  return { start: unq(m[1]), end: unq(m[2]), explicit: true }
+}
+
+/**
+ * Transaction-precise versioning (period columns of BIGINT UNSIGNED holding
+ * transaction ids, from SHOW CREATE TABLE): its history cannot be carried to
+ * another server, so backups keep only the current rows.
+ */
+export function isTrxIdVersionedDdl(ddl: string): boolean {
+  return /\bbigint\b[^,\n]*\bGENERATED\s+ALWAYS\s+AS\s+ROW\s+START\b/i.test(ddl)
+}
+
+/** `SELECT SETVAL(…)` that puts a restored sequence where the backed up one was. */
+export function setSequenceValueSql(
+  quotedName: string,
+  state: { lastValue: string; isCalled: boolean; round?: string }
+): string {
+  const value = /^-?\d+$/.test(state.lastValue) ? state.lastValue : '0'
+  const round = state.round && /^\d+$/.test(state.round) ? state.round : '0'
+  return `SELECT SETVAL(${quotedName}, ${value}, ${state.isCalled ? 1 : 0}, ${round})`
+}
+
+/**
+ * Warning of a .nb3 backup on MariaDB: the format has no slot for sequences
+ * (only tables have been observed in Navicat's files) and keeps only the
+ * current rows of system-versioned tables. Names only; null when nothing applies.
+ */
+export function describeNb3MariaDbLimits(objects: SkippedBackupObject[]): string | null {
+  if (!objects.length) return null
+  const sequences = objects.filter((o) => o.kind === 'sequence').map((o) => o.name)
+  const versioned = objects.filter((o) => o.kind === 'system-versioned').map((o) => o.name)
+  const parts: string[] = []
+  if (sequences.length)
+    parts.push(
+      `no incluye ${sequences.length === 1 ? 'la secuencia' : `las ${sequences.length} secuencias`} ${sequences.join(', ')}`
+    )
+  if (versioned.length)
+    parts.push(
+      `de ${versioned.length === 1 ? 'la tabla versionada' : `las ${versioned.length} tablas versionadas`} ${versioned.join(', ')} guarda solo las filas actuales, sin historial`
+    )
+  return `La copia .nb3 ${parts.join(' y ')} (MariaDB). Elige el formato .vqb para copiarlo todo.`
 }

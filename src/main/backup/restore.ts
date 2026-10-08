@@ -5,6 +5,7 @@ import { describeError } from '../mysql/errors'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
 import { openMysqlRestoreArchive, type RestoreArchive } from './archive'
+import { setSequenceValueSql } from '../mysql/mariadb'
 import { isCancelled } from './nb3/reader'
 import type { Nb3ManifestObject, Nb3ObjectMeta } from './nb3/format'
 
@@ -83,14 +84,16 @@ export function stripDefiner(ddl: string): string {
   return ddl.replace(DEFINER_RE, '')
 }
 
+// MariaDB sequences go first: a table may take its default from NEXTVAL(seq).
 const PHASE_RANK: Record<string, number> = {
-  table: 0,
-  function: 1,
-  procedure: 1,
-  view: 2,
-  event: 3
+  sequence: 0,
+  table: 1,
+  function: 2,
+  procedure: 2,
+  view: 3,
+  event: 4
 }
-const rankOf = (type: string): number => PHASE_RANK[type.toLowerCase()] ?? 4
+const rankOf = (type: string): number => PHASE_RANK[type.toLowerCase()] ?? 5
 
 const DROP_KEYWORD: Record<string, string> = {
   table: 'TABLE',
@@ -98,7 +101,8 @@ const DROP_KEYWORD: Record<string, string> = {
   function: 'FUNCTION',
   procedure: 'PROCEDURE',
   event: 'EVENT',
-  trigger: 'TRIGGER'
+  trigger: 'TRIGGER',
+  sequence: 'SEQUENCE'
 }
 
 function validate(options: RestoreOptions): void {
@@ -234,6 +238,8 @@ interface SavedSessionState {
   sqlMode: string | null
   /** The time zone was changed for the archive's TIMESTAMP text. */
   timeZone: boolean
+  /** MariaDB system_versioning_insert_history was turned on (history rows of a .vqb). */
+  insertHistory?: boolean
 }
 
 async function prepareSession(
@@ -262,6 +268,25 @@ async function resetSession(session: MysqlSession, saved: SavedSessionState): Pr
   await quiet('SET UNIQUE_CHECKS = 1')
   if (saved.sqlMode !== null) await quiet('SET SQL_MODE = ?', [saved.sqlMode])
   if (saved.timeZone) await quiet('SET time_zone = DEFAULT')
+  if (saved.insertHistory) await quiet('SET @@session.system_versioning_insert_history = DEFAULT')
+}
+
+/**
+ * Lets the session insert history rows (period columns) into system-versioned
+ * tables: MariaDB 10.11+. False when the server refuses it (older MariaDB).
+ */
+async function allowHistoryInsert(
+  session: MysqlSession,
+  saved: SavedSessionState
+): Promise<boolean> {
+  if (saved.insertHistory) return true
+  try {
+    await session.execute('SET @@session.system_versioning_insert_history = 1')
+    saved.insertHistory = true
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function restoreBackup(
@@ -381,6 +406,7 @@ async function restoreFrom(
           name,
           options,
           definers,
+          saved!,
           signal,
           (count) =>
             progress({
@@ -395,7 +421,8 @@ async function restoreFrom(
                 rows: count,
                 rowsEstimate: options.includeData ? estimate : null
               }
-            })
+            }),
+          (message) => progress({ phase: 'warning', current: index, total, message, done: false })
         )
         result.rowsInserted += rows
         if (!options.includeData) rows = null
@@ -408,6 +435,10 @@ async function restoreFrom(
           options.dropObjectsFirst,
           definers
         )
+        if (options.includeData) await setSequenceValue(session, reader, item.meta, name)
+      } else if (options.includeData && reader.sequenceState?.(item.meta)) {
+        // Data only: a sequence's value is its data.
+        await setSequenceValue(session, reader, item.meta, name)
       } else {
         // Data-only restore: nothing is executed for views/routines/events.
         return
@@ -505,6 +536,17 @@ async function restoreDdlObject(
   for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)
 }
 
+/** MariaDB sequence of a .vqb: SETVAL to where the backed up one was (no-op otherwise). */
+async function setSequenceValue(
+  session: MysqlSession,
+  reader: RestoreArchive,
+  meta: Nb3ObjectMeta,
+  name: string
+): Promise<void> {
+  const state = reader.sequenceState?.(meta)
+  if (state) await session.execute(setSequenceValueSql(session.escapeId(name), state))
+}
+
 async function restoreTable(
   session: MysqlSession,
   reader: RestoreArchive,
@@ -512,8 +554,10 @@ async function restoreTable(
   name: string,
   options: RestoreOptions,
   definers: DefinerAccounts,
+  saved: SavedSessionState,
   signal: AbortSignal | undefined,
-  onRows: (rows: number) => void
+  onRows: (rows: number) => void,
+  onWarning: (message: string) => void
 ): Promise<number> {
   const table = session.escapeId(name)
   if (options.includeStructure) {
@@ -525,8 +569,13 @@ async function restoreTable(
   }
   let inserted = 0
   if (options.includeData && meta.Data.length > 0) {
+    // A system-versioned table of a .vqb carries its history in the two last (period)
+    // columns; where the server cannot take history rows only the current ones go in.
+    const versioned = reader.versioning?.(meta) ?? null
+    const currentOnly = !!versioned && !(await allowHistoryInsert(session, saved))
+    const fields = currentOnly ? meta.Fields.slice(0, -2) : meta.Fields
     const columns =
-      meta.Fields.length > 0 ? ` (${meta.Fields.map((f) => session.escapeId(f)).join(', ')})` : ''
+      fields.length > 0 ? ` (${fields.map((f) => session.escapeId(f)).join(', ')})` : ''
     const batcher = new InsertBatcher(session, `INSERT INTO ${table}${columns} VALUES`)
     let lastReported = 0
     await reader.rows(
@@ -538,10 +587,15 @@ async function restoreTable(
           onRows(batcher.inserted)
         }
       },
-      signal
+      signal,
+      currentOnly ? { currentOnly: true } : undefined
     )
     await batcher.flush()
     inserted = batcher.inserted
+    if (currentOnly)
+      onWarning(
+        `${name}: el servidor de destino no admite insertar historial (MariaDB 10.11 o posterior), así que solo se han restaurado las filas actuales de la tabla versionada.`
+      )
   }
   if (options.includeStructure) {
     for (const ddl of meta.IndexDDL) if (ddl.trim()) await executeDdl(session, ddl, definers)

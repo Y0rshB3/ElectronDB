@@ -13,6 +13,7 @@ import { objectWeight, partialWork, type CreateDeps } from './create'
 import type { ProgressReporter } from './index'
 import { literalKindOf, quoteString, renderTuple, type LiteralKind } from './mysqlLiterals'
 import { formatSqlDumpFileName } from './naming'
+import { isTrxIdVersionedDdl, setSequenceValueSql, systemVersioningColumns } from '../mysql/mariadb'
 
 /**
  * Plain SQL dump of one schema that the mysql command-line client (and other
@@ -32,11 +33,13 @@ export const INSERT_MAX_BYTES = 1024 * 1024
 
 const ROW_PROGRESS_EVERY = 5000
 
-type ObjectKind = 'Table' | 'View' | 'Function' | 'Procedure' | 'Event'
+type ObjectKind = 'Sequence' | 'Table' | 'View' | 'Function' | 'Procedure' | 'Event'
 
 interface SchemaObject {
   type: ObjectKind
   name: string
+  /** MariaDB system-versioned table. */
+  versioned?: boolean
   rowsEstimate: number | null
   /** sql_mode the routine/event was created with (null when unknown). */
   sqlMode: string | null
@@ -50,6 +53,7 @@ interface TriggerRef {
 }
 
 const KIND_LABEL: Record<ObjectKind, string> = {
+  Sequence: 'secuencia',
   Table: 'tabla',
   View: 'vista',
   Function: 'función',
@@ -58,6 +62,7 @@ const KIND_LABEL: Record<ObjectKind, string> = {
 }
 
 const KIND_TITLE: Record<ObjectKind, string> = {
+  Sequence: 'Secuencia',
   Table: 'Tabla',
   View: 'Vista',
   Function: 'Función',
@@ -66,6 +71,7 @@ const KIND_TITLE: Record<ObjectKind, string> = {
 }
 
 const SHOW_CREATE: Record<Exclude<ObjectKind, 'Table'>, { stmt: string; column: string }> = {
+  Sequence: { stmt: 'SHOW CREATE SEQUENCE', column: 'Create Table' },
   View: { stmt: 'SHOW CREATE VIEW', column: 'Create View' },
   Function: { stmt: 'SHOW CREATE FUNCTION', column: 'Create Function' },
   Procedure: { stmt: 'SHOW CREATE PROCEDURE', column: 'Create Procedure' },
@@ -73,14 +79,18 @@ const SHOW_CREATE: Record<Exclude<ObjectKind, 'Table'>, { stmt: string; column: 
 }
 
 const DROP_KEYWORD: Record<Exclude<ObjectKind, 'Table'>, string> = {
+  Sequence: 'SEQUENCE',
   View: 'VIEW',
   Function: 'FUNCTION',
   Procedure: 'PROCEDURE',
   Event: 'EVENT'
 }
 
-/** Output order: tables, routines (views may call functions), views, events. */
-const TYPE_ORDER: ObjectKind[] = ['Table', 'Function', 'Procedure', 'View', 'Event']
+/**
+ * Output order: MariaDB sequences (a table default may call NEXTVAL), tables,
+ * routines (views may call functions), views, events.
+ */
+const TYPE_ORDER: ObjectKind[] = ['Sequence', 'Table', 'Function', 'Procedure', 'View', 'Event']
 
 const GENERATED_RE = /\b(VIRTUAL|STORED) GENERATED\b/i
 
@@ -220,6 +230,16 @@ async function listObjects(
         rowsEstimate: estimateOf(t.estRows)
       })
     else if (type === 'VIEW') objects.push({ ...base, type: 'View', name: text(t.name) })
+    // MariaDB only (a MySQL server never reports these types).
+    else if (type === 'SYSTEM VERSIONED')
+      objects.push({
+        ...base,
+        type: 'Table',
+        name: text(t.name),
+        rowsEstimate: estimateOf(t.estRows),
+        versioned: true
+      })
+    else if (type === 'SEQUENCE') objects.push({ ...base, type: 'Sequence', name: text(t.name) })
   }
   for (const r of routines) {
     const type = text(r.type).toUpperCase()
@@ -503,8 +523,8 @@ export async function exportSchemaToSql(
     const wanted = new Set((options.objects ?? []).filter(Boolean))
     const objects = (await listObjects(session, schema, options.includeData))
       .filter((o) => wanted.size === 0 || wanted.has(o.name))
-      // Data only: nothing to write for views, routines and events.
-      .filter((o) => options.includeStructure || o.type === 'Table')
+      // Data only: nothing to write for views, routines and events (a sequence's value is data).
+      .filter((o) => options.includeStructure || o.type === 'Table' || o.type === 'Sequence')
       .sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type))
     if (wanted.size > 0 && objects.length === 0)
       throw new Error(`Ninguno de los objetos seleccionados existe en ${schema}.`)
@@ -591,6 +611,7 @@ export async function exportSchemaToSql(
             obj.name,
             triggers.get(obj.name) ?? [],
             options,
+            !!obj.versioned,
             {
               cancelled,
               onRows: (count) =>
@@ -611,6 +632,8 @@ export async function exportSchemaToSql(
           )
           rowsTotal += written
           rows = options.includeData ? written : null
+        } else if (obj.type === 'Sequence') {
+          await writer.write(await sequenceBlock(session, obj.name, options))
         } else {
           const spec = SHOW_CREATE[obj.type]
           const ddl =
@@ -672,6 +695,31 @@ export async function exportSchemaToSql(
   }
 }
 
+/**
+ * MariaDB sequence: DROP + SHOW CREATE SEQUENCE, then (with data) SETVAL to the
+ * value the next NEXTVAL would hand out after a restart (next_not_cached_value).
+ */
+async function sequenceBlock(
+  session: MysqlSession,
+  name: string,
+  options: SqlExportOptions
+): Promise<string> {
+  let block = heading(`Secuencia ${id(name)}`)
+  if (options.includeStructure) {
+    const ddl = await showCreate(session, 'SHOW CREATE SEQUENCE', name, 'Create Table')
+    block += `DROP SEQUENCE IF EXISTS ${id(name)};\n${ddl.trim()};\n`
+  }
+  if (options.includeData) {
+    const rows = await session.query<{ v: unknown; c: unknown }>(
+      `SELECT next_not_cached_value AS v, cycle_count AS c FROM ${session.escapeId(name)}`
+    )
+    const value = text(rows[0]?.v)
+    if (/^-?\d+$/.test(value))
+      block += `${setSequenceValueSql(id(name), { lastValue: value, isCalled: false, round: text(rows[0]?.c) })};\n`
+  }
+  return `${block}\n`
+}
+
 async function exportTable(
   session: MysqlSession,
   writer: DumpWriter,
@@ -679,10 +727,15 @@ async function exportTable(
   table: string,
   triggers: TriggerRef[],
   options: SqlExportOptions,
+  versioned: boolean,
   hooks: { cancelled: () => boolean; onRows: (rows: number) => void }
 ): Promise<number> {
+  // MySQL data-only exports never read the DDL (only versioned MariaDB tables need it).
+  const ddl =
+    options.includeStructure || versioned
+      ? await showCreate(session, 'SHOW CREATE TABLE', table, 'Create Table')
+      : ''
   if (options.includeStructure) {
-    const ddl = await showCreate(session, 'SHOW CREATE TABLE', table, 'Create Table')
     await writer.write(
       heading(`Estructura de la tabla ${id(table)}`) +
         `DROP TABLE IF EXISTS ${id(table)};\n${ddl.trim()};\n\n`
@@ -693,12 +746,25 @@ async function exportTable(
     const columns = (await tableColumns(session, schema, table)).filter(
       (c) => !GENERATED_RE.test(c.extra)
     )
+    // MariaDB system-versioned table: every row version with its period columns,
+    // inserted with system_versioning_insert_history (MariaDB 10.11+, `/*!101100` so MySQL
+    // and older MariaDB skip it; like
+    // mariadb-dump --dump-history). Transaction-precise versioning: current rows only.
+    const period = versioned && !isTrxIdVersionedDdl(ddl) ? systemVersioningColumns(ddl) : null
+    if (period && columns.length > 0)
+      columns.push(
+        { name: period.start, columnType: 'timestamp(6)', extra: '' },
+        { name: period.end, columnType: 'timestamp(6)', extra: '' }
+      )
     if (columns.length > 0) {
       const kinds: LiteralKind[] = columns.map((c) => literalKindOf(c.columnType))
       const prefix = `INSERT INTO ${id(table)} (${columns.map((c) => id(c.name)).join(', ')}) VALUES\n`
-      const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}`
+      const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}${period ? ' FOR SYSTEM_TIME ALL' : ''}`
       await writer.write(
         heading(`Datos de la tabla ${id(table)}`) +
+          (period
+            ? '/*!101100 SET @OLD_INSERT_HISTORY=@@SESSION.system_versioning_insert_history, @@SESSION.system_versioning_insert_history=1 */;\n'
+            : '') +
           `/*!40000 ALTER TABLE ${id(table)} DISABLE KEYS */;\n`
       )
       let batch: string[] = []
@@ -731,7 +797,13 @@ async function exportTable(
       }
       if (hooks.cancelled()) throw new Error(EXPORT_CANCELLED)
       await flush()
-      await writer.write(`/*!40000 ALTER TABLE ${id(table)} ENABLE KEYS */;\n\n`)
+      await writer.write(
+        `/*!40000 ALTER TABLE ${id(table)} ENABLE KEYS */;\n` +
+          (period
+            ? '/*!101100 SET @@SESSION.system_versioning_insert_history=@OLD_INSERT_HISTORY */;\n'
+            : '') +
+          '\n'
+      )
     }
   }
   if (options.includeStructure) {

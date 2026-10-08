@@ -284,12 +284,14 @@ describeServer(MARIADB_TARGET, 'MariaDB fixes on a mysql connection (integration
     }
   })
 
-  it('warns before a backup that would skip system-versioned tables and sequences', async () => {
+  it('warns before an .nb3 that would skip sequences and the history of versioned tables', async () => {
     const sessions = getSessionFactory(ctx)
     const warning = await skippedObjectsWarning(sessions, id, SCHEMA)
     expect(warning).toBe(
-      'La copia no incluye 1 tabla versionada y 1 secuencia (MariaDB): seq_orders, sv. Copia esos objetos con otra herramienta si los necesitas.'
+      'La copia .nb3 no incluye la secuencia seq_orders y de la tabla versionada sv guarda solo las filas actuales, sin historial (MariaDB). Elige el formato .vqb para copiarlo todo.'
     )
+    // A .vqb (and a .sql) holds both: no warning.
+    expect(await skippedObjectsWarning(sessions, id, SCHEMA, 'vqb')).toBeNull()
     const events: Omit<ProgressEvent, 'operationId' | 'kind'>[] = []
     const service = createBackupService(ctx, sessions)
     const result = await service.create(
@@ -297,7 +299,7 @@ describeServer(MARIADB_TARGET, 'MariaDB fixes on a mysql connection (integration
       (e) => events.push(e)
     )
     expect(events.find((e) => e.phase === 'warning')?.message).toBe(warning)
-    // plain + v_sv only: the .nb3 format has no slot for the other two.
-    expect(result.objects).toBe(2)
+    // plain, sv (current rows) and v_sv: the .nb3 format has no slot for the sequence.
+    expect(result.objects).toBe(3)
   }, 60_000)
 })

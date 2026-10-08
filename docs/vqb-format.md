@@ -174,9 +174,10 @@ password).
 | `options`                            | `includeData` (false: structure only, data files absent), `structureOnly` (its negation, for readers that look for it), `partial` (only some objects were selected).                                                   |
 | `encryption`                         | `null`, or `{"alg": "AES-256-GCM", "kdf": "scrypt"}` (parameters in the header).                                                                                                                                       |
 | `objects[]`                          | `id` (folder number), `type`, `name`, `schema` (PostgreSQL), `rows` (tables: rows written; otherwise `null`), `files[]` with `path`, `sha256` (hex) and `bytes` of every entry of the object **as stored in the ZIP**. |
-| `warnings`                           | Optional: what the backup could not include, in the user's language (MariaDB system-versioned tables, PostgreSQL aggregates…).                                                                                         |
+| `warnings`                           | Optional: what the backup could not include, in the user's language (history of MariaDB transaction-precise versioned tables, PostgreSQL aggregates…).                                                                 |
 
-Object `type`s: MySQL/MariaDB `table`, `view`, `function`, `procedure`, `event`; SQLite `table`, `view`;
+Object `type`s: MySQL/MariaDB `table`, `view`, `function`, `procedure`, `event` (MariaDB also
+`sequence`); SQLite `table`, `view`;
 MongoDB `collection`, `view`;
 PostgreSQL `extension`, `type`, `sequence`, `table`, `function`, `procedure`, `view`,
 `materialized_view`.
@@ -216,21 +217,22 @@ statement and never split it.
 }
 ```
 
-| Field                    | Meaning                                                                                                                                                                                                                             |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`, `type`, `schema` | As in the manifest.                                                                                                                                                                                                                 |
-| `ddl`                    | Path of `ddl.sql`.                                                                                                                                                                                                                  |
-| `columns`                | Tables: columns in the order of the values of every row, with their type in the source dialect. Generated (computed) columns are not stored. `delimiter`: PostgreSQL array element delimiter when it is not `,` (`box[]` uses `;`). |
-| `rows`, `data`           | Tables: rows written, and each data file with its row count.                                                                                                                                                                        |
-| `primaryKey`             | PostgreSQL tables: primary key columns.                                                                                                                                                                                             |
-| `autoIncrement`          | MySQL tables: the `AUTO_INCREMENT` counter (also inside the DDL). SQLite: the table's `sqlite_sequence` value.                                                                                                                      |
-| `indexes`                | PostgreSQL and SQLite: `CREATE INDEX` statements of indexes no constraint owns (MySQL keeps them inside the DDL).                                                                                                                   |
-| `foreignKeys`            | PostgreSQL: `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY …` (MySQL keeps them inside the DDL).                                                                                                                                       |
-| `triggers`               | Trigger statements of the table.                                                                                                                                                                                                    |
-| `comments`               | PostgreSQL: `COMMENT ON …` statements.                                                                                                                                                                                              |
-| `postDdl`                | PostgreSQL: statements that go right after the main one (constraints of a partition) or, for sequences, after every table exists (`ALTER SEQUENCE … OWNED BY …`).                                                                   |
-| `sequences`              | PostgreSQL: sequence values to set after the data: `schema`, `name`, `lastValue` (integer text), `isCalled`, `ownedBy` (`{table, column}`), `kind` (`identity`, `serial`, `standalone`).                                            |
-| `signature`              | PostgreSQL routines: identity arguments, to tell overloads apart.                                                                                                                                                                   |
+| Field                    | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`, `type`, `schema` | As in the manifest.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `ddl`                    | Path of `ddl.sql`.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `columns`                | Tables: columns in the order of the values of every row, with their type in the source dialect. Generated (computed) columns are not stored. `delimiter`: PostgreSQL array element delimiter when it is not `,` (`box[]` uses `;`).                                                                                                                                                                                                               |
+| `rows`, `data`           | Tables: rows written, and each data file with its row count.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `primaryKey`             | PostgreSQL tables: primary key columns.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `autoIncrement`          | MySQL tables: the `AUTO_INCREMENT` counter (also inside the DDL). SQLite: the table's `sqlite_sequence` value.                                                                                                                                                                                                                                                                                                                                    |
+| `indexes`                | PostgreSQL and SQLite: `CREATE INDEX` statements of indexes no constraint owns (MySQL keeps them inside the DDL).                                                                                                                                                                                                                                                                                                                                 |
+| `foreignKeys`            | PostgreSQL: `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY …` (MySQL keeps them inside the DDL).                                                                                                                                                                                                                                                                                                                                                     |
+| `triggers`               | Trigger statements of the table.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `comments`               | PostgreSQL: `COMMENT ON …` statements.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `postDdl`                | PostgreSQL: statements that go right after the main one (constraints of a partition) or, for sequences, after every table exists (`ALTER SEQUENCE … OWNED BY …`).                                                                                                                                                                                                                                                                                 |
+| `sequences`              | PostgreSQL: sequence values to set after the data: `schema`, `name`, `lastValue` (integer text), `isCalled`, `ownedBy` (`{table, column}`), `kind` (`identity`, `serial`, `standalone`). MariaDB `sequence` objects: one entry with `schema` `""`, `lastValue` = `next_not_cached_value`, `isCalled` `false` and `round` = `cycle_count` (integer text, omitted when 0), restored with `SETVAL(seq, lastValue, 0, round)`.                        |
+| `systemVersioning`       | MariaDB system-versioned tables: `{start, end, currentEnd}`. The last two `columns` are the period columns `start` and `end` (`row_start`/`row_end` when the table uses MariaDB's hidden ones) and the rows are every version (`FOR SYSTEM_TIME ALL`); `currentEnd` is the `end` value of the current rows (`null` when there are none). Absent for transaction-precise versioning, whose current rows only are stored (with a `warnings` entry). |
+| `signature`              | PostgreSQL routines: identity arguments, to tell overloads apart.                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### data-NNNNNN.jsonl.gz
 
@@ -282,7 +284,10 @@ The JSON string `"NULL"` is the text NULL, never SQL NULL.
 
 Restore: write the value as a literal: numbers, `$bigint` and `$dec` unquoted, `$bin` as
 `0x…`, everything else as an escaped string; set the session `time_zone` to
-`source.timeZone` first.
+`source.timeZone` first. A table with `systemVersioning` is inserted with
+`SET @@session.system_versioning_insert_history = 1` (MariaDB 10.11 and later), naming the period
+columns; a server without it gets the current rows only (rows whose last value equals
+`currentEnd`, without the two period columns).
 
 ### PostgreSQL
 
@@ -366,9 +371,9 @@ as it is when its turn comes.
 
 ### Restore order
 
-- MySQL/MariaDB: tables (DDL, rows, triggers, `AUTO_INCREMENT`), functions and procedures,
-  views (retry those that depend on other views), events. A `DEFINER` whose account does not
-  exist on the target may be dropped.
+- MySQL/MariaDB: MariaDB sequences (DDL, then `SETVAL` when restoring data), tables (DDL, rows,
+  triggers, `AUTO_INCREMENT`), functions and procedures, views (retry those that depend on other
+  views), events. A `DEFINER` whose account does not exist on the target may be dropped.
 - PostgreSQL: schemas, extensions, types (retry those that depend on others), sequences,
   tables and their rows (partitioned parents first), functions and procedures, views and
   materialized views (retry), then every table's `indexes`, `foreignKeys`, `triggers`,
@@ -499,7 +504,8 @@ for obj in manifest["objects"]:
   subscriptions, foreign tables, aggregates, event triggers and table inheritance
   (`INHERITS`, restored as independent tables) are not included; extensions are recreated
   with `CREATE EXTENSION`, so the target server must have them installed.
-- MariaDB: system-versioned tables and sequences are left out (listed in `warnings`).
+- MariaDB: the history of transaction-precise system-versioned tables (period columns of
+  transaction ids) is left out: their current rows are stored (listed in `warnings`).
 - SQLite: virtual tables (FTS, R-Tree…) are left out (listed in `warnings`), and so are rowids
   of tables without an `INTEGER PRIMARY KEY`.
 - MongoDB: users, roles and `system.*` collections are not included; a backup is not a point-in-time

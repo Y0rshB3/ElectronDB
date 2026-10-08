@@ -4,7 +4,12 @@ import { isEncrypted, type Nb3Manifest, type Nb3ObjectMeta } from './nb3/format'
 import { ENCRYPTED_MESSAGE, Nb3Reader, readManifest, verifyBackupFile } from './nb3/reader'
 import { NB3_TYPE_OF, VqbMysqlArchive } from './vqb/mysqlArchive'
 import { VqbReader, withVqbReader } from './vqb/reader'
-import type { VqbHeader, VqbManifest } from './vqb/format'
+import type {
+  VqbHeader,
+  VqbManifest,
+  VqbSequenceState,
+  VqbSystemVersioning
+} from './vqb/format'
 
 /**
  * Format-neutral access to restorable backups (.nb3 and .vqb): metadata for
@@ -21,11 +26,24 @@ export interface RestoreArchive {
   rows(
     meta: Nb3ObjectMeta,
     onRow: (tuple: string) => Promise<void> | void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: RowsOptions
   ): Promise<number>
+  /** MariaDB system-versioned table whose data carries its history (.vqb only). */
+  versioning?(meta: Nb3ObjectMeta): VqbSystemVersioning | null
+  /** MariaDB sequence value to set after the sequence is created (.vqb only). */
+  sequenceState?(meta: Nb3ObjectMeta): VqbSequenceState | null
   /** Session time zone of the archive's TIMESTAMP text (.vqb: '+00:00'), null = leave it. */
   readonly timeZone: string | null
   close(): Promise<void>
+}
+
+export interface RowsOptions {
+  /**
+   * System-versioned table restored where history cannot be inserted: only
+   * the current rows, without the two period columns.
+   */
+  currentOnly?: boolean
 }
 
 export const NOT_A_BACKUP_MESSAGE =

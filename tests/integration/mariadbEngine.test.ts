@@ -25,7 +25,7 @@ import { ConnectionsRepo, JobsRepo, RunsRepo, SettingsRepo } from '@main/storage
 import { ConnectionManager } from '@main/db/manager'
 import { executeScript } from '@main/mysql/query'
 import * as introspect from '@main/mysql/introspect'
-import { replaceSafetyRefusal } from '@main/mysql/mariadb'
+import { replaceSafetyPlan } from '@main/mysql/mariadb'
 import { assertScriptAllowed } from '@main/ipc/productionGuard'
 import {
   mariadbBuildAlter,
@@ -215,12 +215,9 @@ describeServer(MARIADB_TARGET, 'MariaDB engine (integration)', (url) => {
     })
   })
 
-  it('refuses to replace a database whose safety copy would leave its sequences out', async () => {
+  it('takes the safety copy of a database with sequences as a .vqb (never refused)', async () => {
     await withRoot(async (s) => {
-      const refusal = await replaceSafetyRefusal(s, SCHEMA)
-      expect(refusal).toContain(`No se reemplaza «${SCHEMA}»`)
-      expect(refusal).toMatch(/seq_facturas/)
-      expect(refusal).toMatch(/precios/)
+      expect(await replaceSafetyPlan(s, SCHEMA)).toEqual({ vqb: true, refusal: null })
     })
   })
 

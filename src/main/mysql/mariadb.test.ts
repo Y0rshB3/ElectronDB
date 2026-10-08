@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   MARIADB_SEQUENCES_SQL,
   describeMariaDbSequence,
-  describeSkippedObjects,
+  describeNb3MariaDbLimits,
   isMariaDbSession,
+  isTrxIdVersionedDdl,
   jsonColumnsFromChecks,
   listMariaDbSequences,
-  replaceSafetyRefusal,
+  replaceSafetyPlan,
+  setSequenceValueSql,
   skippedFromTableTypes,
+  systemVersioningColumns,
   unquoteMariaDbDefault
 } from './mariadb'
 import { buildCountSql, buildSelectSql } from './tableData'
@@ -39,7 +42,7 @@ describe('MariaDB session detection', () => {
   })
 })
 
-describe('backup warning for skipped MariaDB objects', () => {
+describe('.nb3 warning for MariaDB objects', () => {
   it('lists system-versioned tables and sequences by name only', () => {
     const skipped = skippedFromTableTypes([
       { name: 'orders', type: 'BASE TABLE' },
@@ -53,10 +56,48 @@ describe('backup warning for skipped MariaDB objects', () => {
       { kind: 'sequence', name: 'seq_a' },
       { kind: 'sequence', name: 'seq_b' }
     ])
-    expect(describeSkippedObjects(skipped)).toBe(
-      'La copia no incluye 1 tabla versionada y 2 secuencias (MariaDB): history, seq_a, seq_b. Copia esos objetos con otra herramienta si los necesitas.'
+    expect(describeNb3MariaDbLimits(skipped)).toBe(
+      'La copia .nb3 no incluye las 2 secuencias seq_a, seq_b y de la tabla versionada history guarda solo las filas actuales, sin historial (MariaDB). Elige el formato .vqb para copiarlo todo.'
     )
-    expect(describeSkippedObjects([])).toBeNull()
+    expect(describeNb3MariaDbLimits([{ kind: 'sequence', name: 's' }])).toBe(
+      'La copia .nb3 no incluye la secuencia s (MariaDB). Elige el formato .vqb para copiarlo todo.'
+    )
+    expect(describeNb3MariaDbLimits([])).toBeNull()
+  })
+})
+
+describe('system-versioned tables and sequences in backups', () => {
+  it('finds the period columns (explicit or hidden)', () => {
+    expect(
+      systemVersioningColumns('CREATE TABLE `t` (\n  `id` int) ENGINE=InnoDB WITH SYSTEM VERSIONING')
+    ).toEqual({ start: 'row_start', end: 'row_end', explicit: false })
+    expect(
+      systemVersioningColumns(
+        'CREATE TABLE `t` (\n  `s` timestamp(6) GENERATED ALWAYS AS ROW START,\n  `e``x` timestamp(6) GENERATED ALWAYS AS ROW END,\n  PERIOD FOR SYSTEM_TIME (`s`, `e``x`)\n) WITH SYSTEM VERSIONING'
+      )
+    ).toEqual({ start: 's', end: 'e`x', explicit: true })
+  })
+
+  it('tells transaction-precise versioning apart', () => {
+    expect(
+      isTrxIdVersionedDdl(
+        '  `s` bigint(20) unsigned GENERATED ALWAYS AS ROW START,\n  `e` bigint(20) unsigned GENERATED ALWAYS AS ROW END,'
+      )
+    ).toBe(true)
+    expect(isTrxIdVersionedDdl('  `s` timestamp(6) GENERATED ALWAYS AS ROW START,')).toBe(false)
+    expect(isTrxIdVersionedDdl('CREATE TABLE t (id bigint) WITH SYSTEM VERSIONING')).toBe(false)
+  })
+
+  it('sets a restored sequence with SETVAL (validated numbers only)', () => {
+    expect(setSequenceValueSql('`s`', { lastValue: '510', isCalled: false })).toBe(
+      'SELECT SETVAL(`s`, 510, 0, 0)'
+    )
+    expect(setSequenceValueSql('`s`', { lastValue: '-3', isCalled: true, round: '2' })).toBe(
+      'SELECT SETVAL(`s`, -3, 1, 2)'
+    )
+    expect(setSequenceValueSql('`s`', { lastValue: '1; DROP', isCalled: false, round: 'x' })).toBe(
+      'SELECT SETVAL(`s`, 0, 0, 0)'
+    )
   })
 })
 
@@ -157,26 +198,56 @@ describe('MariaDB engine helpers (P5)', () => {
   })
 })
 
-describe('replaceSafetyRefusal', () => {
-  const session = (version: string, rows: { name: string; type: string }[]) => ({
-    serverVersion: version,
-    query: async <T>(): Promise<T[]> => rows as T[]
+describe('replaceSafetyPlan', () => {
+  const session = (
+    version: string,
+    rows: { name: string; type: string }[],
+    ddl = 'CREATE TABLE `h` (`id` int) WITH SYSTEM VERSIONING'
+  ) => {
+    const calls: string[] = []
+    return {
+      calls,
+      serverVersion: version,
+      query: async <T>(sql: string): Promise<T[]> => {
+        calls.push(sql)
+        return (sql.startsWith('SHOW CREATE') ? [{ 'Create Table': ddl }] : rows) as T[]
+      }
+    }
+  }
+
+  it('asks for a .vqb safety copy when the database has sequences or versioned tables', async () => {
+    expect(
+      await replaceSafetyPlan(
+        session('11.8.9-MariaDB', [
+          { name: 'seq', type: 'SEQUENCE' },
+          { name: 'h', type: 'SYSTEM VERSIONED' }
+        ]),
+        'tienda'
+      )
+    ).toEqual({ vqb: true, refusal: null })
   })
 
-  it('refuses a REPLACE whose safety copy would leave MariaDB objects out', async () => {
-    const refusal = await replaceSafetyRefusal(
-      session('11.8.9-MariaDB', [{ name: 'seq', type: 'SEQUENCE' }]),
+  it('refuses when transaction-precise history would be lost', async () => {
+    const plan = await replaceSafetyPlan(
+      session(
+        '11.8.9-MariaDB',
+        [{ name: 'h', type: 'SYSTEM VERSIONED' }],
+        '`s` bigint(20) unsigned GENERATED ALWAYS AS ROW START,'
+      ),
       'tienda'
     )
-    expect(refusal).toContain('No se reemplaza «tienda»')
-    expect(refusal).toContain('1 secuencia')
-    expect(refusal).toContain('Desactiva la copia previa')
+    expect(plan.vqb).toBe(true)
+    expect(plan.refusal).toContain('No se reemplaza «tienda»')
+    expect(plan.refusal).toContain('Desactiva la copia previa')
   })
 
-  it('allows it on MySQL servers and when nothing would be left out', async () => {
-    expect(
-      await replaceSafetyRefusal(session('8.4.3', [{ name: 's', type: 'SEQUENCE' }]), 'x')
-    ).toBeNull()
-    expect(await replaceSafetyRefusal(session('11.8.9-MariaDB', []), 'x')).toBeNull()
+  it('never queries a MySQL server and changes nothing when there is nothing special', async () => {
+    const mysql = session('8.4.3', [{ name: 's', type: 'SEQUENCE' }])
+    expect(await replaceSafetyPlan(mysql, 'x')).toEqual({ vqb: false, refusal: null })
+    expect(mysql.calls).toEqual([])
+    expect(await replaceSafetyPlan(session('11.8.9-MariaDB', []), 'x')).toEqual({
+      vqb: false,
+      refusal: null
+    })
   })
 })

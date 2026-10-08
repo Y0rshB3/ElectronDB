@@ -40,7 +40,7 @@ export interface VqbFileRef {
 }
 
 /**
- * Object types. MySQL/MariaDB: table, view, function, procedure, event.
+ * Object types. MySQL/MariaDB: table, view, function, procedure, event (MariaDB: sequence).
  * PostgreSQL: extension, type, sequence, table, function, procedure, view,
  * materialized_view. SQLite: table, view. MongoDB: collection, view.
  */
@@ -140,6 +140,20 @@ export interface VqbSequenceState {
   ownedBy?: { table: string; column: string } | null
   /** 'identity' sequences are created by the column itself. */
   kind?: 'identity' | 'serial' | 'standalone'
+  /** MariaDB: cycle_count of the sequence (SETVAL's round), integer text. */
+  round?: string
+}
+
+/**
+ * MariaDB system-versioned table: the last two columns of the data are its
+ * period columns and the rows include the history (FOR SYSTEM_TIME ALL).
+ */
+export interface VqbSystemVersioning {
+  /** Period start/end column names (MariaDB's hidden ones are row_start/row_end). */
+  start: string
+  end: string
+  /** End value (as stored in the data) of the current rows; null = no current rows. */
+  currentEnd: string | null
 }
 
 export interface VqbObjectMeta {
@@ -169,6 +183,8 @@ export interface VqbObjectMeta {
   sequences?: VqbSequenceState[]
   /** Statements to run right after the main DDL (PostgreSQL ALTER … OWNED BY…). */
   postDdl?: string[]
+  /** MariaDB: the table is system-versioned and its data carries the history. */
+  systemVersioning?: VqbSystemVersioning
   data?: VqbDataFile[]
 }
 
@@ -321,7 +337,23 @@ export function validateObjectMeta(raw: unknown, expected: VqbManifestObject): V
       if (typeof seq.lastValue !== 'string' || !/^-?\d+$/.test(seq.lastValue))
         bad('valor de secuencia')
       if (typeof seq.isCalled !== 'boolean') bad('estado de secuencia')
+      if (seq.round !== undefined && (typeof seq.round !== 'string' || !/^\d+$/.test(seq.round)))
+        bad('ciclo de secuencia')
     }
+  }
+  if (raw.systemVersioning !== undefined) {
+    const v = raw.systemVersioning
+    if (!isObj(v)) return bad('versionado de sistema')
+    str(v.start, 'columna de inicio del periodo')
+    str(v.end, 'columna de fin del periodo')
+    if (v.currentEnd !== null) str(v.currentEnd, 'fin del periodo actual')
+    const cols = Array.isArray(raw.columns) ? (raw.columns as { name: string }[]) : []
+    if (
+      cols.length < 2 ||
+      cols[cols.length - 2].name !== v.start ||
+      cols[cols.length - 1].name !== v.end
+    )
+      bad('columnas del periodo de una tabla versionada')
   }
   return raw as unknown as VqbObjectMeta
 }

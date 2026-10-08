@@ -9,9 +9,11 @@ import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
 import {
   MARIADB_SKIPPED_OBJECTS_SQL,
-  describeSkippedObjects,
+  describeNb3MariaDbLimits,
   isMariaDbSession,
-  skippedFromTableTypes
+  isTrxIdVersionedDdl,
+  skippedFromTableTypes,
+  systemVersioningColumns
 } from '../mysql/mariadb'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { ProgressReporter } from './index'
@@ -21,7 +23,12 @@ import { NB3_EXTENSION } from './nb3/format'
 import { Nb3Writer, type ObjectDefinition } from './nb3/writer'
 import { detectMysqlFlavor } from '@shared/serverFlavor'
 import type { ScryptParams } from './vqb/crypto'
-import { VQB_EXTENSION, type VqbObjectType } from './vqb/format'
+import {
+  VQB_EXTENSION,
+  type VqbObjectType,
+  type VqbSequenceState,
+  type VqbSystemVersioning
+} from './vqb/format'
 import { mysqlCodecOf } from './vqb/mysqlValues'
 import { VqbWriter } from './vqb/writer'
 
@@ -56,8 +63,19 @@ export const backupFormatOf = (options: Pick<BackupCreateOptions, 'format'>): 'n
 
 /** Where the rows and DDL of one backup go (.nb3 or .vqb). */
 interface ArchiveSink {
+  /**
+   * The format holds MariaDB sequences and the history of system-versioned
+   * tables (.vqb). An .nb3 keeps the current rows only and no sequences.
+   */
+  readonly mariaDbObjects: boolean
   beginTable(name: string, columns: ColumnRow[]): TableSink
-  ddlObject(type: Exclude<ObjectKind, 'Table'>, name: string, ddl: string): Promise<void>
+  ddlObject(
+    type: Exclude<ObjectKind, 'Table' | 'Sequence'>,
+    name: string,
+    ddl: string
+  ): Promise<void>
+  /** MariaDB sequence with its value (only when `mariaDbObjects`). */
+  sequence(name: string, ddl: string, state: VqbSequenceState): Promise<void>
   warn(message: string): void
   finish(): Promise<{ path: string; sizeBytes: number; objects: number; rows: number }>
   abort(): Promise<void>
@@ -70,11 +88,14 @@ interface TableSink {
     ddl: string
     triggerDdl: string[]
     autoIncrement: string
+    /** System-versioned table whose rows include the history (.vqb). */
+    versioning?: VqbSystemVersioning
   }): Promise<{ rows: number }>
 }
 
 function nb3Sink(writer: Nb3Writer): ArchiveSink {
   return {
+    mariaDbObjects: false,
     beginTable(name, columns) {
       const kinds: LiteralKind[] = columns.map((c) => literalKindOf(c.columnType))
       const object = writer.beginObject('Table', name)
@@ -99,6 +120,7 @@ function nb3Sink(writer: Nb3Writer): ArchiveSink {
     ddlObject: async (type, name, ddl) => {
       await writer.beginObject(type, name).finish({ ddl })
     },
+    sequence: () => Promise.reject(new Error('Las copias .nb3 no guardan secuencias')),
     // .nb3 has no slot for notes; the job log and the dialog show the warning.
     warn: () => undefined,
     finish: () => writer.finish(),
@@ -106,7 +128,7 @@ function nb3Sink(writer: Nb3Writer): ArchiveSink {
   }
 }
 
-const VQB_TYPE: Record<Exclude<ObjectKind, 'Table'>, VqbObjectType> = {
+const VQB_TYPE: Record<Exclude<ObjectKind, 'Table' | 'Sequence'>, VqbObjectType> = {
   View: 'view',
   Function: 'function',
   Procedure: 'procedure',
@@ -115,6 +137,7 @@ const VQB_TYPE: Record<Exclude<ObjectKind, 'Table'>, VqbObjectType> = {
 
 function vqbSink(writer: VqbWriter): ArchiveSink {
   return {
+    mariaDbObjects: true,
     beginTable(name, columns) {
       const object = writer.beginObject('table', name)
       object.setColumns(
@@ -133,13 +156,17 @@ function vqbSink(writer: VqbWriter): ArchiveSink {
               autoIncrement: d.autoIncrement || null,
               triggers: d.triggerDdl,
               indexes: [],
-              foreignKeys: []
+              foreignKeys: [],
+              ...(d.versioning ? { systemVersioning: d.versioning } : {})
             }
           })
       }
     },
     ddlObject: async (type, name, ddl) => {
       await writer.beginObject(VQB_TYPE[type], name).finish({ ddl })
+    },
+    sequence: async (name, ddl, state) => {
+      await writer.beginObject('sequence', name).finish({ ddl, meta: { sequences: [state] } })
     },
     warn: (message) => writer.warn(message),
     finish: () => writer.finish(),
@@ -171,11 +198,13 @@ export function checkBackupPassword(password: string | null | undefined): string
   return password
 }
 
-type ObjectKind = 'Table' | 'View' | 'Function' | 'Procedure' | 'Event'
+type ObjectKind = 'Sequence' | 'Table' | 'View' | 'Function' | 'Procedure' | 'Event'
 
 interface SchemaObject {
   type: ObjectKind
   name: string
+  /** MariaDB system-versioned table. */
+  versioned?: boolean
   /** information_schema TABLE_ROWS (an InnoDB estimate), null when unknown. */
   rowsEstimate: number | null
 }
@@ -213,6 +242,7 @@ const estimateOf = (value: unknown): number | null => {
 }
 
 const KIND_LABEL: Record<ObjectKind, string> = {
+  Sequence: 'secuencia',
   Table: 'tabla',
   View: 'vista',
   Function: 'función',
@@ -220,14 +250,18 @@ const KIND_LABEL: Record<ObjectKind, string> = {
   Event: 'evento'
 }
 
-const SHOW_CREATE: Record<Exclude<ObjectKind, 'Table'>, { stmt: string; column: string }> = {
+const SHOW_CREATE: Record<
+  Exclude<ObjectKind, 'Table' | 'Sequence'>,
+  { stmt: string; column: string }
+> = {
   View: { stmt: 'SHOW CREATE VIEW', column: 'Create View' },
   Function: { stmt: 'SHOW CREATE FUNCTION', column: 'Create Function' },
   Procedure: { stmt: 'SHOW CREATE PROCEDURE', column: 'Create Procedure' },
   Event: { stmt: 'SHOW CREATE EVENT', column: 'Create Event' }
 }
 
-const TYPE_ORDER: ObjectKind[] = ['Table', 'View', 'Function', 'Procedure', 'Event']
+// MariaDB sequences first: a table default may call NEXTVAL(seq).
+const TYPE_ORDER: ObjectKind[] = ['Sequence', 'Table', 'View', 'Function', 'Procedure', 'Event']
 
 /** information_schema may hand back Buffers for some columns depending on the driver/charset. */
 const text = (value: unknown): string =>
@@ -297,6 +331,16 @@ async function listObjects(
     if (type === 'BASE TABLE')
       objects.push({ type: 'Table', name: text(t.name), rowsEstimate: estimateOf(t.estRows) })
     else if (type === 'VIEW') objects.push({ type: 'View', name: text(t.name), rowsEstimate: null })
+    // MariaDB only (a MySQL server never reports these types).
+    else if (type === 'SYSTEM VERSIONED')
+      objects.push({
+        type: 'Table',
+        name: text(t.name),
+        rowsEstimate: estimateOf(t.estRows),
+        versioned: true
+      })
+    else if (type === 'SEQUENCE')
+      objects.push({ type: 'Sequence', name: text(t.name), rowsEstimate: null })
   }
   for (const r of routines) {
     const type = text(r.type).toUpperCase()
@@ -438,17 +482,19 @@ export async function createBackup(
     }
 
     const wanted = new Set((options.objects ?? []).filter(Boolean))
-    // MariaDB: system-versioned tables and sequences have no .nb3 slot and are left out;
-    // say so (names only) instead of skipping them silently. Read from the same listing.
+    // MariaDB: an .nb3 has no slot for sequences and keeps only the current rows of
+    // system-versioned tables; say so (names only). A .vqb holds both.
     let skippedWarning = null as string | null
     const objects = (
       await listObjects(session, schema, options.includeData, (rows) => {
-        if (!isMariaDbSession(session)) return
-        skippedWarning = describeSkippedObjects(
+        if (format === 'vqb' || !isMariaDbSession(session)) return
+        skippedWarning = describeNb3MariaDbLimits(
           skippedFromTableTypes(rows).filter((o) => wanted.size === 0 || wanted.has(o.name))
         )
       })
-    ).filter((o) => wanted.size === 0 || wanted.has(o.name))
+    )
+      .filter((o) => wanted.size === 0 || wanted.has(o.name))
+      .filter((o) => format === 'vqb' || o.type !== 'Sequence')
     if (wanted.size > 0 && objects.length === 0) {
       throw new Error(`Ninguno de los objetos seleccionados existe en ${schema}.`)
     }
@@ -556,8 +602,13 @@ export async function createBackup(
             obj.name,
             triggers.get(obj.name) ?? [],
             options.includeData,
+            !!obj.versioned,
             {
               cancelled,
+              onWarning: (message) => {
+                writer!.warn(message)
+                progress({ phase: 'warning', current: i, total, message, done: false })
+              },
               onRows: (count) =>
                 progress({
                   phase: 'rows',
@@ -575,6 +626,8 @@ export async function createBackup(
             }
           )
           rows = options.includeData ? written : null
+        } else if (obj.type === 'Sequence') {
+          await backupSequence(session, writer, obj.name)
         } else {
           const spec = SHOW_CREATE[obj.type]
           const ddl = await showCreate(session, spec.stmt, obj.name, spec.column)
@@ -630,6 +683,29 @@ export async function createBackup(
   }
 }
 
+/** MariaDB sequence: its DDL and the value the next NEXTVAL would hand out after a restart. */
+async function backupSequence(
+  session: MysqlSession,
+  writer: ArchiveSink,
+  name: string
+): Promise<void> {
+  const ddl = await showCreate(session, 'SHOW CREATE SEQUENCE', name, 'Create Table')
+  // next_not_cached_value skips the values cached in memory, as a server restart does.
+  const rows = await session.query<{ v: unknown; c: unknown }>(
+    `SELECT next_not_cached_value AS v, cycle_count AS c FROM ${session.escapeId(name)}`
+  )
+  const value = text(rows[0]?.v)
+  if (!/^-?\d+$/.test(value)) throw new Error(`No se pudo leer el valor de la secuencia ${name}`)
+  const round = text(rows[0]?.c)
+  await writer.sequence(name, ddl, {
+    schema: '',
+    name,
+    lastValue: value,
+    isCalled: false,
+    ...(/^\d+$/.test(round) && round !== '0' ? { round } : {})
+  })
+}
+
 async function backupTable(
   session: MysqlSession,
   writer: ArchiveSink,
@@ -637,12 +713,38 @@ async function backupTable(
   table: string,
   triggerNames: string[],
   includeData: boolean,
-  hooks: { cancelled: () => boolean; onRows: (rows: number) => void }
+  versioned: boolean,
+  hooks: {
+    cancelled: () => boolean
+    onRows: (rows: number) => void
+    onWarning: (message: string) => void
+  }
 ): Promise<number> {
   const ddl = await showCreate(session, 'SHOW CREATE TABLE', table, 'Create Table')
   const columns = (await tableColumns(session, schema, table)).filter(
     (c) => !GENERATED_RE.test(c.extra)
   )
+  // MariaDB system-versioned table in a .vqb: every row version (FOR SYSTEM_TIME ALL) with
+  // its period columns last. Transaction-precise versioning keeps only the current rows.
+  let period: { start: string; end: string } | null = null
+  if (versioned && writer.mariaDbObjects && includeData) {
+    if (isTrxIdVersionedDdl(ddl))
+      hooks.onWarning(
+        `La copia guarda solo las filas actuales de ${table}: el historial de una tabla versionada por transacción no se puede llevar a otro servidor (MariaDB).`
+      )
+    else period = systemVersioningColumns(ddl)
+  }
+  let currentEnd: string | null = null
+  if (period) {
+    const rows = await session.query<{ e: unknown }>(
+      `SELECT ${session.escapeId(period.end)} AS e FROM ${session.escapeId(table)} LIMIT 1`
+    )
+    currentEnd = rows.length ? text(rows[0].e) || null : null
+    columns.push(
+      { name: period.start, columnType: 'timestamp(6)', extra: '' },
+      { name: period.end, columnType: 'timestamp(6)', extra: '' }
+    )
+  }
   const triggerDdl: string[] = []
   for (const name of triggerNames) {
     triggerDdl.push(
@@ -651,7 +753,7 @@ async function backupTable(
   }
   const object = writer.beginTable(table, columns)
   if (includeData && columns.length > 0) {
-    const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}`
+    const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}${period ? ' FOR SYSTEM_TIME ALL' : ''}`
     const { rows } = await session.streamRows(select)
     try {
       for await (const row of rows as AsyncIterable<unknown[]>) {
@@ -667,22 +769,24 @@ async function backupTable(
   const { rows } = await object.finish({
     ddl,
     triggerDdl,
-    autoIncrement: parseAutoIncrement(ddl)
+    autoIncrement: parseAutoIncrement(ddl),
+    ...(period ? { versioning: { start: period.start, end: period.end, currentEnd } } : {})
   })
   return rows
 }
 
 /**
- * Pre-backup check for the backup dialog (P1b): on a MariaDB server, the
- * warning naming the system-versioned tables and sequences a .nb3 of `schema`
- * would leave out; null otherwise. A MySQL server is never queried.
+ * Pre-backup check for the backup dialog: on a MariaDB server, what an .nb3
+ * of `schema` cannot hold (sequences; history of system-versioned tables);
+ * null otherwise and for .vqb/.sql, which hold both. A MySQL server is never queried.
  */
 export async function skippedObjectsWarning(
   sessions: SessionFactory,
   connectionId: string,
-  schema: string
+  schema: string,
+  format: 'nb3' | 'vqb' | 'sql' = 'nb3'
 ): Promise<string | null> {
-  if (!schema?.trim()) return null
+  if (!schema?.trim() || format !== 'nb3') return null
   const session = await sessions.acquire(connectionId)
   try {
     if (!isMariaDbSession(session)) return null
@@ -690,7 +794,7 @@ export async function skippedObjectsWarning(
       MARIADB_SKIPPED_OBJECTS_SQL,
       [schema]
     )
-    return describeSkippedObjects(skippedFromTableTypes(rows))
+    return describeNb3MariaDbLimits(skippedFromTableTypes(rows))
   } finally {
     await session.release().catch(() => undefined)
   }

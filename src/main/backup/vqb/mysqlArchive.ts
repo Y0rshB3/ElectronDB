@@ -1,9 +1,23 @@
 import type { Nb3Manifest, Nb3ObjectMeta } from '../nb3/format'
-import type { RestoreArchive } from '../archive'
+import type { RestoreArchive, RowsOptions } from '../archive'
 import { engineMismatchMessage } from './engine'
-import type { VqbObjectMeta, VqbObjectType } from './format'
+import type {
+  VqbObjectMeta,
+  VqbObjectType,
+  VqbSequenceState,
+  VqbSystemVersioning
+} from './format'
 import { mysqlTuple } from './mysqlValues'
 import { VqbReader } from './reader'
+import { tagOf, type VqbValue } from './values'
+
+/** Text of a stored date/time value ({"$dt": …} or a plain string). */
+const valueText = (value: VqbValue): string | null => {
+  if (value === null) return null
+  if (typeof value === 'string') return value
+  const tag = tagOf(value)
+  return tag ? String((value as Record<string, unknown>)[tag]) : String(value)
+}
 
 /**
  * A MySQL/MariaDB .vqb seen through the shape restore.ts walks (the one the
@@ -90,15 +104,44 @@ export class VqbMysqlArchive implements RestoreArchive {
     return shaped
   }
 
+  private source(meta: Nb3ObjectMeta): VqbObjectMeta | undefined {
+    const id = this.ids.get(meta)
+    return id ? this.metas.get(id) : undefined
+  }
+
+  versioning(meta: Nb3ObjectMeta): VqbSystemVersioning | null {
+    return this.source(meta)?.systemVersioning ?? null
+  }
+
+  sequenceState(meta: Nb3ObjectMeta): VqbSequenceState | null {
+    const source = this.source(meta)
+    return source?.type === 'sequence' ? (source.sequences?.[0] ?? null) : null
+  }
+
   async rows(
     meta: Nb3ObjectMeta,
     onRow: (tuple: string) => Promise<void> | void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: RowsOptions = {}
   ): Promise<number> {
-    const id = this.ids.get(meta)
-    const source = id ? this.metas.get(id) : undefined
+    const source = this.source(meta)
     if (!source) throw new Error(`Faltan los metadatos de ${meta.Name} en la copia`)
-    return this.reader.rows(source, (row) => onRow(mysqlTuple(row)), signal)
+    const versioning = source.systemVersioning
+    if (!options.currentOnly || !versioning)
+      return this.reader.rows(source, (row) => onRow(mysqlTuple(row)), signal)
+    // History rows are dropped; current rows lose their two period columns.
+    let kept = 0
+    await this.reader.rows(
+      source,
+      async (row) => {
+        const end = row[row.length - 1]
+        if (versioning.currentEnd === null || valueText(end) !== versioning.currentEnd) return
+        kept++
+        await onRow(mysqlTuple(row.slice(0, -2)))
+      },
+      signal
+    )
+    return kept
   }
 
   async close(): Promise<void> {

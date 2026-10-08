@@ -8,7 +8,7 @@ import {
   type SqlDumpImportResult
 } from '@shared/importers'
 import { isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
-import { replaceSafetyRefusal } from '../../mysql/mariadb'
+import { replaceSafetyPlan } from '../../mysql/mariadb'
 import type { BackupCreateOptions, ConnectionConfig, ProgressDetail } from '@shared/types'
 import type { BackupService, ProgressReporter } from '../../backup/index'
 import {
@@ -195,15 +195,23 @@ export async function importSqlDump(
     if (intoSchema && options.replaceSchema && target) {
       const existing = await schemaCharset(session, target)
       if (existing && options.safetyBackup !== false) {
-        // MariaDB: a database whose copy would leave objects out is never dropped behind it.
-        const refusal = await replaceSafetyRefusal(session, target).catch(() => null)
-        if (refusal) throw new Error(refusal)
+        // MariaDB: sequences and versioned tables need a .vqb copy; history no copy can hold
+        // (transaction-precise versioning) is never dropped behind the user.
+        let plan
+        try {
+          plan = await replaceSafetyPlan(session, target)
+        } catch (err) {
+          throw new Error(
+            `No se pudo comprobar qué objetos tiene ${target}; no se ha tocado nada: ${describeError(err)}`
+          )
+        }
+        if (plan.refusal) throw new Error(plan.refusal)
         const backupOptions: BackupCreateOptions = {
           connectionId: options.connectionId,
           schema: target,
           includeData: true,
           label: IMPORT_SAFETY_LABEL,
-          ...(deps.safetyFormat?.() === 'vqb' ? { format: 'vqb' as const } : {})
+          ...(plan.vqb || deps.safetyFormat?.() === 'vqb' ? { format: 'vqb' as const } : {})
         }
         let copy
         try {

@@ -95,7 +95,9 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
   Procedure: 'Procedimiento',
   Event: 'Evento',
   Trigger: 'Trigger',
-  Statement: 'Sentencia'
+  Statement: 'Sentencia',
+  Sequence: 'Secuencia',
+  Collection: 'Colección'
 }
 
 const OBJECT_TYPE_PLURALS: Record<string, [string, string]> = {
@@ -103,7 +105,9 @@ const OBJECT_TYPE_PLURALS: Record<string, [string, string]> = {
   View: ['vista', 'vistas'],
   Function: ['función', 'funciones'],
   Procedure: ['procedimiento', 'procedimientos'],
-  Event: ['evento', 'eventos']
+  Event: ['evento', 'eventos'],
+  Sequence: ['secuencia', 'secuencias'],
+  Collection: ['colección', 'colecciones']
 }
 
 const TRIGGER_LABELS: Record<string, string> = {

@@ -11,7 +11,7 @@ import { SAFETY_BACKUP_LABEL, isSystemSchema, systemSchemaRefusal } from '@share
 import type { BackupCreateResult, BackupMeta, ConnectionConfig, RestoreResult } from '@shared/types'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
-import { replaceSafetyRefusal } from '../mysql/mariadb'
+import { replaceSafetyPlan } from '../mysql/mariadb'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { BackupService, ProgressReporter } from './index'
 import { metaNeedsPassword, vqbCharset } from './archive'
@@ -358,9 +358,22 @@ export async function replaceSchemaFromBackup(
       say(`  Copia previa desactivada: «${target}» se reemplaza sin copia`)
     } else {
       const label = `Copia previa de ${target}`
-      // MariaDB: a database whose copy would leave objects out is never dropped behind it.
-      const refusal = await replaceSafetyRefusal(session, target).catch(() => null)
-      if (refusal) throw new Error(`${refusal} ${keep}`)
+      // MariaDB: sequences and versioned tables need a .vqb copy; history no copy can hold
+      // (transaction-precise versioning) is never dropped behind the user.
+      let plan
+      try {
+        plan = await replaceSafetyPlan(session, target)
+      } catch (err) {
+        throw new Error(
+          `${sentence(`No se pudo comprobar qué objetos tiene «${target}»: ${describeError(err)}`)} ${keep}`
+        )
+      }
+      if (plan.refusal) throw new Error(`${plan.refusal} ${keep}`)
+      const restoringVqb = backupFormatOfPath(request.backupPath) === 'vqb'
+      if (plan.vqb && !restoringVqb)
+        say(
+          '  La copia previa se guarda en .vqb: la base de datos tiene secuencias o tablas versionadas (MariaDB), que una copia .nb3 no guarda enteras'
+        )
       try {
         safety = await deps.backups.create(
           {
@@ -369,9 +382,12 @@ export async function replaceSchemaFromBackup(
             includeData: true,
             label: SAFETY_LABEL,
             comment: `Copia automática antes de restaurar ${request.backupPath}`,
-            // Same format as the backup being restored; an encrypted .vqb keeps its password.
-            format: backupFormatOfPath(request.backupPath) === 'vqb' ? 'vqb' : 'nb3',
-            ...(request.password && meta.encrypted ? { password: request.password } : {})
+            // Same format as the backup being restored (a .vqb when only that holds every
+            // MariaDB object); an encrypted .vqb keeps its password.
+            format: restoringVqb || plan.vqb ? 'vqb' : 'nb3',
+            ...(restoringVqb && request.password && meta.encrypted
+              ? { password: request.password }
+              : {})
           },
           (event) => hooks.progress?.('safety', event),
           signal

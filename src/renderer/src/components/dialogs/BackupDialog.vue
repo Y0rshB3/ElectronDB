@@ -140,6 +140,7 @@ function initialFormat(): BackupFormat {
 
 watch(format, (value) => {
   if (value !== 'vqb') encrypt.value = false
+  void loadSkippedWarning()
 })
 
 function reset(): void {
@@ -169,9 +170,10 @@ function reset(): void {
 let objectsRequest = 0
 
 /**
- * MariaDB servers only (P1b): a .nb3 leaves out system-versioned tables and
- * sequences, so the dialog names them before the copy starts. MySQL servers
- * never ask (the connection's runtime flavour comes from connections:open).
+ * MariaDB servers only: an .nb3 leaves out sequences and the history of
+ * system-versioned tables (a .vqb or .sql holds both), so the dialog names
+ * them before the copy starts. MySQL servers never ask (the connection's
+ * runtime flavour comes from connections:open).
  */
 const skippedWarning = ref<string | null>(null)
 let skippedRequest = 0
@@ -181,9 +183,10 @@ async function loadSkippedWarning(): Promise<void> {
   skippedWarning.value = null
   const cid = connectionId.value
   const db = schema.value
-  if (!cid || !db || connections.serverInfo[cid]?.runtime?.flavor !== 'mariadb') return
+  if (!cid || !db || format.value !== 'nb3') return
+  if (connections.serverInfo[cid]?.runtime?.flavor !== 'mariadb') return
   try {
-    const warning = await api.invokeSilent('backups:skippedObjects', cid, db)
+    const warning = await api.invokeSilent('backups:skippedObjects', cid, db, 'nb3')
     if (request === skippedRequest) skippedWarning.value = warning
   } catch {
     // Best effort: the backup itself logs the same warning.
@@ -213,14 +216,20 @@ async function loadObjects(): Promise<void> {
       }))
       return
     }
-    const [tables, views] = await Promise.all([
+    // MariaDB connections: sequences can be picked too (.vqb and .sql copy them).
+    const sequences = connections.get(cid)?.engine === 'mariadb'
+    const [tables, views, seqs] = await Promise.all([
       api.invokeSilent('db:tables', cid, db),
-      api.invokeSilent('db:views', cid, db).catch(() => [])
+      api.invokeSilent('db:views', cid, db).catch(() => []),
+      sequences
+        ? api.invokeSilent('db:objects', cid, db, 'sequence').catch(() => [])
+        : Promise.resolve([])
     ])
     if (request !== objectsRequest) return
     objectItems.value = [
       ...tables.map((t) => ({ title: t.name, value: t.name, subtitle: 'Tabla' })),
-      ...views.map((v) => ({ title: v.name, value: v.name, subtitle: 'Vista' }))
+      ...views.map((v) => ({ title: v.name, value: v.name, subtitle: 'Vista' })),
+      ...seqs.map((q) => ({ title: q.name, value: q.name, subtitle: 'Secuencia' }))
     ]
   } catch (err) {
     if (request === objectsRequest) error.value = errorMessage(err)
@@ -572,7 +581,7 @@ function onSchemaChange(value: string | null): void {
                 </v-col>
               </template>
             </template>
-            <v-col v-if="!isSql && skippedWarning" cols="12">
+            <v-col v-if="format === 'nb3' && skippedWarning" cols="12">
               <v-alert
                 type="warning"
                 variant="tonal"

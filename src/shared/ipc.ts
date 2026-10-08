@@ -93,6 +93,7 @@ import type {
 } from './ai'
 import type { TourState } from './tour'
 import type {
+  BackupFormat,
   ImportConnectionsPreview,
   ImportConnectionsRequest,
   ImportConnectionsResult,
@@ -501,7 +502,10 @@ export interface IpcInvokeMap {
    * Pre-backup check: on a MariaDB server, the warning that names the system-versioned
    * tables and sequences a .nb3 of `schema` leaves out; null on MySQL or when there are none.
    */
-  'backups:skippedObjects': { args: [connectionId: string, schema: string]; result: string | null }
+  'backups:skippedObjects': {
+    args: [connectionId: string, schema: string, format?: BackupFormat]
+    result: string | null
+  }
   /** Plain .sql dump of one schema (mysqldump-compatible); cancelled with backups:cancel. */
   'backups:exportSql': {
     args: [operationId: string, options: SqlExportOptions]

@@ -2238,11 +2238,35 @@ a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and need
   `mariadb` connections (the "MariaDB se importa como conexión MySQL" warning is gone).
 - **AI.** MariaDB connections get a MariaDB note in the context, their sequences are named (without
   their internal columns) and the version shows as «MariaDB x.y.z».
-- **Not done in P5:** sequences and system-versioned tables are still left out of `.nb3` **and `.vqb`**
-  backups (with the pre-backup warning naming them, as in P1b); because of that, a REPLACE with a safety
-  copy (restore or `.sql` import) is **refused** on MariaDB when the database has such objects
-  (`replaceSafetyRefusal`), instead of dropping them for good; completion does not list sequence
-  names; `/*M!` handling in the automation runner's own splitter (`automation/runner.ts`) is unchanged.
+- **Not done in P5** (all closed on 2026-10-08, see «MariaDB backups complete» below): sequences and
+  system-versioned tables were left out of `.nb3` and `.vqb` backups, a REPLACE with a safety copy was
+  refused on MariaDB when the database had such objects, completion did not list sequence names and the
+  automation runner's splitter ignored `/*M!`.
+
+#### MariaDB backups complete (2026-10-08)
+
+- **`.vqb`** holds MariaDB sequences (object type `sequence`: `SHOW CREATE SEQUENCE` plus
+  `next_not_cached_value`/`cycle_count`, restored first with `SETVAL(seq, v, 0, round)` when the restore
+  includes data) and system-versioned tables **with their history**: every row version
+  (`FOR SYSTEM_TIME ALL`) with the period columns last and `meta.systemVersioning` (hidden
+  `row_start`/`row_end` or the explicit `PERIOD FOR SYSTEM_TIME` columns, and the end value of the
+  current rows). The restore inserts history with `system_versioning_insert_history` (MariaDB 10.11+); an
+  older server gets the current rows and a warning. Transaction-precise versioning (BIGINT transaction
+  ids) cannot be carried to another server: its current rows are stored, with a manifest warning.
+  `docs/vqb-format.md` documents both fields (format version unchanged: 2.0.0 is the first release).
+- **`.nb3`** keeps versioned tables as tables with their current rows and has no sequences: only tables
+  have ever been observed in Navicat's files, so no other object type is written. The backup dialog and
+  the job log say so for MariaDB databases (`describeNb3MariaDbLimits`) and point to `.vqb`.
+- **`.sql`** writes sequences (`CREATE SEQUENCE` + `SELECT SETVAL(…)`, before the tables, whose defaults
+  may call `NEXTVAL`) and versioned history (period columns in the INSERTs between
+  `/*!101100 SET … system_versioning_insert_history=1 */` lines, as `mariadb-dump --dump-history` does).
+- **REPLACE safety copies** (restore, rollback, `.sql` import): `replaceSafetyPlan` replaces the refusal.
+  On a MariaDB database with sequences or versioned tables the safety copy is a `.vqb` even when the
+  backup being restored (or Ajustes › Copias) is `.nb3`, so nothing is lost; the replace is refused only
+  when a transaction-precise versioned table's history would be dropped. A MySQL server is never queried
+  for it.
+- Completion lists sequence names on MariaDB connections; job steps on MariaDB (engine or server) split
+  with the MariaDB splitter (`/*M!` as code), MySQL steps keep the line splitting.
 
 #### PostgreSQL follow-ups (2026-10-07)
 
