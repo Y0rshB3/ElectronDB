@@ -128,7 +128,7 @@ describe('ConnectionManager authentication modes', () => {
     secrets.set(`mysql:${id}`, 'wrong')
     mysql.createPool.mockReturnValue(fakePool(accessDenied()))
     await expect(new ConnectionManager(ctx).open(id)).rejects.toThrow(
-      /No se pudo conectar a Prod proxy: Access denied .*ER_ACCESS_DENIED_ERROR 1045/
+      /No se pudo conectar a Prod proxy: Usuario o contraseña incorrectos.*Mensaje del servidor: Access denied .*ER_ACCESS_DENIED_ERROR 1045/
     )
   })
 

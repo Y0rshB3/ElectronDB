@@ -222,17 +222,22 @@ export class MysqlDriverConnection implements MysqlFamilyConnection {
       const conn = raw as unknown as CoreConnection
       conn.on('error', (err) => {
         if (isConnectionLost(err))
-          log.info(`a pooled connection of ${config.name} was dropped: ${describeError(err)}`)
-        else log.warn(`connection ${config.name} reported an error: ${describeError(err)}`)
+          log.info(`a pooled connection of ${config.name} was dropped: ${describeForLog(err)}`)
+        else log.warn(`connection ${config.name} reported an error: ${describeForLog(err)}`)
       })
       if (initial.length === 0) return
       const outcome = (async (): Promise<string | null> => {
         for (const stmt of initial) {
+          let logText = ''
           const failure = await new Promise<string | null>((resolve) => {
-            conn.query(stmt.sql, (err) => resolve(err ? describeError(err) : null))
+            conn.query(stmt.sql, (err) => {
+              if (err) logText = describeForLog(err)
+              resolve(err ? describeError(err) : null)
+            })
           })
           if (failure) {
-            log.warn(`initial query #${stmt.startLine} failed on ${config.name}: ${failure}`)
+            // The server text may quote values: the log gets the code only.
+            log.warn(`initial query #${stmt.startLine} failed on ${config.name}: ${logText}`)
             return `La consulta inicial de la línea ${stmt.startLine} falló en ${config.name}: ${failure}. Revisa las consultas iniciales de la conexión.`
           }
         }

@@ -422,7 +422,7 @@ describe('restore error hints (5.7 staging -> 8.x local)', () => {
     }
     const text = describeRestoreError(err)
     expect(text).toMatch(
-      /^This function has none of DETERMINISTIC.*\(ER_BINLOG_UNSAFE_ROUTINE 1418\)\. Pista: /
+      /^Mensaje del servidor: This function has none of DETERMINISTIC.*\(ER_BINLOG_UNSAFE_ROUTINE 1418\)\. Pista: /
     )
     expect(text).toContain('SET GLOBAL log_bin_trust_function_creators = 1')
     expect(restoreErrorHint({ message: 'x', errno: 1273 })).toMatch(/utf8mb4_0900_ai_ci/)

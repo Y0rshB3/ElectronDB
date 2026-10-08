@@ -6,7 +6,12 @@
  *   of 23505 quotes the duplicate key). They are shown to the user through
  *   describeForUser, and logged only as `name + SQLSTATE` (describeForLog).
  */
-import { DbUserError, describeForLog as describeDbErrorForLog } from '../db/errors'
+import {
+  DbUserError,
+  describeForLog as describeDbErrorForLog,
+  describeNetworkError,
+  withServerMessage
+} from '../db/errors'
 
 export class PgUserError extends DbUserError {
   constructor(message: string, code = 'E_PG_USER') {
@@ -86,27 +91,36 @@ const EXPLANATIONS: Record<string, string> = {
   '22003': 'Número fuera de rango',
   '22P02': 'Valor con formato no válido (las listas se escriben {a,b,"c d"})',
   '3D000': 'La base de datos no existe',
+  '42P04': 'La base de datos ya existe',
+  '42P01': 'La tabla o vista no existe (revisa el esquema y el search_path)',
+  '42P07': 'Ya existe un objeto con ese nombre',
+  '42703': 'La columna no existe',
+  '42601': 'Error de sintaxis SQL',
+  '53300': 'El servidor tiene demasiadas conexiones abiertas',
+  '57P01': 'El servidor cerró la sesión (apagado o reinicio)',
   '28P01': 'Contraseña o usuario incorrectos',
   '28000': 'El servidor rechazó la conexión'
 }
 
 /**
- * "<explanation>: <server message> — <detail> (SQLSTATE)". The `(CODE)` suffix
- * is the contract privileges.ts/friendlyError parse. Never contains SQL text.
+ * A server reply becomes "<explicación>. Mensaje del servidor: <message> —
+ * <detail> (SQLSTATE)" (the explanation only for common SQLSTATEs); a socket
+ * error "<explicación>. Detalle: …". The `(CODE)` suffix is the contract
+ * privileges.ts/friendlyError parse. Never contains SQL text.
  */
 export function describeError(err: unknown): string {
   if (err instanceof DbUserError) return err.message
   if (!isPgErrorLike(err)) return String(err)
   const state = sqlState(err)
-  let message = err.message || 'Error desconocido'
-  if (state === '57014') message = 'cancelada por el usuario'
-  const explanation = state ? EXPLANATIONS[state] : undefined
-  let text =
-    explanation && !message.startsWith(explanation) ? `${explanation}: ${message}` : message
+  const message = err.message || 'Error desconocido'
+  const code = state ?? err.code
+  const suffix = code ? ` (${code})` : ''
+  if (state === '57014') return `Consulta cancelada por el usuario${suffix}`
+  if (!state) return `${describeNetworkError(err.code, message) ?? message}${suffix}`
+  let text = withServerMessage(EXPLANATIONS[state], message)
   if (err.detail) text += ` — ${err.detail}`
   if (err.hint) text += ` (Sugerencia: ${err.hint})`
-  const code = state ?? err.code
-  return code ? `${text} (${code})` : text
+  return `${text}${suffix}`
 }
 
 /** Log-safe description: class name and SQLSTATE only (detail may echo values). */

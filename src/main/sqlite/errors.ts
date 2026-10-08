@@ -7,7 +7,12 @@
  *   error quotes the statement, so it is shown and logged only as its code.
  */
 import { explainSqliteError } from '@shared/dialects/sqlite'
-import { DbUserError, ServerError, describeForLog as describeDbErrorForLog } from '../db/errors'
+import {
+  DbUserError,
+  ServerError,
+  describeForLog as describeDbErrorForLog,
+  withServerMessage
+} from '../db/errors'
 import type { WorkerError } from './protocol'
 
 export class SqliteUserError extends DbUserError {
@@ -63,13 +68,17 @@ export function codeName(errcode: number): string {
   return CODE_NAMES[errcode] ?? `SQLITE ${errcode}`
 }
 
-/** "<explanation>: <SQLite message> (SQLITE_NAME)". */
+/** SQLite has no server: its text is marked as SQLite's. */
+export const SQLITE_MESSAGE_LABEL = 'Mensaje de SQLite'
+
+/** "<explicación>. Mensaje de SQLite: <message> (SQLITE_NAME)". */
 export function describeError(err: unknown): string {
   if (err instanceof DbUserError) return err.message
   if (err instanceof SqliteServerError) {
-    const explanation = err.errcode !== null ? explainSqliteError(String(err.errcode)) : null
-    const text = explanation ? `${explanation} Detalle: ${err.message}` : err.message
-    return err.errcode !== null ? `${text} (${codeName(err.errcode)})` : text
+    if (err.errcode === null) return err.message
+    const explanation = explainSqliteError(String(err.errcode))
+    const text = withServerMessage(explanation, err.message, SQLITE_MESSAGE_LABEL)
+    return `${text} (${codeName(err.errcode)})`
   }
   return err instanceof Error ? err.message : String(err)
 }

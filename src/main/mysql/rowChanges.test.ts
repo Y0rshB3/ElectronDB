@@ -271,6 +271,6 @@ describe('explainRowChangeError', () => {
   })
 
   it('keeps unknown server errors with their code', () => {
-    expect(explainRowChangeError(server(9999, 'Something odd'))).toBe('Something odd (ER 9999)')
+    expect(explainRowChangeError(server(9999, 'Something odd'))).toBe('Mensaje del servidor: Something odd (ER 9999)')
   })
 })

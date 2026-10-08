@@ -8,7 +8,12 @@
  * - Raw driver errors are converted by `toServerError` before they leave the
  *   driver, so `describeForLog` never sees their text.
  */
-import { DbUserError, ServerError, describeForLog as describeDbErrorForLog } from '../db/errors'
+import {
+  DbUserError,
+  ServerError,
+  describeForLog as describeDbErrorForLog,
+  withServerMessage
+} from '../db/errors'
 
 export class MongoUserError extends DbUserError {
   constructor(message: string, code = 'E_MONGO_USER') {
@@ -90,7 +95,7 @@ export function isConnectionLost(err: unknown): boolean {
   )
 }
 
-/** "<explicación> Detalle: <texto del servidor> (código)". Shown, never logged. */
+/** "<explicación>. Mensaje del servidor: <texto> (código)". Shown, never logged. */
 export function describeError(err: unknown): string {
   if (err instanceof DbUserError) return err.message
   if (err instanceof MongoServerSideError) return err.message
@@ -108,7 +113,9 @@ function serverMessage(err: MongoErrorLike): string {
   if (name === 'MongoParseError' || name === 'MongoInvalidArgumentError')
     return `Opción de conexión no válida: ${err.message}`
   const explanation = code !== null ? EXPLAINED[code] : undefined
-  let text = explanation ? `${explanation} Detalle: ${err.message}` : (err.message ?? name)
+  // A server reply (it has a numeric code) is marked as the server's text.
+  let text =
+    code !== null ? withServerMessage(explanation, err.message ?? name) : (err.message ?? name)
   if (code === 121) {
     const info = summarizeErrInfo(err.errInfo ?? err.errorResponse?.errInfo)
     if (info) text += ` · ${info}`

@@ -87,3 +87,48 @@ export function requireConnectionCapability(
   if (!engine.capabilities[cap])
     throw new DbUserError(message(connection.name, engine.label), 'E_CAPABILITY')
 }
+
+/* ---------- Server messages shown to the user ---------- */
+
+/** Marks text that comes from the database server (kept: it is useful, but it is in English). */
+export const SERVER_MESSAGE_LABEL = 'Mensaje del servidor'
+
+/**
+ * "<explicación>. Mensaje del servidor: <texto>", or only the marked server
+ * text when there is no Spanish explanation. Shown to the user, never logged.
+ */
+export function withServerMessage(
+  explanation: string | null | undefined,
+  serverText: string,
+  label: string = SERVER_MESSAGE_LABEL
+): string {
+  const marked = `${label}: ${serverText}`
+  const e = explanation?.trim().replace(/[.:]+$/, '')
+  return e ? `${e}. ${marked}` : marked
+}
+
+/** Spanish explanations of the socket-level errors every network engine meets. */
+const NETWORK_EXPLANATIONS: Record<string, string> = {
+  ECONNREFUSED:
+    'El servidor rechazó la conexión: comprueba que está arrancado y que escucha en ese host y puerto',
+  ETIMEDOUT: 'El servidor no respondió a tiempo: revisa el host, el puerto, el túnel SSH y la red',
+  PROTOCOL_SEQUENCE_TIMEOUT:
+    'El servidor no respondió a tiempo: revisa el host, el puerto, el túnel SSH y la red',
+  ENOTFOUND: 'No se encontró el host: revisa el nombre del servidor',
+  EAI_AGAIN: 'No se pudo resolver el nombre del servidor: revisa la red o el DNS',
+  EHOSTUNREACH: 'No hay ruta hasta el servidor: revisa la red o la VPN',
+  ENETUNREACH: 'No hay ruta hasta el servidor: revisa la red o la VPN',
+  ECONNRESET: 'El servidor cerró la conexión',
+  PROTOCOL_CONNECTION_LOST: 'Se perdió la conexión con el servidor'
+}
+
+/** Spanish explanation of a socket error code (ECONNREFUSED…), or null. */
+export function explainNetworkError(code: unknown): string | null {
+  return typeof code === 'string' ? (NETWORK_EXPLANATIONS[code] ?? null) : null
+}
+
+/** "<explicación>. Detalle: <texto del controlador>" for a socket error, or null. */
+export function describeNetworkError(code: unknown, message: string): string | null {
+  const explanation = explainNetworkError(code)
+  return explanation ? `${explanation}. Detalle: ${message}` : null
+}

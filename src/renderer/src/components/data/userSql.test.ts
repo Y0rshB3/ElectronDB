@@ -47,5 +47,9 @@ describe('userSql', () => {
     expect(friendlyError('Duplicate entry (ER_DUP_ENTRY 1062)')).toBe(
       'Duplicate entry (ER_DUP_ENTRY 1062)'
     )
+    // Already explained by main: not explained twice.
+    const explained =
+      'La cuenta conectada no tiene privilegios suficientes para esta operación: pide los permisos a un administrador. Mensaje del servidor: SELECT command denied to user (ER_TABLEACCESS_DENIED_ERROR 1142)'
+    expect(friendlyError(explained)).toBe(explained)
   })
 })
