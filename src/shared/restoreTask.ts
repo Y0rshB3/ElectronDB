@@ -30,15 +30,15 @@ type Lookup = (id: string) => ConnectionConfig | null | undefined
 
 /**
  * A .sql copy (backup step with «Formato: .sql») is for other managers: restore
- * steps and «Restaurar todo» only read .nb3 copies.
+ * steps and «Restaurar todo» only read .vqb and .nb3 copies.
  */
 export const SQL_COPY_NOT_RESTORABLE =
-  'Es una copia en formato .sql: las restauraciones automáticas y «Restaurar todo» solo usan copias .nb3. Para llevarla a una base de datos usa «Importar…» › Archivo .sql.'
+  'Es una copia en formato .sql: las restauraciones automáticas y «Restaurar todo» solo usan copias .vqb o .nb3. Para llevarla a una base de datos usa «Importar…» › Archivo .sql.'
 
 /** Why a restore step cannot use the backup step `ref` (format .sql), or null. */
 export function sqlCopyRefusal(label: string, ref: JobTask): string | null {
   if (ref.type !== 'backupschema' || ref.format !== 'sql') return null
-  return `El ${label} restaura «${ref.referenceName || ref.schema}», una copia .sql; las restauraciones automáticas necesitan una copia .nb3. Cambia el formato del paso de copia a .nb3.`
+  return `El ${label} restaura «${ref.referenceName || ref.schema}», una copia .sql; las restauraciones automáticas necesitan una copia .vqb o .nb3. Cambia el formato del paso de copia a .vqb o .nb3.`
 }
 
 export function restoreProductionRefusal(stepName: string, connectionName: string): string {

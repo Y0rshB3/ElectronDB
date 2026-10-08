@@ -24,7 +24,18 @@ export interface JobDraft {
   launchAgent: boolean
   schedule: ScheduleForm
   source?: Job['source']
+  /** A backup password is stored for this job (the password itself never reaches the renderer). */
+  hasBackupPassword: boolean
+  /** New password for the encrypted .vqb steps ('' = keep the stored one). */
+  backupPassword: string
+  backupPasswordAgain: string
 }
+
+export const MIN_BACKUP_PASSWORD = 8
+
+/** The job has backup steps that encrypt their .vqb. */
+export const encryptsBackups = (tasks: JobTask[]): boolean =>
+  tasks.some((t) => t.type === 'backupschema' && t.format === 'vqb' && t.encrypt === true)
 
 export const TASK_TYPES: { value: JobTaskType; title: string }[] = [
   { value: 'backupschema', title: 'Copia de seguridad' },
@@ -46,8 +57,11 @@ function randomId(): string {
 
 export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobTask {
   const task: JobTask = { id: randomId(), type, connectionId, schema, referenceName: '' }
-  if (type === 'backupschema') task.includeData = true
-  else if (type === 'restoreschema') {
+  if (type === 'backupschema') {
+    task.includeData = true
+    // New steps write .vqb (Vortaq's own format); saved steps without a format stay .nb3.
+    task.format = 'vqb'
+  } else if (type === 'restoreschema') {
     task.restoreSource = { kind: 'task', taskId: '' }
     task.safetyBackup = true
     task.includeData = true
@@ -93,7 +107,10 @@ export function emptyDraft(): JobDraft {
     tasks: [],
     scheduleEnabled: false,
     launchAgent: false,
-    schedule: defaultScheduleForm()
+    schedule: defaultScheduleForm(),
+    hasBackupPassword: false,
+    backupPassword: '',
+    backupPasswordAgain: ''
   }
 }
 
@@ -106,7 +123,10 @@ export function draftFromJob(job: Job): JobDraft {
     scheduleEnabled: job.schedule.enabled,
     launchAgent: job.schedule.launchAgent,
     schedule: job.schedule.cron ? formFromCron(job.schedule.cron) : defaultScheduleForm(),
-    source: job.source
+    source: job.source,
+    hasBackupPassword: job.hasBackupPassword === true,
+    backupPassword: '',
+    backupPasswordAgain: ''
   }
 }
 
@@ -141,6 +161,15 @@ export function validateDraft(
       if (problem) errors.push(problem)
     }
   })
+  if (encryptsBackups(draft.tasks) || draft.backupPassword) {
+    const typed = draft.backupPassword ?? ''
+    if (!typed && !draft.hasBackupPassword)
+      errors.push('Escribe la contraseña de cifrado de las copias (al menos 8 caracteres).')
+    else if (typed && typed.length < MIN_BACKUP_PASSWORD)
+      errors.push('La contraseña de cifrado debe tener al menos 8 caracteres.')
+    else if (typed && typed !== draft.backupPasswordAgain)
+      errors.push('Las contraseñas de cifrado no coinciden.')
+  }
   const cron = cronFromForm(draft.schedule)
   if (draft.scheduleEnabled && !isValidCron(cron))
     errors.push(`La programación "${cron}" no es una expresión cron válida de 5 campos.`)
@@ -161,8 +190,9 @@ export function buildJobInput(draft: JobDraft): JobInput {
       }
       if (task.type === 'backupschema') {
         out.includeData = task.includeData !== false
-        // Only .sql is stored: jobs with .nb3 steps stay byte-identical.
-        if (task.format === 'sql') out.format = 'sql'
+        // .nb3 is never stored (absent = .nb3): jobs with .nb3 steps stay byte-identical.
+        if (task.format === 'sql' || task.format === 'vqb') out.format = task.format
+        if (task.format === 'vqb' && task.encrypt) out.encrypt = true
       } else if (task.type === 'restoreschema') {
         out.schema = task.schema.trim()
         if (task.restoreSource) out.restoreSource = { ...task.restoreSource }
@@ -180,6 +210,7 @@ export function buildJobInput(draft: JobDraft): JobInput {
   }
   if (draft.id) input.id = draft.id
   if (draft.source) input.source = draft.source
+  if (draft.backupPassword) input.backupPassword = draft.backupPassword
   return input
 }
 

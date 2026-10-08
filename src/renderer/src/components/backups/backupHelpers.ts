@@ -1,4 +1,11 @@
-import type { BackupFile, ConnectionConfig, Environment } from '@shared/types'
+import type {
+  BackupFile,
+  BackupFileFormat,
+  BackupMeta,
+  BackupObjectSummary,
+  ConnectionConfig,
+  Environment
+} from '@shared/types'
 import { can } from '@renderer/engines/capabilities'
 
 export const SOURCE_CHIPS: Record<BackupFile['source'], { label: string; color: string }> = {
@@ -33,9 +40,52 @@ export function environmentColor(env: Environment): string {
   return ENVIRONMENTS.find((e) => e.value === env)?.color ?? 'secondary'
 }
 
-/** Connections whose engine supports .nb3 backups (every MySQL connection). */
+/** True when the connection can make and restore backups (.vqb and/or .nb3). */
+export function canBackup(c: ConnectionConfig | null | undefined): boolean {
+  return !!c && (can(c, 'supportsBackupsNb3') || can(c, 'supportsBackupsVqb'))
+}
+
+/** Connections with backups: MySQL (.vqb and .nb3) and PostgreSQL (.vqb). */
 export function backupConnections(list: ConnectionConfig[]): ConnectionConfig[] {
+  return list.filter(canBackup)
+}
+
+/** Connections a .sql dump can be imported into (MySQL, the engine the importer speaks). */
+export function sqlImportConnections(list: ConnectionConfig[]): ConnectionConfig[] {
   return list.filter((c) => can(c, 'supportsBackupsNb3'))
+}
+
+/**
+ * Connections a backup can be restored into: the same engine only. A .nb3 is
+ * MySQL; a .vqb says its engine in the manifest (unknown while it is locked).
+ */
+export function restoreTargets(
+  list: ConnectionConfig[],
+  meta: Pick<BackupMeta, 'format' | 'engine' | 'locked'> | null | undefined,
+  file?: Pick<BackupFile, 'format'> | null
+): ConnectionConfig[] {
+  const format = meta?.format ?? file?.format ?? 'nb3'
+  const all = backupConnections(list)
+  if (format === 'nb3') return all.filter((c) => can(c, 'supportsBackupsNb3'))
+  if (!meta || meta.locked || !meta.engine) return all
+  const isPg = meta.engine === 'postgresql'
+  return all.filter((c) => (c.engine === 'postgresql') === isPg)
+}
+
+/** «.vqb» / «.nb3 (Navicat)». */
+export function backupFormatLabel(format: BackupFileFormat | undefined): string {
+  return format === 'vqb' ? '.vqb (Vortaq)' : '.nb3 (Navicat)'
+}
+
+/** «MySQL», «MariaDB», «PostgreSQL». */
+export function engineLabel(engine: string | undefined, flavor?: string): string {
+  if (engine === 'postgresql') return 'PostgreSQL'
+  return flavor === 'mariadb' ? 'MariaDB' : 'MySQL'
+}
+
+/** Object name as listed: PostgreSQL objects carry their schema. */
+export function backupObjectName(o: Pick<BackupObjectSummary, 'name' | 'schema'>): string {
+  return o.schema ? `${o.schema}.${o.name}` : o.name
 }
 
 /** Connections that automation tasks may target (every MySQL connection). */
@@ -76,7 +126,11 @@ const OBJECT_TYPE_LABELS: Record<string, string> = {
   function: 'Función',
   procedure: 'Procedimiento',
   event: 'Evento',
-  trigger: 'Disparador'
+  trigger: 'Disparador',
+  materializedview: 'Vista materializada',
+  sequence: 'Secuencia',
+  type: 'Tipo',
+  extension: 'Extensión'
 }
 
 /** Spanish label for a backup object type as stored in meta.json (Table, View...). */

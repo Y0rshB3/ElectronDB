@@ -142,6 +142,18 @@ const SOURCES: SourceSpec[] = [
     usualPath: () => null
   },
   {
+    id: 'vqb',
+    flow: 'nb3',
+    label: 'Copia .vqb (Vortaq)',
+    description:
+      'Restaura una copia .vqb de MySQL, MariaDB o PostgreSQL en una conexión del mismo motor; pide la contraseña si está cifrada.',
+    icon: 'mdi-archive-lock-open-outline',
+    pick: 'file',
+    filters: [{ name: 'Copia .vqb', extensions: ['vqb'] }],
+    mayContainPasswords: false,
+    usualPath: () => null
+  },
+  {
     id: 'nb3',
     flow: 'nb3',
     label: 'Copia .nb3 (Navicat/Vortaq)',

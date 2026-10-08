@@ -470,6 +470,19 @@ export function useObjectActions() {
           icon: 'mdi-puzzle-outline',
           action: () => showExtensions(c, db)
         },
+        // PostgreSQL backups are .vqb of a whole database.
+        {
+          key: 'backup',
+          label: 'Nueva copia de seguridad…',
+          icon: 'mdi-archive-plus-outline',
+          action: () => ui.openBackupDialog(c, db)
+        },
+        {
+          key: 'backups',
+          label: 'Copias de seguridad',
+          icon: 'mdi-archive-outline',
+          action: () => ws.openBackups(c, db)
+        },
         { key: 'd1', label: '', divider: true },
         refresh,
         {
@@ -868,7 +881,7 @@ export function useObjectActions() {
           disabled: !open,
           action: () => ui.openNewDatabaseDialog(c)
         },
-        !!caps.supportsBackupsNb3 && {
+        !!(caps.supportsBackupsNb3 || caps.supportsBackupsVqb) && {
           key: 'backups',
           label: 'Copias de seguridad',
           icon: 'mdi-archive-outline',

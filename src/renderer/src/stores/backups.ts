@@ -17,6 +17,15 @@ export const useBackupsStore = defineStore('backups', () => {
   const lists = ref<Record<string, BackupFile[]>>({})
   const loading = ref<Record<string, boolean>>({})
   const metaCache = ref<Record<string, BackupMeta>>({})
+  /**
+   * Passwords of encrypted .vqb typed in this session, by path, so the details
+   * panel and the restore dialog ask only once. Memory only: never persisted.
+   */
+  const passwords = new Map<string, string>()
+
+  function passwordOf(path: string): string | null {
+    return passwords.get(path) ?? null
+  }
 
   function listOf(connectionId: string, schema?: string | null): BackupFile[] {
     return lists.value[listKey(connectionId, schema)] ?? []
@@ -40,7 +49,19 @@ export const useBackupsStore = defineStore('backups', () => {
 
   async function meta(path: string, force = false): Promise<BackupMeta> {
     if (!force && metaCache.value[path]) return metaCache.value[path]
-    const m = await api.backups.meta(path)
+    const known = passwords.get(path)
+    const m = known ? await api.backups.unlockMeta(path, known) : await api.backups.meta(path)
+    metaCache.value = { ...metaCache.value, [path]: m }
+    return m
+  }
+
+  /**
+   * Opens an encrypted .vqb with `password` (throws the main-process message
+   * on a wrong one) and remembers the password for this session.
+   */
+  async function unlock(path: string, password: string): Promise<BackupMeta> {
+    const m = await api.backups.unlockMeta(path, password)
+    passwords.set(path, password)
     metaCache.value = { ...metaCache.value, [path]: m }
     return m
   }
@@ -76,6 +97,7 @@ export const useBackupsStore = defineStore('backups', () => {
     const nextMeta = { ...metaCache.value }
     delete nextMeta[file.path]
     metaCache.value = nextMeta
+    passwords.delete(file.path)
   }
 
   return {
@@ -86,6 +108,8 @@ export const useBackupsStore = defineStore('backups', () => {
     isLoading,
     load,
     meta,
+    unlock,
+    passwordOf,
     invalidate,
     create,
     restore,

@@ -47,7 +47,7 @@ export function groupsFor(connection: EngineHolder): GroupKind[] {
   const caps = descriptor.capabilities
   return descriptor.groups.filter((g): g is GroupKind => {
     if (!RENDERER_GROUPS.has(g)) return false
-    if (g === 'backups') return caps.supportsBackupsNb3
+    if (g === 'backups') return caps.supportsBackupsNb3 || caps.supportsBackupsVqb
     if (g === 'events') return caps.events
     if (g === 'functions') return caps.routines
     if (g === 'sequences') return caps.sequences

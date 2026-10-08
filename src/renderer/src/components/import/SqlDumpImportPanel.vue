@@ -14,7 +14,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useTreeStore } from '@renderer/stores/tree'
 import { formatBytes, formatDuration, formatNumber } from '@renderer/utils/format'
 import {
-  backupConnections,
+  sqlImportConnections,
   findLocalConnection
 } from '@renderer/components/backups/backupHelpers'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
@@ -98,7 +98,7 @@ async function inspect(path: string): Promise<void> {
     mode.value = defaultMode(i)
     targetSchema.value =
       mode.value === 'intoSchema' ? (i.databases[0] ?? schemaFromFileName(i.fileName)) : ''
-    targetConnectionId.value ??= findLocalConnection(backupConnections(connections.sorted))?.id ?? null
+    targetConnectionId.value ??= findLocalConnection(sqlImportConnections(connections.sorted))?.id ?? null
     if (targetConnectionId.value) void schemaLoader.load(targetConnectionId.value)
     step.value = 3
   } catch (err) {

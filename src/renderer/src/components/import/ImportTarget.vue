@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
-  backupConnections,
+  sqlImportConnections,
   environmentLabel,
   environmentPillClass
 } from '@renderer/components/backups/backupHelpers'
@@ -20,7 +20,7 @@ const connections = useConnectionsStore()
 const settings = useSettingsStore()
 
 const items = computed(() =>
-  backupConnections(connections.sorted).map((c) => ({
+  sqlImportConnections(connections.sorted).map((c) => ({
     title: c.name,
     value: c.id,
     subtitle: environmentLabel(c.environment),

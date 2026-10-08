@@ -28,9 +28,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     version: '0.2.0',
     date: '2026-10-07',
     highlights: [
-      'ElectronDB ahora se llama Vortaq',
+      'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
+      'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
-      'Nuevo icono y barra de herramientas reorganizada',
       'PostgreSQL (vista previa): actívalo en Ajustes › Motores en vista previa',
       'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
     ],
@@ -53,8 +53,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       },
       {
         target: 'toolbar-backup',
-        title: 'Exportar a .sql',
-        text: 'En Copias de seguridad, «Nueva copia» puede guardar un .sql que lee cualquier gestor. Los pasos de copia de la automatización también tienen «Formato: .nb3 | .sql».'
+        title: 'Copias .vqb',
+        text: '«Nueva copia» guarda por defecto un .vqb: el formato abierto y documentado de Vortaq, también para PostgreSQL, con «Cifrar con contraseña» opcional. Sigues pudiendo elegir .nb3 (Navicat) o .sql; los pasos de copia de la automatización también tienen «Formato: .vqb | .nb3 | .sql».'
       }
     ]
   },

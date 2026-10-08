@@ -78,7 +78,8 @@ describe('BackupsView', () => {
       format: 'sql'
     })
     await w.get('[data-test="backups-new"]').trigger('click')
-    expect(useUiStore().backupDialog.format).toBe('nb3')
+    // «Nueva copia» leaves the format to Ajustes (.vqb by default).
+    expect(useUiStore().backupDialog.format).toBeUndefined()
   })
 
   it('disables Eliminar for Navicat backups and enables it for Vortaq ones', async () => {

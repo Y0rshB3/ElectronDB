@@ -13,7 +13,7 @@ import SqlFolderImportPanel from './SqlFolderImportPanel.vue'
 /**
  * «Importar…»: one wizard for every source. Step 1 lists the sources; the
  * Navicat folder hands over to its own dialog (detection and confirmation),
- * a .nb3 copy to the restore dialog, everything else continues here.
+ * a .vqb or .nb3 copy to the restore dialog, everything else continues here.
  */
 const ui = useUiStore()
 
@@ -95,6 +95,7 @@ async function choose(s: ImportSourceInfo): Promise<void> {
     const file: BackupFile = {
       path,
       fileName,
+      format: /\.vqb$/i.test(fileName) ? 'vqb' : 'nb3',
       connectionId: null,
       schema: null,
       sizeBytes: 0,

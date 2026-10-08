@@ -7,7 +7,13 @@ import { useBackupsStore } from '@renderer/stores/backups'
 import { formatBytes, formatDate, formatNumber } from '@renderer/utils/format'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import SourcePill from './SourcePill.vue'
-import { backupObjectTypeLabel } from './backupHelpers'
+import BackupPasswordPrompt from './BackupPasswordPrompt.vue'
+import {
+  backupFormatLabel,
+  backupObjectName,
+  backupObjectTypeLabel,
+  engineLabel
+} from './backupHelpers'
 
 const props = defineProps<{ file: BackupFile }>()
 const emit = defineEmits<{ close: [] }>()
@@ -33,8 +39,15 @@ function typeIcon(type: string): string {
   if (t.includes('func') || t.includes('proc')) return 'mdi-function-variant'
   if (t.includes('event')) return 'mdi-calendar-clock-outline'
   if (t.includes('trigger')) return 'mdi-lightning-bolt-outline'
+  if (t.includes('sequence')) return 'mdi-numeric'
+  if (t.includes('type')) return 'mdi-shape-outline'
+  if (t.includes('extension')) return 'mdi-puzzle-outline'
   return 'mdi-table'
 }
+
+const isVqb = computed(() => (meta.value?.format ?? props.file.format) === 'vqb')
+const encrypted = computed(() => meta.value?.encrypted ?? props.file.encrypted === true)
+const locked = computed(() => meta.value?.locked === true)
 
 const totalRows = computed(
   () => meta.value?.objects.reduce((sum, o) => sum + (o.rows ?? 0), 0) ?? 0
@@ -60,7 +73,11 @@ async function showDdl(obj: BackupObjectSummary): Promise<void> {
   ddlLoading.value = true
   ddl.value = ''
   try {
-    ddl.value = await api.backups.objectDdl(props.file.path, obj.uuid)
+    ddl.value = await api.backups.objectDdl(
+      props.file.path,
+      obj.uuid,
+      backups.passwordOf(props.file.path)
+    )
   } catch (err) {
     ddl.value = `-- No se pudo leer el DDL: ${errorMessage(err)}`
   } finally {
@@ -83,7 +100,7 @@ watch(() => props.file.path, loadMeta, { immediate: true })
   >
     <header class="backup-details__head">
       <span class="nd-icon-badge" aria-hidden="true"
-        ><v-icon icon="mdi-archive-outline" size="18"
+        ><v-icon :icon="encrypted ? 'mdi-archive-lock-outline' : 'mdi-archive-outline'" size="18"
       /></span>
       <div class="backup-details__title">
         <div class="backup-details__file nd-ellipsis" :title="file.path">{{ file.fileName }}</div>
@@ -99,8 +116,26 @@ watch(() => props.file.path, loadMeta, { immediate: true })
     </header>
 
     <dl class="backup-details__facts">
-      <dt>Esquema</dt>
-      <dd class="nd-mono">{{ meta?.schema ?? file.schema ?? '—' }}</dd>
+      <dt>{{ meta?.engine === 'postgresql' ? 'Base de datos' : 'Esquema' }}</dt>
+      <dd class="nd-mono">{{ meta?.schema || file.schema || '—' }}</dd>
+      <dt>Formato</dt>
+      <dd data-test="backup-details-format">
+        {{ backupFormatLabel(meta?.format ?? file.format) }}
+        <span v-if="encrypted" class="nd-pill nd-pill--info backup-details__lock"
+          ><v-icon icon="mdi-lock-outline" size="12" aria-hidden="true" />cifrada</span
+        >
+      </dd>
+      <template v-if="isVqb && meta?.engine">
+        <dt>Motor</dt>
+        <dd class="nd-ellipsis">
+          {{ engineLabel(meta.engine, meta.engineFlavor) }}
+          <span v-if="meta.serverVersion" class="nd-mono">{{ meta.serverVersion }}</span>
+        </dd>
+      </template>
+      <template v-if="isVqb && meta?.connectionName">
+        <dt>Conexión</dt>
+        <dd class="nd-ellipsis" :title="meta.connectionName">{{ meta.connectionName }}</dd>
+      </template>
       <dt>Tamaño</dt>
       <dd class="nd-mono">{{ formatBytes(file.sizeBytes) }}</dd>
       <dt>Origen</dt>
@@ -115,7 +150,23 @@ watch(() => props.file.path, loadMeta, { immediate: true })
       </template>
     </dl>
 
-    <div v-if="meta" class="backup-details__stats">
+    <BackupPasswordPrompt
+      v-if="locked"
+      :path="file.path"
+      class="mx-4 mt-3"
+      @unlocked="meta = $event"
+    />
+    <v-alert
+      v-for="warning in meta?.warnings ?? []"
+      :key="warning"
+      type="warning"
+      variant="tonal"
+      density="compact"
+      class="mx-4 mt-2"
+      >{{ warning }}</v-alert
+    >
+
+    <div v-if="meta && !locked" class="backup-details__stats">
       <div class="backup-details__stat">
         <span class="backup-details__stat-value nd-mono">{{
           formatNumber(meta.objects.length)
@@ -141,8 +192,8 @@ watch(() => props.file.path, loadMeta, { immediate: true })
         hide-default-footer
         hover
         fixed-header
-        no-data-text="Sin objetos"
-        loading-text="Leyendo meta.json…"
+        :no-data-text="locked ? 'Cifrada: escribe la contraseña' : 'Sin objetos'"
+        loading-text="Leyendo el manifiesto…"
         :row-props="
           ({ item }) => ({ class: item.uuid === selectedObject?.uuid ? 'bg-surface-variant' : '' })
         "
@@ -156,7 +207,9 @@ watch(() => props.file.path, loadMeta, { immediate: true })
           </span>
         </template>
         <template #[`item.name`]="{ item }">
-          <span class="nd-ellipsis d-block" :title="item.name">{{ item.name }}</span>
+          <span class="nd-ellipsis d-block" :title="backupObjectName(item)">{{
+            backupObjectName(item)
+          }}</span>
         </template>
         <template #[`item.rows`]="{ item }">
           <span class="nd-num">{{ formatNumber(item.rows) }}</span>
@@ -227,6 +280,12 @@ watch(() => props.file.path, loadMeta, { immediate: true })
   margin: 0;
   min-width: 0;
   color: var(--nd-text);
+}
+.backup-details__lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
 }
 .backup-details__comment {
   white-space: pre-wrap;

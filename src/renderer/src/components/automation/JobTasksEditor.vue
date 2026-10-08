@@ -84,7 +84,7 @@ function sourceItems(index: number): { title: string; value: string }[] {
     t.type === 'backupschema'
       ? [
           {
-            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}${t.format === 'sql' ? ' · .sql (no restaurable)' : ''}`,
+            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}${t.format === 'sql' ? ' · .sql (no restaurable)' : t.format === 'vqb' ? ` · .vqb${t.encrypt ? ' cifrada' : ''}` : ''}`,
             value: `task:${t.id}`
           }
         ]
@@ -329,22 +329,45 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
             <div class="task-card__format">
               <span class="task-card__format-label">Formato</span>
               <v-btn-toggle
-                :model-value="task.format === 'sql' ? 'sql' : 'nb3'"
+                :model-value="task.format === 'sql' || task.format === 'vqb' ? task.format : 'nb3'"
                 mandatory
                 density="compact"
                 variant="outlined"
                 divided
                 data-test="task-format"
                 @update:model-value="
-                  update(index, { format: $event === 'sql' ? 'sql' : undefined })
+                  update(index, {
+                    format: $event === 'sql' || $event === 'vqb' ? $event : undefined,
+                    encrypt: $event === 'vqb' ? task.encrypt : undefined
+                  })
                 "
               >
+                <v-btn value="vqb" size="small" data-test="task-format-vqb">.vqb</v-btn>
                 <v-btn value="nb3" size="small" data-test="task-format-nb3">.nb3</v-btn>
                 <v-btn value="sql" size="small" data-test="task-format-sql">.sql</v-btn>
               </v-btn-toggle>
+              <v-checkbox
+                v-if="task.format === 'vqb'"
+                :model-value="task.encrypt === true"
+                label="Cifrar con contraseña"
+                density="compact"
+                hide-details
+                class="task-card__check task-card__encrypt"
+                data-test="task-encrypt"
+                @update:model-value="update(index, { encrypt: $event ? true : undefined })"
+              />
             </div>
             <p v-if="task.format === 'sql'" class="task-card__hint" data-test="task-format-hint">
-              Para llevar la copia a otros gestores. Las restauraciones automáticas necesitan .nb3.
+              Para llevar la copia a otros gestores. Las restauraciones automáticas necesitan .nb3 o
+              .vqb.
+            </p>
+            <p
+              v-else-if="task.format === 'vqb' && task.encrypt"
+              class="task-card__hint"
+              data-test="task-encrypt-hint"
+            >
+              Se cifra con la contraseña de la tarea (más abajo); se guarda cifrada en este equipo
+              para las ejecuciones programadas.
             </p>
           </template>
           <template v-else-if="task.type === 'restoreschema'">

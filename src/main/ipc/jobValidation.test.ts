@@ -37,7 +37,7 @@ describe('validateJobInput (jobs:save)', () => {
     const sql: JobTask = { ...backup, format: 'sql' }
     expect(() => validateJobInput(job([sql]), lookup)).not.toThrow()
     expect(() => validateJobInput(job([sql, restore('local')]), lookup)).toThrow(
-      /una copia \.sql; las restauraciones automáticas necesitan una copia \.nb3/
+      /una copia \.sql; las restauraciones automáticas necesitan una copia \.vqb o \.nb3/
     )
     expect(() => validateJobInput(job([{ ...backup, format: 'zip' as never }]), lookup)).toThrow(
       /formato de copia desconocido/

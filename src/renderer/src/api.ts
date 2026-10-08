@@ -220,7 +220,12 @@ export const api = {
   backups: {
     list: (c: string, schema?: string | null) => invokeSilent('backups:list', c, schema),
     meta: (path: string) => invoke('backups:meta', path),
-    objectDdl: (path: string, uuid: string) => invoke('backups:objectDdl', path, uuid),
+    /** Meta of an encrypted .vqb with its password (silent: the caller shows a wrong password inline). */
+    unlockMeta: (path: string, password: string) => invokeSilent('backups:meta', path, password),
+    objectDdl: (path: string, uuid: string, password?: string | null) =>
+      password
+        ? invoke('backups:objectDdl', path, uuid, password)
+        : invoke('backups:objectDdl', path, uuid),
     create: (operationId: string, options: BackupCreateOptions) =>
       invoke('backups:create', operationId, options),
     restore: (operationId: string, options: RestoreOptions) =>
@@ -241,8 +246,14 @@ export const api = {
     runLog: (runId: string) => invoke('jobs:runLog', runId),
     scheduleStatus: (id: string) => invokeSilent('jobs:scheduleStatus', id),
     /** Plan of a run (its id) or of backup files picked in the backups list. */
-    rollbackPlan: (source: string | RollbackFilesSource, targetConnectionId: string | null) =>
-      invokeSilent('jobs:rollbackPlan', source, targetConnectionId),
+    rollbackPlan: (
+      source: string | RollbackFilesSource,
+      targetConnectionId: string | null,
+      password?: string | null
+    ) =>
+      password
+        ? invokeSilent('jobs:rollbackPlan', source, targetConnectionId, password)
+        : invokeSilent('jobs:rollbackPlan', source, targetConnectionId),
     rollback: (request: RollbackRequest, options?: WriteOptions) =>
       invokeSilent('jobs:rollback', request, options)
   },

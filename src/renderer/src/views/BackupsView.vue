@@ -66,7 +66,13 @@ const schemaOptions = computed(() => {
 const selected = computed<BackupFile | null>(
   () => files.value.find((f) => f.path === selectedPath.value) ?? null
 )
-const localConnection = computed(() => findLocalConnection(backupConnections(connections.sorted)))
+/** PostgreSQL: .vqb only, no .sql export and no packages (automation is MySQL-only). */
+const isPg = computed(() => connection.value?.engine === 'postgresql')
+const localConnection = computed(() =>
+  findLocalConnection(
+    backupConnections(connections.sorted).filter((c) => (c.engine === 'postgresql') === isPg.value)
+  )
+)
 
 /* ---------- Packages (files one batch produced together) ---------- */
 
@@ -351,6 +357,7 @@ watch(connectionId, () => {
         >Nueva copia</v-btn
       >
       <v-btn
+        v-if="!isPg"
         size="small"
         prepend-icon="mdi-file-export-outline"
         variant="tonal"
@@ -379,7 +386,7 @@ watch(connectionId, () => {
       >
         Restaurar en Local
       </v-btn>
-      <v-tooltip :text="packageRestoreTip" location="bottom" max-width="320">
+      <v-tooltip v-if="!isPg" :text="packageRestoreTip" location="bottom" max-width="320">
         <template #activator="{ props: tipProps }">
           <span v-bind="tipProps" class="backups-view__tip-wrap">
             <v-btn
@@ -496,7 +503,7 @@ watch(connectionId, () => {
           v-else-if="!loading && !files.length"
           icon="mdi-archive-outline"
           title="No hay copias de seguridad"
-          :description="`No se encontraron archivos .nb3 en ${connection?.backupDir || 'la carpeta de copias'}${schemaFilter ? ` para ${schemaFilter}` : ''}.`"
+          :description="`No se encontraron copias (${isPg ? '.vqb' : '.vqb o .nb3'}) en ${connection?.backupDir || 'la carpeta de copias'}${schemaFilter ? ` para ${schemaFilter}` : ''}.`"
         >
           <v-btn
             color="primary"
@@ -611,10 +618,14 @@ watch(connectionId, () => {
           <template #[`item.fileName`]="{ item }">
             <div class="backups-view__name">
               <v-icon
-                icon="mdi-archive-outline"
+                :icon="item.encrypted ? 'mdi-lock-outline' : 'mdi-archive-outline'"
                 size="16"
                 class="backups-view__file-icon"
-                aria-hidden="true"
+                :class="{ 'backups-view__file-icon--locked': item.encrypted }"
+                :aria-label="item.encrypted ? 'Copia cifrada con contraseña' : undefined"
+                :aria-hidden="item.encrypted ? undefined : 'true'"
+                :title="item.encrypted ? 'Cifrada con contraseña' : undefined"
+                data-test="backup-row-icon"
               />
               <span class="nd-ellipsis" :title="item.path">{{ item.fileName }}</span>
               <span
@@ -911,6 +922,9 @@ watch(connectionId, () => {
 .backups-view__file-icon {
   flex: none;
   color: var(--nd-text-muted);
+}
+.backups-view__file-icon--locked {
+  color: rgb(var(--v-theme-warning));
 }
 .backups-view__newest {
   flex: none;

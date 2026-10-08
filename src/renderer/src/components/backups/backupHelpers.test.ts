@@ -12,7 +12,12 @@ describe('backupObjectTypeLabel', () => {
   })
 
   it('keeps unknown types unchanged', () => {
-    expect(backupObjectTypeLabel('Sequence')).toBe('Sequence')
+    expect(backupObjectTypeLabel('Rule')).toBe('Rule')
+  })
+
+  it('labels the PostgreSQL types of .vqb backups', () => {
+    expect(backupObjectTypeLabel('Sequence')).toBe('Secuencia')
+    expect(backupObjectTypeLabel('MaterializedView')).toBe('Vista materializada')
   })
 })
 

@@ -48,6 +48,14 @@ const safetyBackup = ref(true)
 /** «Contenido»: true = «Estructura y datos» (default), false = «Solo estructura». */
 const includeData = ref(true)
 const starting = ref(false)
+/**
+ * One password for the encrypted .vqb copies of the run/package that the
+ * job's stored password does not open. Memory only; sent with the plan and
+ * the restore request.
+ */
+const packagePassword = ref('')
+const passwordInput = ref('')
+const showPassword = ref(false)
 /** Answer of the latest plan request (target changes while one is loading). */
 let planRequest = 0
 
@@ -72,6 +80,8 @@ const connectionItems = computed(() =>
   }))
 )
 const items = computed<RollbackPlanItem[]>(() => plan.value?.items ?? [])
+/** Encrypted copies the plan could not open (no stored password, or a wrong one). */
+const lockedItems = computed(() => items.value.filter((i) => i.locked))
 const chosen = computed(() => items.value.filter((i) => selected.value.includes(i.taskId)))
 const duplicated = computed(() => {
   const seen = new Set<string>()
@@ -130,7 +140,8 @@ async function loadPlan(): Promise<void> {
             sourceConnectionId: source.sourceConnectionId,
             title: source.title
           },
-      targetId.value
+      targetId.value,
+      packagePassword.value || null
     )
     if (request !== planRequest) return
     // Keep the user's choice across target changes; new plans start with every
@@ -158,7 +169,19 @@ async function loadPlan(): Promise<void> {
   }
 }
 
+/** Re-reads the plan with the typed password (it opens every locked copy it fits). */
+function usePassword(): void {
+  if (!passwordInput.value) return
+  packagePassword.value = passwordInput.value
+  passwordInput.value = ''
+  plan.value = null
+  void loadPlan()
+}
+
 function reset(): void {
+  packagePassword.value = ''
+  passwordInput.value = ''
+  showPassword.value = false
   targetId.value = defaultTarget()
   plan.value = null
   selected.value = []
@@ -227,7 +250,8 @@ async function start(): Promise<void> {
             targetConnectionId: target.value.id,
             taskIds: chosen.value.map((i) => i.taskId),
             safetyBackup: safetyBackup.value,
-            includeData: includeData.value
+            includeData: includeData.value,
+            ...(packagePassword.value ? { password: packagePassword.value } : {})
           }
         : {
             source: 'files',
@@ -236,7 +260,8 @@ async function start(): Promise<void> {
             title: source.title,
             targetConnectionId: target.value.id,
             safetyBackup: safetyBackup.value,
-            includeData: includeData.value
+            includeData: includeData.value,
+            ...(packagePassword.value ? { password: packagePassword.value } : {})
           },
       needsTyped.value ? { confirmProduction: true } : undefined
     )
@@ -309,6 +334,47 @@ async function start(): Promise<void> {
         >
           <span />
         </div>
+        <form
+          v-if="lockedItems.length"
+          class="rollback-dialog__password"
+          data-test="rollback-password"
+          @submit.prevent="usePassword"
+        >
+          <div class="rollback-dialog__password-text">
+            <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
+            {{
+              lockedItems.length === 1
+                ? 'Una copia está cifrada'
+                : `${lockedItems.length} copias están cifradas`
+            }}
+            y la contraseña guardada de su tarea no la abre: escribe la contraseña (una para todo el
+            paquete).
+          </div>
+          <div class="rollback-dialog__password-row">
+            <v-text-field
+              v-model="passwordInput"
+              :type="showPassword ? 'text' : 'password'"
+              label="Contraseña de las copias"
+              density="compact"
+              autocomplete="off"
+              hide-details
+              :disabled="starting || loading"
+              :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+              data-test="rollback-password-input"
+              @click:append-inner="showPassword = !showPassword"
+            />
+            <v-btn
+              type="submit"
+              variant="tonal"
+              color="primary"
+              prepend-icon="mdi-lock-open-variant-outline"
+              :disabled="!passwordInput || starting"
+              :loading="loading"
+              data-test="rollback-password-submit"
+              >Abrir</v-btn
+            >
+          </div>
+        </form>
         <ul v-if="items.length" class="rollback-list" data-test="rollback-items">
           <li
             v-for="item in items"
@@ -327,6 +393,13 @@ async function start(): Promise<void> {
             />
             <div class="rollback-item__main">
               <div class="rollback-item__route nd-mono">
+                <v-icon
+                  v-if="item.encrypted"
+                  :icon="item.locked ? 'mdi-lock-outline' : 'mdi-lock-open-variant-outline'"
+                  size="14"
+                  :title="item.locked ? 'Copia cifrada' : 'Copia cifrada (abierta)'"
+                  data-test="rollback-item-lock"
+                />
                 <span class="rollback-item__schema" :title="item.backupPath">{{
                   item.schema || '?'
                 }}</span>
@@ -462,6 +535,28 @@ async function start(): Promise<void> {
   color: var(--nd-text-2);
   font-size: var(--nd-fs-dense);
   line-height: 1.5;
+}
+.rollback-dialog__password {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-control);
+  background: rgba(var(--v-theme-warning), 0.06);
+}
+.rollback-dialog__password-text {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+}
+.rollback-dialog__password-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rollback-dialog__password-row :deep(.v-input) {
+  flex: 1;
 }
 .rollback-dialog__title {
   display: flex;

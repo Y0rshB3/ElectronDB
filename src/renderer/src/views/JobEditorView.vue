@@ -15,6 +15,7 @@ import {
   draftFromJob,
   emptyDraft,
   validateDraft,
+  encryptsBackups,
   type JobDraft
 } from '@renderer/components/automation/jobForm'
 import {
@@ -237,6 +238,48 @@ onMounted(load)
               <span class="nd-pill">{{ draft.tasks.length }}</span>
             </header>
             <JobTasksEditor v-model="draft.tasks" />
+            <div
+              v-if="encryptsBackups(draft.tasks) || draft.backupPassword"
+              class="je-password"
+              data-test="job-backup-password"
+            >
+              <div class="je-password__title">
+                <v-icon icon="mdi-lock-outline" size="15" aria-hidden="true" />
+                Contraseña de cifrado de las copias
+                <span
+                  v-if="draft.hasBackupPassword && !draft.backupPassword"
+                  class="nd-pill nd-pill--info"
+                  data-test="job-backup-password-stored"
+                  >guardada</span
+                >
+              </div>
+              <div class="je-password__fields">
+                <v-text-field
+                  v-model="draft.backupPassword"
+                  type="password"
+                  :label="draft.hasBackupPassword ? 'Nueva contraseña (opcional)' : 'Contraseña'"
+                  autocomplete="new-password"
+                  density="compact"
+                  hide-details
+                  data-test="job-backup-password-input"
+                />
+                <v-text-field
+                  v-model="draft.backupPasswordAgain"
+                  type="password"
+                  label="Repite la contraseña"
+                  autocomplete="new-password"
+                  density="compact"
+                  hide-details
+                  :disabled="!draft.backupPassword"
+                  data-test="job-backup-password-again"
+                />
+              </div>
+              <p class="je-password__hint">
+                Una para todos los pasos cifrados de esta tarea. Se guarda cifrada en este equipo
+                (como las contraseñas de las conexiones) para las ejecuciones programadas; nunca se
+                escribe en el registro. Si la pierdes, las copias cifradas no se pueden recuperar.
+              </p>
+            </div>
           </section>
 
           <section class="je-card" aria-label="Programación">
@@ -365,6 +408,33 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.je-password {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-control);
+  background: rgba(var(--v-theme-warning), 0.05);
+}
+.je-password__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: var(--nd-fs-dense);
+}
+.je-password__fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.je-password__hint {
+  margin: 0;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
 }
 .je-card {
   min-width: 0;

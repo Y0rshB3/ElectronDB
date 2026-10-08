@@ -88,12 +88,12 @@ describe('WHATS_NEW (curated list)', () => {
     ])
   })
 
-  it('0.2.0 announces the Vortaq name, imports and .sql export, PostgreSQL, MariaDB and the data move', () => {
+  it('0.2.0 announces the Vortaq name, .vqb copies, imports and .sql export, PostgreSQL, MariaDB and the data move', () => {
     const entry = whatsNewFor('0.2.0-alpha.1')
     expect(entry?.highlights).toEqual([
-      'ElectronDB ahora se llama Vortaq',
+      'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
+      'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
-      'Nuevo icono y barra de herramientas reorganizada',
       'PostgreSQL (vista previa): actívalo en Ajustes › Motores en vista previa',
       'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
     ])

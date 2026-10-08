@@ -141,6 +141,26 @@ async function save(): Promise<void> {
               class="nd-path-field"
             />
           </div>
+          <div class="settings-row mt-3">
+            <span class="settings-row__label">Formato de las copias nuevas</span>
+            <v-btn-toggle
+              v-model="form.defaultBackupFormat"
+              mandatory
+              density="compact"
+              variant="outlined"
+              color="primary"
+              aria-label="Formato de las copias nuevas"
+              data-test="settings-backup-format"
+            >
+              <v-btn value="vqb">.vqb</v-btn>
+              <v-btn value="nb3">.nb3</v-btn>
+              <v-btn value="sql">.sql</v-btn>
+            </v-btn-toggle>
+          </div>
+          <p class="settings-section__hint">
+            .vqb es el formato abierto de Vortaq (con cifrado opcional; también para PostgreSQL),
+            .nb3 es compatible con Navicat y .sql sirve para otros gestores.
+          </p>
         </section>
 
         <section class="settings-section" aria-label="Consultas">
@@ -382,6 +402,11 @@ async function save(): Promise<void> {
 }
 .settings-row__label {
   color: var(--nd-text);
+}
+.settings-section__hint {
+  margin: 6px 0 0;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
 }
 .settings-dialog__switch {
   margin-top: 8px;

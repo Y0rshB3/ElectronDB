@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { BackupFormat } from '@shared/importers'
 import type { BackupFile, ConnectionConfig, EngineId, Environment } from '@shared/types'
 
 /** One affected object or statement listed in a confirmation. */
@@ -90,8 +91,8 @@ export const useUiStore = defineStore('ui', () => {
     open: boolean
     connectionId: string | null
     schema: string | null
-    /** «Exportar a .sql…» opens the dialog on the .sql format; absent = .nb3. */
-    format?: 'nb3' | 'sql'
+    /** «Exportar a .sql…» opens the dialog on the .sql format; absent = Ajustes' default. */
+    format?: BackupFormat
   }>({
     open: false,
     connectionId: null,
@@ -119,9 +120,14 @@ export const useUiStore = defineStore('ui', () => {
   function openBackupDialog(
     connectionId: string,
     schema: string | null = null,
-    options: { format?: 'nb3' | 'sql' } = {}
+    options: { format?: BackupFormat } = {}
   ): void {
-    backupDialog.value = { open: true, connectionId, schema, format: options.format ?? 'nb3' }
+    backupDialog.value = {
+      open: true,
+      connectionId,
+      schema,
+      ...(options.format ? { format: options.format } : {})
+    }
   }
   function openRestoreDialog(
     backup: BackupFile,

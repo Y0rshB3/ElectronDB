@@ -58,7 +58,11 @@ const engine = computed<EngineId>(() => form.value.engine ?? 'mysql')
 const isPg = computed(() => engine.value === 'postgresql')
 const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
 /** Backups are MySQL-only: the backup folder fields follow the capability. */
-const showBackupDirs = computed(() => can({ engine: engine.value }, 'supportsBackupsNb3'))
+const showBackupDirs = computed(
+  () =>
+    can({ engine: engine.value }, 'supportsBackupsNb3') ||
+    can({ engine: engine.value }, 'supportsBackupsVqb')
+)
 /**
  * Engines offered for a new connection: only with Ajustes › Motores en vista
  * previa on (otherwise MySQL, as before, and no picker is shown).

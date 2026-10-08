@@ -8,7 +8,8 @@ tablas, saca copias de seguridad y automatiza copias y restauraciones entre ento
 local). Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. Si
 ya usabas otro gestor, puede importar tus conexiones (Navicat, DBeaver, MySQL Workbench) y tus copias `.sql` o
 `.nb3`, y exportar copias en `.sql` que otros programas leen (ver
-[Importar desde otros gestores](#importar-desde-otros-gestores)).
+[Importar desde otros gestores](#importar-desde-otros-gestores)). Sus copias nuevas usan `.vqb`, un formato propio,
+abierto y documentado, con cifrado opcional ([Copias .vqb](#copias-vqb-formato-abierto-con-cifrado-opcional)).
 
 Está construido con Electron, Vue 3 y TypeScript. La interfaz está en español; el código y los comentarios, en
 inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
@@ -47,15 +48,17 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
   transacción y se deshacen todos si falla uno. Filtro visual por condiciones con paréntesis y perfiles,
   selector de fecha y hora, columnas redimensionables y panel **Texto** con el valor completo de la celda.
 - **Diseñador de tablas** (columnas, índices, claves foráneas) y editor DDL de vistas y rutinas.
-- **Copias de seguridad `.nb3`**: crear, listar (incluidas las importadas de otros gestores, en solo lectura), restaurar en
-  cualquier conexión y "rollback a local".
+- **Copias de seguridad `.vqb` y `.nb3`**: crear, listar (incluidas las importadas de otros gestores, en solo
+  lectura), restaurar en cualquier conexión del mismo motor y "rollback a local". Por defecto se usa `.vqb`, el
+  formato abierto de Vortaq, con **Cifrar con contraseña** opcional (también para PostgreSQL); `.nb3` sigue
+  disponible para compartir copias con Navicat.
 - **Automatización**: trabajos con pasos de backup, de SQL y de restauración, programador tipo cron, historial
   y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
   sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
   la lista de copias de seguridad con un paquete entero (también los lotes importados de otros gestores).
 - **Importación desde otros gestores** (**Más › Importar…**): conexiones de Navicat (carpeta de macOS o archivo
   `.ncx`, con contraseñas si lo exportaste con ellas), DBeaver y MySQL Workbench; volcados `.sql`/`.sql.gz` de
-  mysqldump, phpMyAdmin, HeidiSQL y otros gestores (uno o una carpeta entera) y copias `.nb3`. Es de solo
+  mysqldump, phpMyAdmin, HeidiSQL y otros gestores (uno o una carpeta entera) y copias `.vqb` y `.nb3`. Es de solo
   lectura: no modifica nada del otro programa y nunca lee sus almacenes de contraseñas
   ([Importar desde otros gestores](#importar-desde-otros-gestores)).
 - **Exportar a `.sql`**: copias en SQL plano compatibles con `mysql` y otros gestores, también como formato de
@@ -77,16 +80,16 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 El desarrollo y las pruebas diarias se hacen en macOS. Windows y Linux compilan y empaquetan, pero todavía no se
 han probado a fondo en un equipo real: trátalos como **experimentales**.
 
-| Función                                  | macOS                        | Windows                                        | Linux                                            |
-| ---------------------------------------- | ---------------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| Ejecutar desde el código (`npm run dev`) | Sí                           | Sí (experimental)                              | Sí (experimental)                                |
-| Instalador                               | `.dmg` y `.zip` (sin firmar) | Instalador NSIS y `.exe` portable (sin firma)  | AppImage y `.deb`                                |
-| Conexiones, consultas, datos, diseñador  | Sí                           | Sí                                             | Sí                                               |
-| Copias `.nb3` (crear, leer, restaurar)   | Sí                           | Sí                                             | Sí                                               |
-| Importar desde Navicat                   | Sí, detección automática     | Solo copiando la carpeta de un Mac (ver abajo) | Solo copiando la carpeta de un Mac (ver abajo)   |
-| Trabajos programados con la app abierta  | Sí                           | Sí                                             | Sí                                               |
-| Trabajos programados con la app cerrada  | Sí (launchd)                 | **No** de forma integrada (ver Automatización) | **No** de forma integrada (ver Automatización)   |
-| Cifrado de contraseñas guardadas         | Llavero de macOS             | DPAPI de Windows                               | libsecret / KWallet; **sin llavero, sin cifrar** |
+| Función                                   | macOS                        | Windows                                        | Linux                                            |
+| ----------------------------------------- | ---------------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| Ejecutar desde el código (`npm run dev`)  | Sí                           | Sí (experimental)                              | Sí (experimental)                                |
+| Instalador                                | `.dmg` y `.zip` (sin firmar) | Instalador NSIS y `.exe` portable (sin firma)  | AppImage y `.deb`                                |
+| Conexiones, consultas, datos, diseñador   | Sí                           | Sí                                             | Sí                                               |
+| Copias `.vqb` y `.nb3` (crear, restaurar) | Sí                           | Sí                                             | Sí                                               |
+| Importar desde Navicat                    | Sí, detección automática     | Solo copiando la carpeta de un Mac (ver abajo) | Solo copiando la carpeta de un Mac (ver abajo)   |
+| Trabajos programados con la app abierta   | Sí                           | Sí                                             | Sí                                               |
+| Trabajos programados con la app cerrada   | Sí (launchd)                 | **No** de forma integrada (ver Automatización) | **No** de forma integrada (ver Automatización)   |
+| Cifrado de contraseñas guardadas          | Llavero de macOS             | DPAPI de Windows                               | libsecret / KWallet; **sin llavero, sin cifrar** |
 
 Limitaciones conocidas fuera de macOS:
 
@@ -390,15 +393,16 @@ del tour) abre un asistente: eliges el **origen**, luego el **archivo o la carpe
 marcas qué traer. Vortaq solo lee el archivo o la carpeta que eliges (o que confirmas en su ubicación habitual):
 nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almacenes cifrados de otros programas.
 
-| Origen | Qué se importa | Contraseñas |
-| --- | --- | --- |
-| **Navicat — carpeta (macOS)** | Conexiones, colores, trabajos por lotes y copias `.nb3` | No (no están en esos archivos) |
-| **Navicat — archivo .ncx** | Conexiones MySQL/MariaDB con SSH y SSL | Sí, si lo exportaste con «Export Password» |
-| **DBeaver** | Conexiones MySQL/MariaDB de `data-sources.json` (con túnel SSH) | No |
-| **MySQL Workbench** | Conexiones de `connections.xml` (con túnel SSH y SSL) | No |
-| **Archivo .sql** | Un volcado `.sql` o `.sql.gz` en una conexión | — |
-| **Carpeta de volcados .sql** | Un volcado por base de datos, como un paquete | — |
-| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar** | — |
+| Origen                          | Qué se importa                                                                   | Contraseñas                                |
+| ------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ |
+| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                          | No (no están en esos archivos)             |
+| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL                                           | Sí, si lo exportaste con «Export Password» |
+| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (con túnel SSH)                  | No                                         |
+| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                            | No                                         |
+| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                    | —                                          |
+| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                    | —                                          |
+| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada) | —                                          |
+| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                      | —                                          |
 
 Las conexiones de otros motores (PostgreSQL, SQL Server, SQLite…) aparecen en la vista previa como **no
 soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
@@ -424,10 +428,10 @@ Funciona en macOS, Windows y Linux (es la forma de traer conexiones de Navicat p
 El asistente busca el archivo en su sitio habitual y, si existe, pregunta «¿Usar este archivo?» (o **Elegir
 otro…**):
 
-| Programa | macOS | Windows | Linux |
-| --- | --- | --- | --- |
-| DBeaver | `~/Library/DBeaverData/workspace6/General/.dbeaver/data-sources.json` | `%APPDATA%\DBeaverData\workspace6\General\.dbeaver\data-sources.json` | `~/.local/share/DBeaverData/workspace6/General/.dbeaver/data-sources.json` |
-| MySQL Workbench | `~/Library/Application Support/MySQL/Workbench/connections.xml` | `%APPDATA%\MySQL\Workbench\connections.xml` | `~/.mysql/workbench/connections.xml` |
+| Programa        | macOS                                                                 | Windows                                                               | Linux                                                                      |
+| --------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| DBeaver         | `~/Library/DBeaverData/workspace6/General/.dbeaver/data-sources.json` | `%APPDATA%\DBeaverData\workspace6\General\.dbeaver\data-sources.json` | `~/.local/share/DBeaverData/workspace6/General/.dbeaver/data-sources.json` |
+| MySQL Workbench | `~/Library/Application Support/MySQL/Workbench/connections.xml`       | `%APPDATA%\MySQL\Workbench\connections.xml`                           | `~/.mysql/workbench/connections.xml`                                       |
 
 - **DBeaver** guarda usuarios y contraseñas cifrados en otro archivo (`credentials-config.json`) con una clave
   propia: Vortaq **no lo lee**. Las conexiones llegan sin contraseña (y, si DBeaver guardó el usuario ahí, sin
@@ -567,8 +571,10 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
 
 - **Copias de seguridad** (barra superior) abre las copias de la conexión seleccionada: las propias y, en solo
   lectura, las que creó Navicat.
-- **Nueva copia** genera un `.nb3` del esquema elegido (estructura y, si quieres, datos) con barra de progreso
-  y opción de cancelar.
+- **Nueva copia** genera un `.vqb` (por defecto; ver abajo), un `.nb3` o un `.sql` del esquema elegido
+  (estructura y, si quieres, datos) con barra de progreso y opción de cancelar. El formato por defecto se cambia
+  en **Ajustes › Carpetas › Formato de las copias nuevas**. Las copias cifradas salen en la lista con un
+  candado; al seleccionarlas, el panel de detalles pide la contraseña para mostrar su contenido.
 - **Restaurar** carga una copia en la conexión y el esquema que elijas. Puedes crear el esquema, borrar antes
   los objetos, restaurar solo estructura o solo datos y elegir objetos concretos.
 - **Reemplazar la base de datos completa** (modo de **Restaurar**) borra la base de datos de destino y la crea
@@ -585,6 +591,30 @@ con el motivo (varias tablas, columnas calculadas, vista, sin clave primaria).
 Las copias nuevas se guardan en `<perfil>/backups/<conexión>/<esquema>/`, salvo que cambies la carpeta en la
 conexión o en **Ajustes** (si venías de ElectronDB o de Navidog, siguen en la carpeta `backups` de ese perfil).
 
+### Copias .vqb: formato abierto con cifrado opcional
+
+`.vqb` («Vortaq Backup») es el formato propio de Vortaq y el que usan por defecto las copias nuevas y los pasos
+de copia nuevos de la automatización. Su especificación es pública: [docs/vqb-format.md](docs/vqb-format.md).
+
+- **Abierto**: es un ZIP normal con un `manifest.json`, el DDL de cada objeto y las filas en JSON comprimido
+  (`.jsonl.gz`) con tipos exactos (decimales, enteros grandes, binarios, fechas sin cambios de zona horaria,
+  JSON, arrays de PostgreSQL). Se puede abrir sin Vortaq con `unzip`, `gunzip` y cualquier lector de JSON; la
+  especificación trae un lector de ejemplo en Python.
+- **MySQL, MariaDB y PostgreSQL**: en PostgreSQL la copia incluye la base de datos entera (todos sus esquemas,
+  extensiones, tipos, secuencias, tablas y datos, funciones, vistas, índices, claves foráneas y triggers). Una
+  copia se restaura solo en el mismo motor. En PostgreSQL la restauración es una única transacción: si algo
+  falla (y no marcas «Continuar en caso de error»), la base de datos queda exactamente como estaba.
+- **Cifrar con contraseña** (opcional, en **Nueva copia** y en cada paso de copia de la automatización):
+  AES-256-GCM con una clave derivada de tu contraseña (scrypt). Se cifra todo menos una pequeña cabecera, así
+  que ni los nombres de las tablas ni el de la conexión se ven sin la contraseña. **Si pierdes la contraseña,
+  la copia no se puede recuperar.** Una contraseña incorrecta se detecta antes de tocar el destino, y una copia
+  modificada o dañada se rechaza con un error de integridad.
+- **Restaurar** pide la contraseña una vez; **Restaurar paquete en Local** y **Restaurar todo** la piden una vez
+  para todo el paquete, salvo que la tarea que hizo las copias tenga su contraseña guardada.
+- La copia previa de un reemplazo usa el formato de la copia que se restaura (y su contraseña, si está cifrada).
+- **Guardar el nombre de la conexión** (activado por defecto) se puede desmarcar para que la copia no lo
+  incluya.
+
 ### Exportar a .sql
 
 Para llevar una base de datos a otro gestor (o al cliente `mysql`), en **Copias de seguridad** pulsa
@@ -600,12 +630,16 @@ Para llevar una base de datos a otro gestor (o al cliente `mysql`), en **Copias 
   importa en el esquema que elijas) y **Comprimir (.sql.gz)**.
 
 Se guarda en la carpeta de copias de la conexión (`<esquema>/<fecha>[-etiqueta].sql`) y al terminar puedes
-abrir su carpeta. Los archivos `.sql` no aparecen en la lista de copias (que muestra las `.nb3`) y los `DEFINER`
-se conservan tal como los da el servidor.
+abrir su carpeta. Los archivos `.sql` no aparecen en la lista de copias (que muestra las `.vqb` y `.nb3`) y los
+`DEFINER` se conservan tal como los da el servidor.
 
-En **Automatización**, cada paso de copia tiene **Formato: .nb3 | .sql**. Un paso de restauración no puede usar
-una copia `.sql` (las restauraciones automáticas necesitan `.nb3`): el trabajo no se guarda hasta que cambies el
-formato. Para volver a cargar un `.sql`, usa **Importar… › Archivo .sql**.
+En **Automatización**, cada paso de copia tiene **Formato: .vqb | .nb3 | .sql** (los pasos nuevos empiezan en
+`.vqb`; los pasos guardados antes siguen en `.nb3`). Con `.vqb` puedes marcar **Cifrar con contraseña**: la tarea
+pide una contraseña (una para todos sus pasos cifrados) que se guarda cifrada en este equipo, como las de las
+conexiones, para que las ejecuciones programadas puedan cifrar sin que nadie la escriba; nunca aparece en el
+registro. Un paso de restauración no puede usar una copia `.sql` (las restauraciones automáticas necesitan `.vqb`
+o `.nb3`): el trabajo no se guarda hasta que cambies el formato. Para volver a cargar un `.sql`, usa
+**Importar… › Archivo .sql**.
 
 ### Restaurar todo en Local (rollback de una ejecución)
 
@@ -1219,19 +1253,19 @@ el registro es más detallado y se copia también en la terminal.
 
 ## Desarrollo
 
-| Comando                             | Qué hace                                                                    |
-| ----------------------------------- | --------------------------------------------------------------------------- |
-| `npm run dev`                       | App en modo desarrollo con recarga en caliente                              |
-| `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio) |
-| `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                          |
-| `npm run test:watch`                | Tests en modo observación                                                   |
-| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)          |
+| Comando                             | Qué hace                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| `npm run dev`                       | App en modo desarrollo con recarga en caliente                                           |
+| `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio)              |
+| `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                                       |
+| `npm run test:watch`                | Tests en modo observación                                                                |
+| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)                       |
 | `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, MariaDB 11 y PostgreSQL 17; falla si falta alguna URL |
-| `npm run lint`                      | ESLint                                                                      |
-| `npm run format`                    | Prettier                                                                    |
-| `npm run build`                     | Compila a `out/`                                                            |
-| `npm run dist[:mac/:win/:linux]`    | Instaladores en `release/`                                                  |
-| `npm run screenshots`               | Capturas de todas las pantallas con un perfil y un MySQL desechables        |
+| `npm run lint`                      | ESLint                                                                                   |
+| `npm run format`                    | Prettier                                                                                 |
+| `npm run build`                     | Compila a `out/`                                                                         |
+| `npm run dist[:mac/:win/:linux]`    | Instaladores en `release/`                                                               |
+| `npm run screenshots`               | Capturas de todas las pantallas con un perfil y un MySQL desechables                     |
 
 ### Tests de integración
 
@@ -1364,7 +1398,7 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
 | `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                                    |
 | `VORTAQ_TEST_PG_URL`            | PostgreSQL 17 desechable (`postgres://…:55432/…`) para `npm run test:integration[:required]`.                                                                                                             |
-| `VORTAQ_TEST_SSH_URL`           | Servidor SSH de prueba (`ssh://usuario:clave@127.0.0.1:52222`, servicio `sshd` del compose) para el test del túnel de PostgreSQL; opcional.                                                              |
+| `VORTAQ_TEST_SSH_URL`           | Servidor SSH de prueba (`ssh://usuario:clave@127.0.0.1:52222`, servicio `sshd` del compose) para el test del túnel de PostgreSQL; opcional.                                                               |
 | `VORTAQ_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                       |
 | `VORTAQ_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `VORTAQ_USER_DATA`.                                                                                                                                                              |
 | `VORTAQ_UPDATES_FIXTURE=<json>` | Solo pruebas y capturas, y solo con `VORTAQ_USER_DATA`: responde a la búsqueda de actualizaciones con ese archivo en vez de GitHub (`{"httpStatus": 429}` simula un error).                               |

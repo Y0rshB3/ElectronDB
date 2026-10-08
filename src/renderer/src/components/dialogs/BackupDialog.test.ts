@@ -50,6 +50,48 @@ describe('BackupDialog formats', () => {
     expect(calls(invoke, 'backups:exportSql')).toHaveLength(0)
   })
 
+  it('starts on .vqb and encrypts only with a confirmed password of 8+ characters', async () => {
+    const w = await mountFor()
+    const toggle = w.get('[data-test="backup-format"]')
+    expect(toggle.find('[data-test="backup-format-vqb"]').classes()).toContain('v-btn--active')
+    await w.get('[data-test="backup-encrypt"] input').setValue(true)
+    expect(w.find('[data-test="backup-password-warning"]').text()).toContain(
+      'Si pierdes la contraseña, la copia no se puede recuperar'
+    )
+    await w.get('[data-test="backup-password"] input').setValue('corta')
+    expect(w.get('[data-test="backup-start"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-test="backup-password"] input').setValue('una clave larga')
+    await w.get('[data-test="backup-password-again"] input').setValue('otra clave')
+    expect(w.text()).toContain('Las contraseñas no coinciden')
+    expect(w.get('[data-test="backup-start"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-test="backup-password-again"] input').setValue('una clave larga')
+    await w.get('[data-test="backup-record-connection"] input').setValue(false)
+    await w.get('[data-test="backup-start"]').trigger('click')
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:create') as [[string, unknown]]
+    expect(options).toMatchObject({
+      format: 'vqb',
+      password: 'una clave larga',
+      omitConnectionName: true
+    })
+  })
+
+  it('offers only .vqb and no object picker for PostgreSQL', async () => {
+    const pinia = freshPinia()
+    useConnectionsStore().items = [makeConnection({ id: 'pg1', name: 'PG', engine: 'postgresql' })]
+    useUiStore().openBackupDialog('pg1', 'billing', { format: 'nb3' })
+    wrapper = mountWith(BackupDialog, pinia)
+    await settle()
+    expect(wrapper.find('[data-test="backup-format-nb3"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="backup-format-sql"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('base de datos completa')
+    await wrapper.get('[data-test="backup-start"]').trigger('click')
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:create') as [[string, unknown]]
+    expect(options).toMatchObject({ connectionId: 'pg1', schema: 'billing', format: 'vqb' })
+    expect(calls(invoke, 'db:tables')).toHaveLength(0)
+  })
+
   it('«Exportar a .sql…» opens on .sql and sends the export options', async () => {
     const w = await mountFor('sql')
     expect(w.text()).toContain('Exportar a .sql')

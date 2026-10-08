@@ -6,6 +6,7 @@ import { api, newOperationId } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useBackupsStore } from '@renderer/stores/backups'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
 import { formatBytes, formatDuration, formatNumber } from '@renderer/utils/format'
@@ -22,6 +23,7 @@ const ui = useUiStore()
 const connections = useConnectionsStore()
 const backups = useBackupsStore()
 const tree = useTreeStore()
+const settings = useSettingsStore()
 const notify = useNotify()
 const schemaLoader = useSchemaLoader()
 
@@ -31,8 +33,16 @@ const objects = ref<string[]>([])
 const objectItems = ref<{ title: string; value: string; subtitle: string }[]>([])
 const objectsLoading = ref(false)
 const includeData = ref(true)
-/** .nb3 (restorable copy) or plain .sql for other managers. */
-const format = ref<BackupFormat>('nb3')
+/** .vqb (Vortaq's open format, default), .nb3 (Navicat) or plain .sql for other managers. */
+const format = ref<BackupFormat>('vqb')
+/** «Cifrar con contraseña» (.vqb only). */
+const encrypt = ref(false)
+const password = ref('')
+const passwordAgain = ref('')
+const showPassword = ref(false)
+/** Record the connection name in the .vqb manifest. */
+const recordConnectionName = ref(true)
+const MIN_PASSWORD = 8
 const includeStructure = ref(true)
 const includeCreateDatabase = ref(false)
 const gzip = ref(false)
@@ -49,6 +59,7 @@ const result = ref<Pick<
   'path' | 'sizeBytes' | 'objects' | 'rows' | 'durationMs'
 > | null>(null)
 const isSql = computed(() => format.value === 'sql')
+const isVqb = computed(() => format.value === 'vqb')
 
 const open = computed({
   get: () => ui.backupDialog.open,
@@ -64,20 +75,62 @@ const connectionItems = computed(() =>
 const connection = computed(() =>
   connectionId.value ? connections.get(connectionId.value) : undefined
 )
+/** PostgreSQL: whole-database .vqb backups only. */
+const isPg = computed(() => connection.value?.engine === 'postgresql')
+const passwordProblem = computed(() => {
+  if (!isVqb.value || !encrypt.value) return ''
+  if (password.value.length < MIN_PASSWORD)
+    return `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`
+  if (passwordAgain.value !== password.value) return 'Las contraseñas no coinciden.'
+  return ''
+})
 const canStart = computed(
   () =>
     !!connectionId.value &&
     !!schema.value &&
     !running.value &&
-    (!isSql.value || includeStructure.value || includeData.value)
+    (!isSql.value || includeStructure.value || includeData.value) &&
+    !passwordProblem.value
 )
+const subtitle = computed(() =>
+  isSql.value
+    ? 'Archivo .sql que el cliente mysql y otros gestores pueden importar'
+    : isVqb.value
+      ? 'Archivo .vqb: formato abierto de Vortaq, con cifrado opcional'
+      : 'Archivo .nb3 compatible con Navicat'
+)
+const formatHint = computed(() =>
+  isSql.value
+    ? 'Para llevar la copia a otros gestores; Vortaq la importa con «Importar…».'
+    : isVqb.value
+      ? isPg.value
+        ? 'Las copias de PostgreSQL son siempre .vqb e incluyen la base de datos completa.'
+        : 'Formato abierto y documentado; restaurable desde Copias de seguridad y tareas.'
+      : 'Copia restaurable desde Copias de seguridad y tareas, legible por Navicat.'
+)
+
+/** Format the dialog opens with: the one asked for, else Ajustes' default (PostgreSQL: .vqb). */
+function initialFormat(): BackupFormat {
+  if (isPg.value) return 'vqb'
+  const asked = ui.backupDialog.format ?? settings.settings.defaultBackupFormat ?? 'vqb'
+  return asked === 'sql' || asked === 'nb3' ? asked : 'vqb'
+}
+
+watch(format, (value) => {
+  if (value !== 'vqb') encrypt.value = false
+})
 
 function reset(): void {
   connectionId.value = ui.backupDialog.connectionId
   schema.value = ui.backupDialog.schema
   objects.value = []
   includeData.value = true
-  format.value = ui.backupDialog.format === 'sql' ? 'sql' : 'nb3'
+  format.value = initialFormat()
+  encrypt.value = false
+  password.value = ''
+  passwordAgain.value = ''
+  showPassword.value = false
+  recordConnectionName.value = true
   includeStructure.value = true
   includeCreateDatabase.value = false
   gzip.value = false
@@ -121,7 +174,8 @@ async function loadObjects(): Promise<void> {
   objects.value = []
   const cid = connectionId.value
   const db = schema.value
-  if (!cid || !db) {
+  // PostgreSQL copies the whole database: no object picker.
+  if (!cid || !db || isPg.value) {
     objectsLoading.value = false
     return
   }
@@ -176,11 +230,16 @@ async function start(): Promise<void> {
       connectionId: cid,
       schema: schema.value,
       includeData: includeData.value,
-      objects: objects.value.length ? [...objects.value] : undefined,
+      objects: !isPg.value && objects.value.length ? [...objects.value] : undefined,
       label: label.value.trim() || undefined,
       comment: comment.value.trim() || undefined,
-      targetDir: targetDir.value.trim() || undefined
+      targetDir: targetDir.value.trim() || undefined,
+      format: isVqb.value ? 'vqb' : 'nb3',
+      ...(isVqb.value && encrypt.value ? { password: password.value } : {}),
+      ...(isVqb.value && !recordConnectionName.value ? { omitConnectionName: true } : {})
     })
+    password.value = ''
+    passwordAgain.value = ''
     backups.invalidate(cid)
     if (tree.hasItems(cid, schema.value, 'backups'))
       void tree.loadGroup(cid, schema.value, 'backups', true).catch(() => undefined)
@@ -222,6 +281,7 @@ watch(
 
 function onConnectionChange(id: string | null): void {
   connectionId.value = id
+  if (isPg.value) format.value = 'vqb'
   schema.value = null
   objectItems.value = []
   objects.value = []
@@ -242,11 +302,7 @@ function onSchemaChange(value: string | null): void {
       <DialogHeader
         icon="mdi-archive-plus-outline"
         :title="isSql ? 'Exportar a .sql' : 'Nueva copia de seguridad'"
-        :subtitle="
-          isSql
-            ? 'Archivo .sql que el cliente mysql y otros gestores pueden importar'
-            : 'Archivo .nb3 compatible con Navicat'
-        "
+        :subtitle="subtitle"
       />
       <v-card-text class="backup-dialog__body">
         <template v-if="!result">
@@ -261,14 +317,15 @@ function onSchemaChange(value: string | null): void {
               :disabled="running"
               data-test="backup-format"
             >
-              <v-btn value="nb3" size="small" data-test="backup-format-nb3">.nb3</v-btn>
-              <v-btn value="sql" size="small" data-test="backup-format-sql">.sql</v-btn>
+              <v-btn value="vqb" size="small" data-test="backup-format-vqb">.vqb</v-btn>
+              <v-btn v-if="!isPg" value="nb3" size="small" data-test="backup-format-nb3"
+                >.nb3</v-btn
+              >
+              <v-btn v-if="!isPg" value="sql" size="small" data-test="backup-format-sql"
+                >.sql</v-btn
+              >
             </v-btn-toggle>
-            <span class="backup-dialog__format-hint">{{
-              isSql
-                ? 'Para llevar la copia a otros gestores; Vortaq la importa con «Importar…».'
-                : 'Copia restaurable desde Copias de seguridad y tareas.'
-            }}</span>
+            <span class="backup-dialog__format-hint">{{ formatHint }}</span>
           </div>
           <v-row dense>
             <v-col cols="12" sm="6">
@@ -290,7 +347,7 @@ function onSchemaChange(value: string | null): void {
                 :error-messages="
                   schemaLoader.errorOf(connectionId) ? [schemaLoader.errorOf(connectionId)!] : []
                 "
-                label="Esquema"
+                :label="isPg ? 'Base de datos' : 'Esquema'"
                 prepend-inner-icon="mdi-database-outline"
                 :disabled="!connectionId || running"
                 no-data-text="Sin esquemas"
@@ -298,7 +355,7 @@ function onSchemaChange(value: string | null): void {
                 @update:model-value="onSchemaChange"
               />
             </v-col>
-            <v-col cols="12">
+            <v-col v-if="!isPg" cols="12">
               <v-autocomplete
                 v-model="objects"
                 :items="objectItems"
@@ -372,6 +429,69 @@ function onSchemaChange(value: string | null): void {
                 </p>
               </v-col>
             </template>
+            <template v-if="isVqb">
+              <v-col cols="12" sm="6" class="d-flex align-center">
+                <v-checkbox
+                  v-model="encrypt"
+                  label="Cifrar con contraseña"
+                  hide-details
+                  density="compact"
+                  :disabled="running"
+                  data-test="backup-encrypt"
+                />
+              </v-col>
+              <v-col cols="12" sm="6" class="d-flex align-center">
+                <v-checkbox
+                  v-model="recordConnectionName"
+                  label="Guardar el nombre de la conexión"
+                  hide-details
+                  density="compact"
+                  :disabled="running"
+                  data-test="backup-record-connection"
+                />
+              </v-col>
+              <template v-if="encrypt">
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="password"
+                    :type="showPassword ? 'text' : 'password'"
+                    label="Contraseña"
+                    prepend-inner-icon="mdi-lock-outline"
+                    :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                    autocomplete="new-password"
+                    :disabled="running"
+                    hide-details="auto"
+                    data-test="backup-password"
+                    @click:append-inner="showPassword = !showPassword"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="passwordAgain"
+                    :type="showPassword ? 'text' : 'password'"
+                    label="Repite la contraseña"
+                    prepend-inner-icon="mdi-lock-check-outline"
+                    autocomplete="new-password"
+                    :disabled="running"
+                    :error-messages="passwordAgain && passwordProblem ? [passwordProblem] : []"
+                    hide-details="auto"
+                    data-test="backup-password-again"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <v-alert
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    icon="mdi-key-alert-outline"
+                    data-test="backup-password-warning"
+                  >
+                    Si pierdes la contraseña, la copia no se puede recuperar: Vortaq no la guarda y
+                    nadie puede descifrarla sin ella.
+                  </v-alert>
+                </v-col>
+              </template>
+            </template>
             <v-col v-if="!isSql && skippedWarning" cols="12">
               <v-alert
                 type="warning"
@@ -427,7 +547,13 @@ function onSchemaChange(value: string | null): void {
             data-test="backup-result"
           >
             <div class="font-weight-medium">
-              {{ isSql ? 'Exportación creada correctamente' : 'Copia creada correctamente' }}
+              {{
+                isSql
+                  ? 'Exportación creada correctamente'
+                  : encrypt
+                    ? 'Copia cifrada creada correctamente'
+                    : 'Copia creada correctamente'
+              }}
             </div>
             <div class="backup-dialog__path nd-mono nd-ellipsis" :title="result.path">
               {{ result.path }}

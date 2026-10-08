@@ -185,6 +185,8 @@ export function normalizeAiMaxTokens(value: unknown): number {
   return Math.min(n, 128000)
 }
 
+const BACKUP_FORMATS: readonly string[] = ['vqb', 'nb3', 'sql']
+
 export const DEFAULT_SETTINGS = (
   userData: string,
   home: string,
@@ -202,7 +204,8 @@ export const DEFAULT_SETTINGS = (
   aiDefaultProviderId: null,
   aiEffort: 'low',
   aiMaxTokens: DEFAULT_AI_MAX_TOKENS,
-  previewEngines: false
+  previewEngines: false,
+  defaultBackupFormat: 'vqb'
 })
 
 /**
@@ -240,7 +243,12 @@ export class SettingsRepo {
       aiEffort: AI_EFFORTS.includes(stored.aiEffort) ? stored.aiEffort : 'low',
       aiMaxTokens: normalizeAiMaxTokens(stored.aiMaxTokens),
       // Profiles saved before the switch existed (or invalid values): previews hidden.
-      previewEngines: stored.previewEngines === true
+      previewEngines: stored.previewEngines === true,
+      // Profiles saved before .vqb (or invalid values): .vqb is the default for new backups.
+      defaultBackupFormat:
+        stored.defaultBackupFormat && BACKUP_FORMATS.includes(stored.defaultBackupFormat)
+          ? stored.defaultBackupFormat
+          : 'vqb'
     }
     return settings.navicatRootPath === this.staleMacDefault
       ? { ...settings, navicatRootPath: '' }

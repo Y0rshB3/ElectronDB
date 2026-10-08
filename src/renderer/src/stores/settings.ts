@@ -21,7 +21,8 @@ const DEFAULTS: AppSettings = {
   aiDefaultProviderId: null,
   aiEffort: 'low',
   aiMaxTokens: 16000,
-  previewEngines: false
+  previewEngines: false,
+  defaultBackupFormat: 'vqb'
 }
 
 export const useSettingsStore = defineStore('settings', () => {

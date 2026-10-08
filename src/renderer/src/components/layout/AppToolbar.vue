@@ -177,7 +177,7 @@ const actions = computed<ToolbarAction[]>(() => {
       separatorAfter: true,
       action: () => ws.openUsers()
     },
-    !!caps.value?.supportsBackupsNb3 && {
+    !!(caps.value?.supportsBackupsNb3 || caps.value?.supportsBackupsVqb) && {
       key: 'backup',
       label: 'Copias de seguridad',
       icon: 'mdi-archive-outline',

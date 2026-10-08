@@ -112,7 +112,49 @@ describe('backup step format', () => {
       tasks: [{ ...backup, format: 'sql' as const }, restore]
     }
     expect(validateDraft(draft, lookup).join(' ')).toMatch(
-      /una copia \.sql; las restauraciones automáticas necesitan una copia \.nb3/
+      /una copia \.sql; las restauraciones automáticas necesitan una copia \.vqb o \.nb3/
     )
+  })
+})
+
+describe('.vqb backup steps and the job password', () => {
+  const vqbStep = () => ({ ...newTask('backupschema', 'staging', 'auth'), id: 'b1' })
+
+  it('new backup steps write .vqb; format and encryption are saved', () => {
+    expect(vqbStep().format).toBe('vqb')
+    const input = buildJobInput({
+      ...emptyDraft(),
+      name: 'Cifrada',
+      tasks: [{ ...vqbStep(), encrypt: true }],
+      backupPassword: 'una clave larga',
+      backupPasswordAgain: 'una clave larga'
+    })
+    expect(input.tasks[0]).toMatchObject({ format: 'vqb', encrypt: true })
+    expect(input.backupPassword).toBe('una clave larga')
+  })
+
+  it('needs a confirmed password of 8+ characters unless one is stored', () => {
+    const base = { ...emptyDraft(), name: 'Cifrada', tasks: [{ ...vqbStep(), encrypt: true }] }
+    expect(validateDraft(base, lookup)).toContain(
+      'Escribe la contraseña de cifrado de las copias (al menos 8 caracteres).'
+    )
+    expect(validateDraft({ ...base, hasBackupPassword: true }, lookup)).toEqual([])
+    expect(
+      validateDraft({ ...base, backupPassword: 'corta', backupPasswordAgain: 'corta' }, lookup)
+    ).toContain('La contraseña de cifrado debe tener al menos 8 caracteres.')
+    expect(
+      validateDraft(
+        { ...base, backupPassword: 'una clave larga', backupPasswordAgain: 'otra' },
+        lookup
+      )
+    ).toContain('Las contraseñas de cifrado no coinciden.')
+  })
+
+  it('an unencrypted .vqb step needs no password and never sends one', () => {
+    const draft = { ...emptyDraft(), name: 'Sin cifrar', tasks: [vqbStep()] }
+    expect(validateDraft(draft, lookup)).toEqual([])
+    const input = buildJobInput(draft)
+    expect('encrypt' in input.tasks[0]).toBe(false)
+    expect('backupPassword' in input).toBe(false)
   })
 })

@@ -17,6 +17,7 @@ export type ImportSourceId =
   | 'workbench'
   | 'sql-dump'
   | 'sql-folder'
+  | 'vqb'
   | 'nb3'
 
 /**
@@ -25,7 +26,7 @@ export type ImportSourceId =
  * - `connections`: a connections file (preview, select, import);
  * - `sqlDump`: one .sql / .sql.gz file restored into a connection;
  * - `sqlFolder`: a folder of dumps, one per database («paquete»);
- * - `nb3`: a .nb3 copy, restored with the existing restore dialog.
+ * - `nb3`: a backup copy (.vqb or .nb3), restored with the existing restore dialog.
  */
 export type ImportFlow = 'navicatFolder' | 'connections' | 'sqlDump' | 'sqlFolder' | 'nb3'
 
@@ -275,5 +276,5 @@ export interface SqlExportResult {
   durationMs: number
 }
 
-/** Format of a job backup step and of «Nueva copia». Absent = 'nb3'. */
+/** Format of a job backup step and of «Nueva copia». Absent = 'nb3' (saved jobs). */
 export type BackupFormat = 'vqb' | 'nb3' | 'sql'

@@ -15,11 +15,13 @@ import { formatBytes, formatDate, formatDuration, formatNumber } from '@renderer
 import OperationProgress from '@renderer/components/backups/OperationProgress.vue'
 import SourcePill from '@renderer/components/backups/SourcePill.vue'
 import {
-  backupConnections,
+  backupObjectName,
   environmentLabel,
   environmentPillClass,
-  findLocalConnection
+  findLocalConnection,
+  restoreTargets
 } from '@renderer/components/backups/backupHelpers'
+import BackupPasswordPrompt from '@renderer/components/backups/BackupPasswordPrompt.vue'
 import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
 import { replaceContentNotice } from '@renderer/components/backups/replaceContent'
 import DialogHeader from './DialogHeader.vue'
@@ -71,8 +73,13 @@ const open = computed({
   }
 })
 
+/** Encrypted .vqb read without its password: objects and engine unknown until it is typed. */
+const locked = computed(() => meta.value?.locked === true)
+const encrypted = computed(() => meta.value?.encrypted === true || backup.value?.encrypted === true)
+/** Same engine only: a .nb3 or MySQL .vqb into MySQL, a PostgreSQL .vqb into PostgreSQL. */
+const candidates = computed(() => restoreTargets(connections.sorted, meta.value, backup.value))
 const connectionItems = computed(() =>
-  backupConnections(connections.sorted).map((c) => ({
+  candidates.value.map((c) => ({
     title: c.name,
     value: c.id,
     subtitle: environmentLabel(c.environment),
@@ -81,6 +88,10 @@ const connectionItems = computed(() =>
 )
 const target = computed(() =>
   targetConnectionId.value ? connections.get(targetConnectionId.value) : undefined
+)
+const targetIsPg = computed(() => target.value?.engine === 'postgresql')
+const schemaWord = computed(() =>
+  targetIsPg.value || meta.value?.engine === 'postgresql' ? 'Base de datos' : 'Esquema'
 )
 /** Production, and the environments chosen in Ajustes › Seguridad, need the typed name. */
 const needsTyped = computed(() => settings.needsTypedConfirm(target.value?.environment))
@@ -93,13 +104,18 @@ const productionConfirmed = computed(
   () => !needsTyped.value || typedName.value.trim() === target.value?.name
 )
 const objectItems = computed(() =>
-  (meta.value?.objects ?? []).map((o) => ({ title: o.name, value: o.name, subtitle: o.type }))
+  (meta.value?.objects ?? []).map((o) => ({
+    title: backupObjectName(o),
+    value: backupObjectName(o),
+    subtitle: o.type
+  }))
 )
 const safetyCopy = computed(() => isSafetyCopy(backup.value))
 const canRestore = computed(
   () =>
     !!backup.value &&
     !!target.value &&
+    !locked.value &&
     !!targetSchema.value.trim() &&
     (replaceMode.value || includeStructure.value || includeData.value) &&
     productionConfirmed.value &&
@@ -108,7 +124,7 @@ const canRestore = computed(
 
 function defaultTarget(): string | null {
   const preferred = ui.restoreDialog.connectionId
-  const backupable = backupConnections(connections.sorted)
+  const backupable = candidates.value
   if (preferred && backupable.some((c) => c.id === preferred)) return preferred
   // A safety copy goes back to the connection it was taken from.
   const own = backup.value?.connectionId
@@ -122,12 +138,27 @@ async function loadMeta(): Promise<void> {
   metaLoading.value = true
   try {
     meta.value = await backups.meta(backup.value.path)
-    if (!targetSchema.value && meta.value.schema) targetSchema.value = meta.value.schema
+    afterMeta()
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
     metaLoading.value = false
   }
+}
+
+/** Fills what the manifest tells (schema; a target of the right engine). */
+function afterMeta(): void {
+  if (!meta.value) return
+  if (!targetSchema.value && meta.value.schema) targetSchema.value = meta.value.schema
+  if (targetConnectionId.value && !candidates.value.some((c) => c.id === targetConnectionId.value))
+    onTargetChange(defaultTarget())
+  else if (!targetConnectionId.value) onTargetChange(defaultTarget())
+}
+
+function onUnlocked(unlocked: BackupMeta): void {
+  meta.value = unlocked
+  error.value = ''
+  afterMeta()
 }
 
 function reset(): void {
@@ -206,6 +237,9 @@ async function restore(): Promise<void> {
       includeData: replaceMode.value ? replaceIncludeData.value : includeData.value,
       objects: !replaceMode.value && objects.value.length ? [...objects.value] : undefined,
       continueOnError: continueOnError.value,
+      ...(encrypted.value && backups.passwordOf(backup.value.path)
+        ? { password: backups.passwordOf(backup.value.path) }
+        : {}),
       ...(replaceMode.value ? { replaceSchema: true, safetyBackup: safetyBackup.value } : {}),
       ...(needsTyped.value ? { confirmProduction: true } : {})
     })
@@ -260,16 +294,24 @@ async function cancel(): Promise<void> {
       </DialogHeader>
       <v-card-text v-if="backup" class="restore-dialog__body">
         <div class="restore-dialog__file" data-test="restore-backup-info">
-          <v-icon icon="mdi-archive-outline" size="20" class="restore-dialog__file-icon" />
+          <v-icon
+            :icon="encrypted ? 'mdi-archive-lock-outline' : 'mdi-archive-outline'"
+            size="20"
+            class="restore-dialog__file-icon"
+          />
           <div class="restore-dialog__file-text">
             <div class="restore-dialog__file-name nd-ellipsis" :title="backup.path">
               {{ backup.fileName }}
             </div>
             <div class="restore-dialog__file-meta">
               <span
-                >Esquema
-                <span class="nd-mono">{{ meta?.schema ?? backup.schema ?? '—' }}</span></span
+                >{{ meta?.engine === 'postgresql' ? 'Base de datos' : 'Esquema' }}
+                <span class="nd-mono">{{ meta?.schema || backup.schema || '—' }}</span></span
               >
+              <span class="restore-dialog__sep">·</span>
+              <span class="nd-mono">{{
+                (meta?.format ?? backup.format) === 'vqb' ? '.vqb' : '.nb3'
+              }}</span>
               <template v-if="backup.createdAt">
                 <span class="restore-dialog__sep">·</span>
                 <span class="nd-mono">{{ formatDate(backup.createdAt) }}</span>
@@ -288,6 +330,14 @@ async function cancel(): Promise<void> {
         </div>
 
         <template v-if="!result">
+          <BackupPasswordPrompt
+            v-if="locked"
+            :path="backup.path"
+            message="Copia cifrada: escribe su contraseña para restaurarla. Se comprueba antes de tocar el destino."
+            :disabled="running"
+            class="mb-3"
+            @unlocked="onUnlocked"
+          />
           <v-alert
             v-if="safetyCopy"
             type="info"
@@ -363,7 +413,7 @@ async function cancel(): Promise<void> {
                 v-model="targetSchema"
                 :items="schemaLoader.of(targetConnectionId)"
                 :loading="schemaLoader.isLoading(targetConnectionId)"
-                label="Esquema de destino"
+                :label="`${schemaWord} de destino`"
                 :disabled="running"
                 data-test="restore-target-schema"
               />

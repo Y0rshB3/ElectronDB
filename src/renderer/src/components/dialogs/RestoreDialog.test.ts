@@ -259,3 +259,73 @@ describe('RestoreDialog', () => {
     )
   })
 })
+
+describe('RestoreDialog with an encrypted .vqb', () => {
+  let invoke: Mock
+  let wrapper: ReturnType<typeof mountWith> | null = null
+  const vqb = makeBackup({
+    path: '/b/billing/20261007100000.vqb',
+    fileName: '20261007100000.vqb',
+    format: 'vqb',
+    encrypted: true
+  })
+  const locked = { ...meta, schema: '', objects: [], format: 'vqb', encrypted: true, locked: true }
+  const opened = {
+    ...meta,
+    format: 'vqb',
+    encrypted: true,
+    locked: false,
+    engine: 'mysql',
+    encryption: 'AES-256-GCM'
+  }
+
+  beforeEach(() => {
+    invoke = mockVortaq({
+      'backups:meta': (_path: unknown, password: unknown) => {
+        if (password === undefined) return locked
+        if (password === 'buena contraseña') return opened
+        throw new Error('Contraseña incorrecta: no se puede descifrar la copia.')
+      },
+      'connections:open': () => ({ version: '8.4.7' }),
+      'db:databases': () => [{ name: 'billing' }],
+      'backups:restore': () => ({ objectsRestored: 1, rowsInserted: 3, errors: [], durationMs: 9 })
+    })
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('asks for the password, refuses a wrong one and restores with the right one', async () => {
+    const pinia = freshPinia()
+    const connections = useConnectionsStore()
+    connections.items = [
+      makeConnection({ id: 'local', name: 'Local', environment: 'local' }),
+      makeConnection({ id: 'pg', name: 'PG', environment: 'local', engine: 'postgresql' })
+    ]
+    connections.loaded = true
+    useUiStore().restoreDialog = { open: true, backup: vqb, connectionId: 'local' }
+    wrapper = mountWith(RestoreDialog, pinia)
+    await settle()
+    const w = wrapper
+    expect(w.find('[data-test="backup-password"]').exists()).toBe(true)
+    expect(w.get('[data-test="restore-submit"]').attributes('disabled')).toBeDefined()
+
+    await w.get('[data-test="backup-password-input"] input').setValue('mala')
+    await w.get('[data-test="backup-password-submit"]').trigger('submit')
+    await settle()
+    expect(w.text()).toContain('Contraseña incorrecta')
+    expect(w.get('[data-test="restore-submit"]').attributes('disabled')).toBeDefined()
+
+    await w.get('[data-test="backup-password-input"] input').setValue('buena contraseña')
+    await w.get('[data-test="backup-password-submit"]').trigger('submit')
+    await settle()
+    expect(w.find('[data-test="backup-password"]').exists()).toBe(false)
+    await w.get('[data-test="restore-submit"]').trigger('click')
+    await settle()
+    const [[, options]] = calls(invoke, 'backups:restore') as [[string, Record<string, unknown>]]
+    expect(options).toMatchObject({
+      backupPath: vqb.path,
+      connectionId: 'local',
+      targetSchema: 'billing',
+      password: 'buena contraseña'
+    })
+  })
+})

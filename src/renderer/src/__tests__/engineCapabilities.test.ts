@@ -65,7 +65,7 @@ describe('capability helpers', () => {
 describe('context menus per engine', () => {
   beforeEach(setup)
 
-  it('PostgreSQL: no users, backups or events entries', async () => {
+  it('PostgreSQL: no users or events entries; backups (.vqb) per connection', async () => {
     const tree = useTreeStore()
     const { actionsFor } = useObjectActions()
     await useConnectionsStore().open('pg')
@@ -75,6 +75,7 @@ describe('context menus per engine', () => {
       'copyUri',
       'query',
       'newdb',
+      'backups',
       'refresh',
       'delete'
     ])
@@ -184,7 +185,7 @@ describe('main toolbar per engine', () => {
 
   it('leaves out the modules the selected engine lacks', async () => {
     expect(await toolbarFor('pg')).toEqual({
-      buttons: ['connection', 'query', 'objects', 'automation', 'more', 'ai', 'settings'],
+      buttons: ['connection', 'query', 'objects', 'backup', 'automation', 'more', 'ai', 'settings'],
       objects: [
         'Tablas',
         'Vistas',
@@ -208,7 +209,8 @@ describe('backup and job pickers', () => {
 
   it('only offer connections whose engine supports them', () => {
     const all = useConnectionsStore().sorted
-    expect(backupConnections(all).map((c) => c.id)).toEqual(['my'])
+    // PostgreSQL has .vqb backups (no .nb3, no automation).
+    expect(backupConnections(all).map((c) => c.id)).toEqual(['my', 'pg'])
     expect(automationConnections(all).map((c) => c.id)).toEqual(['my'])
     // The default restore target is the first *backup-capable* local connection.
     expect(findLocalConnection(backupConnections(all))?.id).toBe('my')

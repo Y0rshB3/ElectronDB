@@ -1250,6 +1250,11 @@ export interface AppSettings {
   aiMaxTokens: number
   /** Shows engines that are still in preview in the connection pickers. Off by default. */
   previewEngines: boolean
+  /**
+   * Format «Nueva copia» starts with: 'vqb' (default; absent = 'vqb'), 'nb3'
+   * or 'sql'. PostgreSQL connections always use .vqb.
+   */
+  defaultBackupFormat?: BackupFormat
 }
 
 /* ---------- Updates ---------- */
