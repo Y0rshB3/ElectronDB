@@ -228,7 +228,11 @@ export class UpdateService {
     const current = options.currentVersion ?? this.options.currentVersion
     if (!parseVersion(current)) return null
     const previous = options.previousVersion ?? this.store.get().lastSeenVersion
-    const releaseUrl = `https://github.com/${UPDATE_REPO.owner}/${UPDATE_REPO.name}/releases/tag/v${current}`
+    // The repository's earlier name: GitHub serves it before the rename to
+    // Vortaq and redirects it afterwards, so the link works in both states
+    // (and isAllowedReleaseUrl accepts it).
+    const repo = LEGACY_UPDATE_REPOS[0] ?? UPDATE_REPO
+    const releaseUrl = `https://github.com/${repo.owner}/${repo.name}/releases/tag/v${current}`
     if (!previous) {
       const entry = options.profileHadData ? whatsNewFor(current) : null
       if (!entry) {

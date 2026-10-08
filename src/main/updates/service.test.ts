@@ -12,6 +12,7 @@ import {
   type FetchLike
 } from './service'
 import { apiRelease, LEGACY_RELEASES_BASE } from './testing'
+import { isAllowedReleaseUrl } from './release'
 
 const HOUR = 60 * 60 * 1000
 const T0 = Date.parse('2026-10-06T09:00:00Z')
@@ -345,7 +346,9 @@ describe('UpdateService', () => {
       const info = svcAt('0.1.4').whatsNew({ profileHadData: true })
       expect(info?.previousVersion).toBeNull()
       expect(info?.entries.map((e) => e.version)).toEqual(['0.1.4'])
-      expect(info?.releaseUrl).toBe('https://github.com/Y0rshB3/Vortaq/releases/tag/v0.1.4')
+      // The repository's earlier name: valid before and after the rename (GitHub redirects it).
+      expect(info?.releaseUrl).toBe('https://github.com/Y0rshB3/ElectronDB/releases/tag/v0.1.4')
+      expect(isAllowedReleaseUrl(info!.releaseUrl)).toBe(true)
     })
 
     it('upgrade over several versions lists each one, newest first, until marked seen', () => {
