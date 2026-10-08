@@ -8,13 +8,13 @@
 
 MySQL · MariaDB · PostgreSQL · SQLite · MongoDB
 
-[![Última versión](https://img.shields.io/github/v/release/Y0rshB3/ElectronDB?label=versi%C3%B3n&color=7c3aed)](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+[![Última versión](https://img.shields.io/github/v/release/Y0rshB3/Vortaq?label=versi%C3%B3n&color=7c3aed)](https://github.com/Y0rshB3/Vortaq/releases/latest)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE)
-[![Plataformas](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-0ea5e9)](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+[![Plataformas](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-0ea5e9)](https://github.com/Y0rshB3/Vortaq/releases/latest)
 
-[**Descargar para macOS**](https://github.com/Y0rshB3/ElectronDB/releases/latest) ·
-[**Windows**](https://github.com/Y0rshB3/ElectronDB/releases/latest) ·
-[**Linux**](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+[**Descargar para macOS**](https://github.com/Y0rshB3/Vortaq/releases/latest) ·
+[**Windows**](https://github.com/Y0rshB3/Vortaq/releases/latest) ·
+[**Linux**](https://github.com/Y0rshB3/Vortaq/releases/latest)
 
 <br />
 
