@@ -1059,6 +1059,300 @@ export function useObjectActions() {
     return items
   }
 
+  /* ---------- MongoDB (preview) ---------- */
+
+  const isMongo = (connectionId: string): boolean =>
+    connections.get(connectionId)?.engine === 'mongodb'
+
+  /** «db.getCollection('x')» (works for any collection name). */
+  const mongoColl = (name: string): string => `db.getCollection(${JSON.stringify(name)})`
+
+  async function dropMongoObject(node: TreeNode): Promise<void> {
+    const s = node.schema!
+    const name = node.name!
+    const index = node.group === 'indexes'
+    const item = index
+      ? tree.itemsOf(node.connectionId, s, 'indexes').find((o) => o.name === name)
+      : null
+    const indexName = item?.table ? name.slice(item.table.length + 1) : name
+    if (index && indexName === '_id_') return notify.warning('El índice _id_ no se puede eliminar.')
+    const what = index ? 'el índice' : node.group === 'views' ? 'la vista' : 'la colección'
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: `Eliminar ${what.replace(/^(el|la) /, '')}`,
+      message: `Se eliminará ${what} ${index ? `${item?.table ?? ''}.${indexName}` : `${s}.${name}`} de forma permanente.`,
+      confirmText: 'Eliminar',
+      destructive: {
+        title: `¿Eliminar ${what} «${index ? indexName : name}»?`,
+        message: index
+          ? 'Las consultas que lo usaban irán más lentas. Esta acción no se puede deshacer.'
+          : 'Se borrarán todos sus documentos e índices. Esta acción no se puede deshacer.',
+        items: [
+          {
+            tag: index ? 'dropIndex' : 'drop',
+            text: index ? `${item?.table}.${indexName}` : `${s}.${name}`
+          }
+        ],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    const type = index ? 'index' : node.group === 'views' ? 'view' : 'collection'
+    await api.db.dropObject(
+      node.connectionId,
+      s,
+      type,
+      index ? { type: 'index', name, table: item?.table } : name,
+      { confirmProduction: true }
+    )
+    notify.success(`${index ? indexName : name} eliminado`)
+    await tree.loadGroup(node.connectionId, s, node.group!, true)
+    if (!index && tree.hasItems(node.connectionId, s, 'indexes'))
+      await tree.loadGroup(node.connectionId, s, 'indexes', true)
+  }
+
+  async function clearMongoCollection(node: TreeNode): Promise<void> {
+    const s = node.schema!
+    const name = node.name!
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Vaciar colección',
+      message: `Se borrarán todos los documentos de ${s}.${name} (deleteMany({})); los índices se mantienen.`,
+      details: `${mongoColl(name)}.deleteMany({})`,
+      confirmText: 'Vaciar',
+      destructive: {
+        title: `¿Vaciar la colección «${name}»?`,
+        message: 'Se borrarán todos sus documentos. Esta acción no se puede deshacer.',
+        items: [{ tag: 'deleteMany', text: `${s}.${name}` }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    const deleted = await api.mongo.clearCollection(node.connectionId, s, name, {
+      confirmProduction: true
+    })
+    notify.success(`${formatCount(deleted)} documento(s) eliminados de ${name}`)
+    await tree.loadGroup(node.connectionId, s, 'collections', true)
+  }
+
+  async function countMongoCollection(node: TreeNode): Promise<void> {
+    const n = await api.mongo.countDocuments(node.connectionId, node.schema!, node.name!)
+    notify.info(`«${node.name}»: ${formatCount(n)} documento(s) (recuento exacto)`)
+  }
+
+  function formatCount(n: number): string {
+    return n.toLocaleString('es-ES')
+  }
+
+  function mongoNewObjectFor(node: TreeNode): MenuAction[] {
+    const c = node.connectionId
+    const s = node.schema!
+    switch (node.group) {
+      case 'collections':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva colección',
+            icon: 'mdi-plus',
+            action: () => ws.openCollectionDesigner(c, s, null)
+          }
+        ]
+      case 'views':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva vista',
+            icon: 'mdi-plus',
+            action: () =>
+              ws.openQuery(c, s, {
+                sql: "db.createCollection('nueva_vista', {\n  viewOn: 'coleccion',\n  pipeline: [{ $match: {} }]\n})",
+                name: 'Nueva vista'
+              })
+          }
+        ]
+      case 'indexes':
+        return [
+          {
+            key: 'new',
+            label: 'Nuevo índice',
+            icon: 'mdi-plus',
+            action: () =>
+              ws.openQuery(c, s, {
+                sql: "db.getCollection('coleccion').createIndex({ campo: 1 }, { name: 'campo_1' })",
+                name: 'Nuevo índice'
+              })
+          }
+        ]
+      case 'queries':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva consulta',
+            icon: 'mdi-plus',
+            action: () => ws.openQuery(c, s)
+          }
+        ]
+      default:
+        return []
+    }
+  }
+
+  /** Context menu of a MongoDB database / group / object node. */
+  function mongoActionsFor(node: TreeNode, refresh: MenuAction): MenuAction[] {
+    const c = node.connectionId
+    if (node.kind === 'schema') {
+      const s = node.schema!
+      return [
+        {
+          key: 'query',
+          label: 'Nueva consulta',
+          icon: 'mdi-database-search-outline',
+          action: () => ws.openQuery(c, s)
+        },
+        {
+          key: 'collection',
+          label: 'Nueva colección',
+          icon: 'mdi-file-document-plus-outline',
+          action: () => ws.openCollectionDesigner(c, s, null)
+        },
+        {
+          key: 'backup',
+          label: 'Nueva copia de seguridad…',
+          icon: 'mdi-archive-plus-outline',
+          action: () => ui.openBackupDialog(c, s)
+        },
+        {
+          key: 'backups',
+          label: 'Copias de seguridad',
+          icon: 'mdi-archive-outline',
+          action: () => ws.openBackups(c, s)
+        },
+        { key: 'd1', label: '', divider: true },
+        refresh,
+        {
+          key: 'drop',
+          label: 'Eliminar base de datos',
+          icon: 'mdi-delete-outline',
+          danger: true,
+          action: () => dropDatabase(node)
+        }
+      ]
+    }
+    if (node.kind === 'group')
+      return [...mongoNewObjectFor(node), { key: 'd1', label: '', divider: true }, refresh]
+
+    const s = node.schema!
+    const name = node.name!
+    const group = node.group
+    if (group === 'queries')
+      return [
+        { key: 'open', label: 'Abrir', icon: 'mdi-open-in-app', action: () => ws.openNode(node) },
+        ...mongoNewObjectFor({ ...node, kind: 'group' }),
+        { key: 'd1', label: '', divider: true },
+        {
+          key: 'copy',
+          label: 'Copiar nombre',
+          icon: 'mdi-content-copy',
+          action: () => copyText(node.label, 'Nombre')
+        },
+        {
+          key: 'delete',
+          label: 'Eliminar',
+          icon: 'mdi-delete-outline',
+          danger: true,
+          action: () => deleteSavedQuery(node)
+        },
+        { key: 'd2', label: '', divider: true },
+        refresh
+      ]
+    const items: MenuAction[] = []
+    if (group === 'indexes') {
+      items.push(
+        {
+          key: 'open',
+          label: 'Ver en el diseñador',
+          icon: 'mdi-open-in-app',
+          action: () => ws.openNode(node)
+        },
+        ...mongoNewObjectFor({ ...node, kind: 'group' }),
+        { key: 'd1', label: '', divider: true },
+        {
+          key: 'copy',
+          label: 'Copiar nombre',
+          icon: 'mdi-content-copy',
+          action: () => copyText(node.label, 'Nombre')
+        }
+      )
+    } else {
+      items.push(
+        {
+          key: 'open',
+          label: 'Abrir documentos',
+          icon: 'mdi-open-in-app',
+          action: () => ws.openNode(node)
+        },
+        ...(group === 'collections'
+          ? [
+              {
+                key: 'design',
+                label: 'Diseñar (índices y validador)',
+                icon: 'mdi-file-document-edit-outline',
+                action: () => ws.designNode(node)
+              }
+            ]
+          : []),
+        {
+          key: 'query',
+          label: 'Nueva consulta',
+          icon: 'mdi-database-search-outline',
+          action: () => ws.openQuery(c, s, { sql: `${mongoColl(name)}.find({})`, name })
+        },
+        ...mongoNewObjectFor({ ...node, kind: 'group' }),
+        { key: 'd1', label: '', divider: true },
+        {
+          key: 'copy',
+          label: 'Copiar nombre',
+          icon: 'mdi-content-copy',
+          action: () => copyText(name, 'Nombre')
+        }
+      )
+      if (group === 'collections')
+        items.push(
+          {
+            key: 'count',
+            label: 'Contar exacto',
+            icon: 'mdi-counter',
+            action: () => countMongoCollection(node)
+          },
+          {
+            key: 'rename',
+            label: 'Renombrar…',
+            icon: 'mdi-rename-outline',
+            action: () => ws.openCollectionDesigner(c, s, name, 'options')
+          },
+          {
+            key: 'empty',
+            label: 'Vaciar (deleteMany)',
+            icon: 'mdi-eraser-variant',
+            danger: true,
+            action: () => clearMongoCollection(node)
+          }
+        )
+    }
+    items.push(
+      {
+        key: 'delete',
+        label: 'Eliminar',
+        icon: 'mdi-delete-outline',
+        danger: true,
+        action: () => dropMongoObject(node)
+      },
+      { key: 'd2', label: '', divider: true },
+      refresh
+    )
+    return items
+  }
+
   async function deleteSavedQuery(node: TreeNode): Promise<void> {
     if (!node.name) return
     const ok = await ask({
@@ -1237,6 +1531,7 @@ export function useObjectActions() {
     if (node.kind !== 'connection' && node.database !== undefined)
       return pgActionsFor(node, refresh)
     if (node.kind !== 'connection' && isLite(c)) return liteActionsFor(node, refresh)
+    if (node.kind !== 'connection' && isMongo(c)) return mongoActionsFor(node, refresh)
     if (node.kind === 'connection') {
       const open = connections.isOpen(c)
       const items: (MenuAction | false)[] = [
@@ -1261,8 +1556,8 @@ export function useObjectActions() {
           icon: 'mdi-pencil-outline',
           action: () => ui.openConnectionDialog(connections.get(c) ?? null)
         },
-        // PostgreSQL only (MySQL menus unchanged): the URI never contains the password.
-        connections.get(c)?.engine === 'postgresql' && {
+        // PostgreSQL and MongoDB only (MySQL menus unchanged): the URI never contains the password.
+        (connections.get(c)?.engine === 'postgresql' || isMongo(c)) && {
           key: 'copyUri',
           label: 'Copiar URI',
           icon: 'mdi-link-variant',

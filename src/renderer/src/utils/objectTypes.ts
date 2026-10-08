@@ -14,18 +14,21 @@ export type GroupKind =
   // SQLite (preview)
   | 'indexes'
   | 'triggers'
+  // MongoDB (preview)
+  | 'collections'
 
 /** MySQL's groups, in order (pinned against ENGINES.mysql.groups). */
 export const GROUPS: GroupKind[] = ['tables', 'views', 'functions', 'events', 'queries', 'backups']
 
-/** Every group this renderer can list (MySQL's plus the PostgreSQL and SQLite ones). */
+/** Every group this renderer can list (MySQL's plus the PostgreSQL, SQLite and MongoDB ones). */
 export const ALL_GROUPS: GroupKind[] = [
   ...GROUPS,
   'materializedViews',
   'sequences',
   'types',
   'indexes',
-  'triggers'
+  'triggers',
+  'collections'
 ]
 
 export const GROUP_LABELS: Record<GroupKind, string> = {
@@ -39,7 +42,8 @@ export const GROUP_LABELS: Record<GroupKind, string> = {
   sequences: 'Secuencias',
   types: 'Tipos',
   indexes: 'Índices',
-  triggers: 'Triggers'
+  triggers: 'Triggers',
+  collections: 'Colecciones'
 }
 
 export const GROUP_ICONS: Record<GroupKind, string> = {
@@ -53,7 +57,8 @@ export const GROUP_ICONS: Record<GroupKind, string> = {
   sequences: 'mdi-numeric',
   types: 'mdi-shape-outline',
   indexes: 'mdi-sort-ascending',
-  triggers: 'mdi-flash-outline'
+  triggers: 'mdi-flash-outline',
+  collections: 'mdi-file-document-multiple-outline'
 }
 
 export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {

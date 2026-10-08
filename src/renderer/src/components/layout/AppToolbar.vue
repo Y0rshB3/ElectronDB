@@ -102,6 +102,28 @@ function requireSchema(fn: (connectionId: string, schema: string) => void): () =
 
 /** Objetos ▾: browse each object group, then create objects in the selected database. */
 const objectsMenu = computed<ToolbarMenuItem[]>(() => {
+  // MongoDB: collections instead of tables, no SQL objects.
+  if (caps.value?.family === 'document')
+    return [
+      {
+        label: 'Colecciones',
+        icon: 'mdi-file-document-multiple-outline',
+        action: () => ws.showGroup('collections')
+      },
+      { label: 'Vistas', icon: 'mdi-table-eye', action: () => ws.showGroup('views') },
+      { label: 'Índices', icon: 'mdi-sort-ascending', action: () => ws.showGroup('indexes') },
+      {
+        label: 'Consultas guardadas',
+        icon: 'mdi-database-search',
+        action: () => ws.showGroup('queries')
+      },
+      {
+        label: 'Nueva colección',
+        icon: 'mdi-file-document-plus-outline',
+        dividerBefore: true,
+        action: requireSchema((c, s) => ws.openCollectionDesigner(c, s, null))
+      }
+    ]
   const routines = !!caps.value?.routines
   const items: (ToolbarMenuItem | false)[] = [
     { label: 'Tablas', icon: 'mdi-table', action: () => ws.showGroup('tables') },

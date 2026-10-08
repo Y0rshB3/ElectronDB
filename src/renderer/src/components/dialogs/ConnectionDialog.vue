@@ -5,6 +5,10 @@ import type {
   ConnectionInput,
   ConnectionTestResult,
   EngineId,
+  MongoAuthMechanism,
+  MongoOptions,
+  MongoReadPreference,
+  MongoTopology,
   MysqlAuthMode,
   SqliteAttachedDatabase,
   SqliteOptions,
@@ -13,11 +17,13 @@ import type {
 import {
   DEFAULT_NETWORK,
   ENGINES,
+  defaultMongoOptions,
   defaultPostgresOptions,
   defaultSqliteOptions,
   pickableEngines
 } from '@shared/engines'
 import { isAbsolutePathFor } from '@shared/connectionValidation'
+import { parseMongoUri } from '@shared/mongo/uri'
 import { can } from '@renderer/engines/capabilities'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -68,6 +74,7 @@ const clearSslKeyPassword = ref(false)
 const engine = computed<EngineId>(() => form.value.engine ?? 'mysql')
 const isPg = computed(() => engine.value === 'postgresql')
 const isSqlite = computed(() => engine.value === 'sqlite')
+const isMongo = computed(() => engine.value === 'mongodb')
 const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
 /** Backups are MySQL-only: the backup folder fields follow the capability. */
 const showBackupDirs = computed(
@@ -189,6 +196,111 @@ watch(
   }
 )
 
+/* ---------- MongoDB (design 8.2) ---------- */
+
+const mongoOptions = computed<MongoOptions>(() => ({
+  ...defaultMongoOptions(),
+  ...form.value.mongo
+}))
+function patchMongo(patch: Partial<MongoOptions>): void {
+  const mongo = { ...mongoOptions.value, ...patch }
+  // The password plan follows the mechanism: none / X.509 never send a password.
+  const authMode: MysqlAuthMode =
+    mongo.authMechanism === 'none' || mongo.authMechanism === 'x509' ? 'none' : 'password'
+  form.value = { ...form.value, mongo, authMode }
+}
+const MONGO_TOPOLOGIES: { value: MongoTopology; title: string }[] = [
+  { value: 'standalone', title: 'Independiente' },
+  { value: 'replicaSet', title: 'Conjunto de réplicas' },
+  { value: 'shardCluster', title: 'Clúster fragmentado (mongos)' }
+]
+const MONGO_MECHANISMS: { value: MongoAuthMechanism; title: string }[] = [
+  { value: 'none', title: 'Sin autenticación' },
+  { value: 'default', title: 'Usuario y contraseña (SCRAM)' },
+  { value: 'scram-sha-256', title: 'SCRAM-SHA-256' },
+  { value: 'scram-sha-1', title: 'SCRAM-SHA-1' },
+  { value: 'plain', title: 'LDAP (PLAIN)' },
+  { value: 'x509', title: 'Certificado X.509' }
+]
+const MONGO_READ_PREFERENCES: { value: MongoReadPreference; title: string }[] = [
+  { value: 'primary', title: 'Primario' },
+  { value: 'primaryPreferred', title: 'Primario preferido' },
+  { value: 'secondary', title: 'Secundario' },
+  { value: 'secondaryPreferred', title: 'Secundario preferido' },
+  { value: 'nearest', title: 'El más cercano' }
+]
+/** Seed list (replica set / sharded cluster) instead of host and port. */
+const mongoUsesMembers = computed(
+  () => isMongo.value && !mongoOptions.value.srv && mongoOptions.value.topology !== 'standalone'
+)
+const mongoMembers = computed<string[]>({
+  get: () => mongoOptions.value.members.map((m) => `${m.host}:${m.port}`),
+  set: (items) =>
+    patchMongo({
+      members: items
+        .map((item) => {
+          const m = /^\s*\[?([^\]]+?)\]?(?::(\d+))?\s*$/.exec(item)
+          return m ? { host: m[1], port: Number(m[2] ?? 27017) } : null
+        })
+        .filter((m): m is { host: string; port: number } => !!m && !!m.host)
+    })
+})
+/** Extra (non-secret) URI options as `clave=valor` lines. */
+const mongoExtraText = computed({
+  get: () =>
+    Object.entries(mongoOptions.value.extraOptions)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n'),
+  set: (text: string) => {
+    const extraOptions: Record<string, string> = {}
+    for (const line of text.split('\n')) {
+      const eq = line.indexOf('=')
+      const key = (eq >= 0 ? line.slice(0, eq) : line).trim()
+      if (key) extraOptions[key] = eq >= 0 ? line.slice(eq + 1).trim() : ''
+    }
+    patchMongo({ extraOptions })
+  }
+})
+/** SRV records always use TLS. */
+function setMongoSrv(srv: boolean): void {
+  patchMongo({ srv })
+  if (srv) form.value = { ...form.value, ssl: { ...form.value.ssl, enabled: true } }
+}
+/** «Pegar URI»: lives only in this field; its password goes to the password field. */
+const mongoUri = ref('')
+function applyMongoUri(): void {
+  try {
+    const parsed = parseMongoUri(mongoUri.value)
+    form.value = {
+      ...form.value,
+      host: parsed.host,
+      port: parsed.port,
+      username: parsed.username,
+      ssl: {
+        ...form.value.ssl,
+        enabled: parsed.ssl.enabled,
+        verifyServer: parsed.ssl.verifyServer,
+        caCertPath: parsed.ssl.caCertPath ?? form.value.ssl.caCertPath,
+        clientCertPath: parsed.ssl.clientCertPath ?? form.value.ssl.clientCertPath
+      },
+      network: parsed.connectTimeoutMs
+        ? { ...network.value, connectTimeoutMs: parsed.connectTimeoutMs }
+        : form.value.network
+    }
+    patchMongo(parsed.mongo)
+    if (parsed.password !== null) {
+      password.value = parsed.password
+      clearPassword.value = false
+    }
+    mongoUri.value = ''
+    errors.value = []
+    testResult.value = null
+    notify.success('URI aplicada: revisa los campos antes de guardar')
+  } catch (err) {
+    errors.value = [errorMessage(err)]
+  }
+}
+
 const pgOptions = computed(() => form.value.postgres ?? defaultPostgresOptions())
 function patchPostgres(patch: Partial<NonNullable<ConnectionInput['postgres']>>): void {
   form.value = { ...form.value, postgres: { ...pgOptions.value, ...patch } }
@@ -252,6 +364,7 @@ async function reset(): Promise<void> {
   hasSslKeyPassword.value = false
   clearSslKeyPassword.value = false
   password.value = ''
+  mongoUri.value = ''
   sshPassword.value = ''
   clearPassword.value = false
   clearSshPassword.value = false
@@ -268,7 +381,7 @@ async function reset(): Promise<void> {
     ])
     hasPassword.value = pw
     hasSshPassword.value = sshPw
-    if (editing.value.engine === 'postgresql')
+    if (editing.value.engine === 'postgresql' || editing.value.engine === 'mongodb')
       hasSslKeyPassword.value = await api.connections.hasSslKeyPassword(id).catch(() => false)
   }
 }
@@ -333,7 +446,7 @@ async function save(): Promise<void> {
     } else if (clearSshPassword.value || (!input.ssh.savePassword && hasSshPassword.value)) {
       await api.connections.setSshPassword(saved.id, null)
     }
-    if (input.engine === 'postgresql') {
+    if (input.engine === 'postgresql' || input.engine === 'mongodb') {
       if (sslKeyPassword.value && input.ssl.clientKeyPath)
         await api.connections.setSslKeyPassword(saved.id, sslKeyPassword.value)
       else if (clearSslKeyPassword.value || (hasSslKeyPassword.value && !input.ssl.clientKeyPath))
@@ -371,7 +484,9 @@ async function save(): Promise<void> {
               ? 'PostgreSQL (vista previa), con SSH y SSL opcionales'
               : isSqlite
                 ? 'SQLite (vista previa): un archivo de base de datos'
-                : 'MySQL / MariaDB, con SSH y SSL opcionales'
+                : isMongo
+                  ? 'MongoDB (vista previa): independiente, conjunto de réplicas o SRV'
+                  : 'MySQL / MariaDB, con SSH y SSL opcionales'
         "
         :danger="form.environment === 'production'"
       />
@@ -407,7 +522,7 @@ async function save(): Promise<void> {
             >
           </button>
         </div>
-        <div v-else-if="editing && (isPg || isSqlite)" class="mb-2">
+        <div v-else-if="editing && (isPg || isSqlite || isMongo)" class="mb-2">
           <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip"
             >{{ engineLabel }} · vista previa</v-chip
           >
@@ -627,17 +742,94 @@ async function save(): Promise<void> {
                   </div>
                 </v-col>
               </template>
-              <template v-if="!isSqlite">
+              <template v-if="isMongo">
+                <v-col cols="12">
+                  <div class="d-flex align-start ga-2">
+                    <v-text-field
+                      v-model="mongoUri"
+                      label="Pegar URI (opcional)"
+                      placeholder="mongodb://usuario@host:27017/bd?replicaSet=rs0"
+                      persistent-placeholder
+                      prepend-inner-icon="mdi-link-variant"
+                      class="nd-mono-input"
+                      type="password"
+                      autocomplete="off"
+                      hint="Rellena los campos; la contraseña va a su campo y la URI no se guarda."
+                      persistent-hint
+                      data-test="conn-mongo-uri"
+                      @keydown.enter.prevent="applyMongoUri"
+                    />
+                    <v-btn
+                      size="small"
+                      class="mt-2"
+                      :disabled="!mongoUri.trim()"
+                      data-test="conn-mongo-uri-apply"
+                      @click="applyMongoUri"
+                      >Rellenar</v-btn
+                    >
+                  </div>
+                </v-col>
                 <v-col cols="12" sm="8">
+                  <v-select
+                    :model-value="mongoOptions.topology"
+                    :items="MONGO_TOPOLOGIES"
+                    label="Método de conexión"
+                    prepend-inner-icon="mdi-graph-outline"
+                    data-test="conn-mongo-topology"
+                    @update:model-value="patchMongo({ topology: $event })"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4">
+                  <v-switch
+                    :model-value="mongoOptions.srv"
+                    label="Registro SRV"
+                    color="primary"
+                    density="compact"
+                    hint="mongodb+srv (activa TLS)"
+                    persistent-hint
+                    data-test="conn-mongo-srv"
+                    @update:model-value="setMongoSrv($event === true)"
+                  />
+                </v-col>
+              </template>
+              <template v-if="!isSqlite">
+                <v-col v-if="mongoUsesMembers" cols="12" sm="8">
+                  <v-combobox
+                    v-model="mongoMembers"
+                    label="Miembros (host:puerto)"
+                    hint="Pulsa Enter para añadir cada miembro de la lista de semillas."
+                    persistent-hint
+                    multiple
+                    chips
+                    closable-chips
+                    class="nd-mono-input"
+                    data-test="conn-mongo-members"
+                  />
+                </v-col>
+                <v-col v-if="mongoUsesMembers" cols="12" sm="4">
+                  <v-text-field
+                    :model-value="mongoOptions.replicaSet"
+                    label="Nombre del conjunto"
+                    class="nd-mono-input"
+                    :disabled="mongoOptions.topology !== 'replicaSet'"
+                    data-test="conn-mongo-replicaset"
+                    @update:model-value="patchMongo({ replicaSet: $event })"
+                  />
+                </v-col>
+                <v-col
+                  v-if="!mongoUsesMembers"
+                  cols="12"
+                  :sm="isMongo && mongoOptions.srv ? 12 : 8"
+                >
                   <v-text-field
                     v-model="form.host"
-                    label="Host"
+                    :label="isMongo && mongoOptions.srv ? 'Nombre SRV del clúster' : 'Host'"
                     prepend-inner-icon="mdi-server-network"
                     class="nd-mono-input"
                     data-test="conn-host"
                   />
                 </v-col>
-                <v-col cols="12" sm="4">
+                <v-col v-if="!mongoUsesMembers && !(isMongo && mongoOptions.srv)" cols="12" sm="4">
                   <v-text-field
                     v-model.number="form.port"
                     label="Puerto"
@@ -657,7 +849,17 @@ async function save(): Promise<void> {
                     data-test="conn-user"
                   />
                 </v-col>
-                <v-col cols="12" sm="6">
+                <v-col v-if="isMongo" cols="12" sm="6">
+                  <v-select
+                    :model-value="mongoOptions.authMechanism"
+                    :items="MONGO_MECHANISMS"
+                    label="Autenticación"
+                    prepend-inner-icon="mdi-shield-key-outline"
+                    data-test="conn-mongo-mechanism"
+                    @update:model-value="patchMongo({ authMechanism: $event })"
+                  />
+                </v-col>
+                <v-col v-else cols="12" sm="6">
                   <v-select
                     v-model="form.authMode"
                     :items="AUTH_MODES"
@@ -666,7 +868,7 @@ async function save(): Promise<void> {
                     data-test="conn-auth-mode"
                   />
                 </v-col>
-                <v-col v-if="noPassword" cols="12">
+                <v-col v-if="noPassword && !isMongo" cols="12">
                   <v-alert
                     type="info"
                     variant="tonal"
@@ -724,6 +926,51 @@ async function save(): Promise<void> {
                       {{ clearPassword ? 'Mantener contraseña' : 'Borrar contraseña guardada' }}
                     </v-btn>
                   </template>
+                </v-col>
+              </template>
+              <template v-if="isMongo">
+                <v-col cols="12" sm="4">
+                  <v-text-field
+                    :model-value="mongoOptions.authSource"
+                    label="Base de autenticación"
+                    class="nd-mono-input"
+                    :disabled="noPassword"
+                    hint="authSource (por defecto admin)"
+                    persistent-hint
+                    data-test="conn-mongo-authsource"
+                    @update:model-value="patchMongo({ authSource: $event })"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4">
+                  <v-text-field
+                    :model-value="mongoOptions.defaultDatabase"
+                    label="Base de datos predeterminada"
+                    prepend-inner-icon="mdi-database-outline"
+                    class="nd-mono-input"
+                    hint="La de las consultas nuevas"
+                    persistent-hint
+                    data-test="conn-mongo-database"
+                    @update:model-value="patchMongo({ defaultDatabase: $event })"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4">
+                  <v-select
+                    :model-value="mongoOptions.readPreference"
+                    :items="MONGO_READ_PREFERENCES"
+                    label="Preferencia de lectura"
+                    data-test="conn-mongo-readpref"
+                    @update:model-value="patchMongo({ readPreference: $event })"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <v-checkbox
+                    :model-value="mongoOptions.directConnection"
+                    label="Conexión directa a este miembro (directConnection)"
+                    density="compact"
+                    hide-details
+                    data-test="conn-mongo-direct"
+                    @update:model-value="patchMongo({ directConnection: $event === true })"
+                  />
                 </v-col>
               </template>
               <template v-if="isPg">
@@ -962,13 +1209,34 @@ async function save(): Promise<void> {
                   label="Clave de cliente"
                   :disabled="!form.ssl.enabled"
                 />
+                <v-text-field
+                  v-if="isMongo"
+                  v-model="sslKeyPassword"
+                  label="Contraseña de la clave"
+                  type="password"
+                  autocomplete="new-password"
+                  :placeholder="
+                    hasSslKeyPassword && !clearSslKeyPassword ? '•••••• (guardada)' : ''
+                  "
+                  persistent-placeholder
+                  :disabled="!form.ssl.enabled || !form.ssl.clientCertPath"
+                  data-test="conn-mongo-ssl-key-password"
+                />
                 <v-checkbox
                   v-model="form.ssl.verifyServer"
-                  label="Verificar certificado del servidor"
+                  :label="
+                    isMongo
+                      ? 'Verificar certificado y nombre del servidor'
+                      : 'Verificar certificado del servidor'
+                  "
                   density="compact"
                   hide-details
                   :disabled="!form.ssl.enabled"
                 />
+                <div v-if="isMongo" class="text-caption text-medium-emphasis">
+                  Con registro SRV, TLS siempre está activo. Con túnel SSH se verifica el nombre del
+                  servidor real, no 127.0.0.1.
+                </div>
               </div>
             </template>
           </v-window-item>
@@ -986,6 +1254,7 @@ async function save(): Promise<void> {
               class="mb-3"
             />
             <v-textarea
+              v-if="!isMongo"
               v-model="form.initialQueries"
               label="Consultas iniciales de sesión"
               :hint="
@@ -999,6 +1268,61 @@ async function save(): Promise<void> {
               density="compact"
               class="mb-3"
             />
+            <v-row v-if="isMongo" dense class="mb-1">
+              <v-col cols="6" sm="3">
+                <v-text-field
+                  v-model.number="connectTimeoutSec"
+                  label="Tiempo de conexión (s)"
+                  type="number"
+                  min="1"
+                  data-test="conn-mongo-timeout"
+                />
+              </v-col>
+              <v-col cols="6" sm="3">
+                <v-text-field
+                  v-model.number="keepAliveSec"
+                  label="Keepalive SSH (s)"
+                  type="number"
+                  min="0"
+                  hint="0 = desactivado"
+                  persistent-hint
+                />
+              </v-col>
+              <v-col cols="6" sm="3">
+                <v-switch
+                  :model-value="mongoOptions.retryWrites"
+                  label="Reintentar escrituras"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  data-test="conn-mongo-retry-writes"
+                  @update:model-value="patchMongo({ retryWrites: $event === true })"
+                />
+              </v-col>
+              <v-col cols="6" sm="3">
+                <v-switch
+                  :model-value="mongoOptions.retryReads"
+                  label="Reintentar lecturas"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  @update:model-value="patchMongo({ retryReads: $event === true })"
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-textarea
+                  v-model="mongoExtraText"
+                  label="Opciones extra (una por línea: clave=valor)"
+                  hint="Opciones de URI sin credenciales, p. ej. maxIdleTimeMS=60000 o w=majority."
+                  persistent-hint
+                  rows="2"
+                  variant="outlined"
+                  density="compact"
+                  class="nd-mono-input"
+                  data-test="conn-mongo-extra"
+                />
+              </v-col>
+            </v-row>
             <v-row v-if="isSqlite" dense class="mb-1">
               <v-col cols="12" sm="6">
                 <v-text-field
@@ -1123,7 +1447,7 @@ async function save(): Promise<void> {
         >
           <span class="connection-dialog__result-dot" aria-hidden="true" />
           <span class="nd-ellipsis">
-            <template v-if="testResult.ok && (isPg || isSqlite)"
+            <template v-if="testResult.ok && (isPg || isSqlite || isMongo)"
               >Conectado · {{ testResult.serverVersion }} ({{ testResult.durationMs }} ms)<template
                 v-if="testResult.details?.length"
               >

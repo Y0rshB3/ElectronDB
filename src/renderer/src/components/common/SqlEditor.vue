@@ -4,6 +4,7 @@ import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { sql, StandardSQL, type SQLDialect } from '@codemirror/lang-sql'
+import { javascript } from '@codemirror/lang-javascript'
 import type { CompletionSource } from '@codemirror/autocomplete'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
@@ -55,6 +56,13 @@ function editorDialect(): SQLDialect {
 }
 
 function languageExt() {
+  // MongoDB: shell syntax (JavaScript highlighting) with its own completion source.
+  if (props.engine === 'mongodb') {
+    const js = javascript()
+    return props.completionSource
+      ? [js, js.language.data.of({ autocomplete: props.completionSource })]
+      : js
+  }
   const lang = sql({
     dialect: editorDialect(),
     schema: props.schema ?? {},

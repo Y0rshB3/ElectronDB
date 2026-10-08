@@ -227,7 +227,9 @@ describe('ImportWizard', () => {
           }
         ]
       ])
-      expect(q('[data-test="import-connections-result"]')!.textContent).toContain('1 conexión nueva')
+      expect(q('[data-test="import-connections-result"]')!.textContent).toContain(
+        '1 conexión nueva'
+      )
       expect(q('[data-test="import-type-passwords"]')).not.toBeNull()
       expect(q('[data-test="import-delete-file"]')).toBeNull()
     })
@@ -401,7 +403,9 @@ describe('ImportWizard', () => {
 
     it('settings can require the typed name for staging too', async () => {
       await openDump({
-        'connections:list': () => [makeConnection({ id: 'stg', name: 'Pre', environment: 'staging' })]
+        'connections:list': () => [
+          makeConnection({ id: 'stg', name: 'Pre', environment: 'staging' })
+        ]
       })
       useSettingsStore().settings.typedConfirmEnvironments = ['staging']
       await click('[data-test="import-source-sql-dump"]')
@@ -433,7 +437,9 @@ describe('ImportWizard', () => {
       await click('[data-test="import-folder-pick"]')
       expect(document.querySelectorAll('[data-test="folder-row"]')).toHaveLength(2)
       expect(q('[data-test="folder-rows"]')!.textContent).toContain('existe')
-      const inputs = document.querySelectorAll<HTMLInputElement>('[data-test="folder-schema"] input')
+      const inputs = document.querySelectorAll<HTMLInputElement>(
+        '[data-test="folder-schema"] input'
+      )
       inputs[1].value = 'ventas'
       inputs[1].dispatchEvent(new Event('input'))
       await settle()

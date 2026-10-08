@@ -4,6 +4,12 @@ import type {
   ConnectionInput,
   JobInput,
   EngineObjectType,
+  MongoCreateCollectionOptions,
+  MongoDocumentChange,
+  MongoDocumentQuery,
+  MongoExecuteOptions,
+  MongoIndexSpec,
+  MongoValidatorInput,
   NameRef,
   NavicatImportRequest,
   QueryExecuteOptions,
@@ -232,6 +238,69 @@ export const api = {
       invoke('sqlite:copyFile', connectionId, targetPath),
     maintenance: (connectionId: string, action: SqliteMaintenanceAction, options?: WriteOptions) =>
       invoke('sqlite:maintenance', connectionId, action, options)
+  },
+  /**
+   * MongoDB (P4): documents travel as canonical EJSON text; filters and scripts
+   * use shell syntax, parsed in main. Writes take WriteOptions (production guard).
+   */
+  mongo: {
+    collections: (c: string, db: string) => invoke('mongo:collections', c, db),
+    collectionDetails: (c: string, db: string, coll: string) =>
+      invoke('mongo:collectionDetails', c, db, coll),
+    /** Silent: the collection view shows parse errors next to the filter. */
+    find: (c: string, query: MongoDocumentQuery) => invokeSilent('mongo:find', c, query),
+    getMore: (c: string, resultId: string, count: number) =>
+      invoke('mongo:getMore', c, resultId, count),
+    closeCursor: (c: string, resultId: string) => invokeSilent('mongo:closeCursor', c, resultId),
+    document: (c: string, db: string, coll: string, id: string) =>
+      invoke('mongo:document', c, db, coll, id),
+    applyChanges: (
+      c: string,
+      db: string,
+      coll: string,
+      changes: MongoDocumentChange[],
+      options?: WriteOptions
+    ) => invokeSilent('mongo:applyChanges', c, db, coll, changes, options),
+    sampleFields: (c: string, db: string, coll: string, size?: number) =>
+      invokeSilent('mongo:sampleFields', c, db, coll, size),
+    /** Silent: the query tab shows its own errors. */
+    execute: (c: string, script: string, options: MongoExecuteOptions) =>
+      invokeSilent('mongo:execute', c, script, options),
+    beginTransaction: (c: string, key: string) => invoke('mongo:beginTransaction', c, key),
+    createCollection: (
+      c: string,
+      db: string,
+      name: string,
+      options: MongoCreateCollectionOptions,
+      writeOptions?: WriteOptions
+    ) => invoke('mongo:createCollection', c, db, name, options, writeOptions),
+    renameCollection: (
+      c: string,
+      db: string,
+      from: string,
+      to: string,
+      writeOptions?: WriteOptions
+    ) => invoke('mongo:renameCollection', c, db, from, to, writeOptions),
+    clearCollection: (c: string, db: string, coll: string, writeOptions?: WriteOptions) =>
+      invoke('mongo:clearCollection', c, db, coll, writeOptions),
+    countDocuments: (c: string, db: string, coll: string) =>
+      invoke('mongo:countDocuments', c, db, coll),
+    createIndex: (
+      c: string,
+      db: string,
+      coll: string,
+      spec: MongoIndexSpec,
+      writeOptions?: WriteOptions
+    ) => invokeSilent('mongo:createIndex', c, db, coll, spec, writeOptions),
+    dropIndex: (c: string, db: string, coll: string, name: string, writeOptions?: WriteOptions) =>
+      invoke('mongo:dropIndex', c, db, coll, name, writeOptions),
+    setValidator: (
+      c: string,
+      db: string,
+      coll: string,
+      input: MongoValidatorInput,
+      writeOptions?: WriteOptions
+    ) => invokeSilent('mongo:setValidator', c, db, coll, input, writeOptions)
   },
   backups: {
     list: (c: string, schema?: string | null) => invokeSilent('backups:list', c, schema),

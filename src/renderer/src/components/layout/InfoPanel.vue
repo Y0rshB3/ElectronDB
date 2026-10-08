@@ -151,6 +151,21 @@ const schemaInfo = computed(() => {
       rows: [{ label: 'Archivo', value: file || '—' }]
     }
   }
+  if (config?.engine === 'mongodb') {
+    const collections = tree.itemsOf(n.connectionId, n.schema, 'collections')
+    return {
+      title: n.schema,
+      subtitle: 'Base de datos MongoDB',
+      rows: [
+        {
+          label: 'Colecciones',
+          value: tree.hasItems(n.connectionId, n.schema, 'collections')
+            ? String(collections.length)
+            : '—'
+        }
+      ]
+    }
+  }
   const db = (tree.databases[n.connectionId] ?? []).find((d) => d.name === n.schema)
   return {
     title: n.schema,
@@ -168,8 +183,13 @@ const ddlCache = ref<Record<string, string>>({})
 const ddlLoading = ref(false)
 const ddlError = ref<string | null>(null)
 
+// MongoDB objects have no DDL text (their structure is in the collection designer).
 const ddlType = computed(() =>
-  node.value && node.value.kind === 'object' ? engineObjectTypeOf(node.value) : null
+  node.value &&
+  node.value.kind === 'object' &&
+  connections.get(node.value.connectionId)?.engine !== 'mongodb'
+    ? engineObjectTypeOf(node.value)
+    : null
 )
 const ddl = computed(() => (node.value ? ddlCache.value[node.value.id] : undefined))
 

@@ -98,7 +98,8 @@ async function inspect(path: string): Promise<void> {
     mode.value = defaultMode(i)
     targetSchema.value =
       mode.value === 'intoSchema' ? (i.databases[0] ?? schemaFromFileName(i.fileName)) : ''
-    targetConnectionId.value ??= findLocalConnection(sqlImportConnections(connections.sorted))?.id ?? null
+    targetConnectionId.value ??=
+      findLocalConnection(sqlImportConnections(connections.sorted))?.id ?? null
     if (targetConnectionId.value) void schemaLoader.load(targetConnectionId.value)
     step.value = 3
   } catch (err) {
@@ -255,7 +256,13 @@ defineExpose({ pick })
         :disabled="op.running.value"
       />
 
-      <v-radio-group v-model="mode" density="compact" hide-details class="mb-2" data-test="dump-mode">
+      <v-radio-group
+        v-model="mode"
+        density="compact"
+        hide-details
+        class="mb-2"
+        data-test="dump-mode"
+      >
         <v-radio value="asFile" data-test="dump-mode-file">
           <template #label>
             <span>
@@ -278,7 +285,11 @@ defineExpose({ pick })
         v-model="targetSchema"
         :items="schemaItems"
         :loading="schemaLoader.isLoading(targetConnectionId)"
-        :label="mode === 'intoSchema' ? 'Esquema de destino' : 'Esquema para sentencias sin USE (opcional)'"
+        :label="
+          mode === 'intoSchema'
+            ? 'Esquema de destino'
+            : 'Esquema para sentencias sin USE (opcional)'
+        "
         :error-messages="schemaProblem ?? undefined"
         :hint="
           schemaExists
@@ -385,7 +396,11 @@ defineExpose({ pick })
         data-test="dump-result"
       >
         <div class="font-weight-medium">
-          {{ result.errors.length ? `Terminado con ${result.errors.length} error(es)` : 'Importación completada' }}
+          {{
+            result.errors.length
+              ? `Terminado con ${result.errors.length} error(es)`
+              : 'Importación completada'
+          }}
           <span class="text-medium-emphasis">· {{ formatDuration(result.durationMs) }}</span>
         </div>
         <div class="text-body-2">{{ dumpSummary(result) }}</div>

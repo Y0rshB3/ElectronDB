@@ -36,6 +36,13 @@ const isPg = computed(
     !!connectionId.value &&
     descriptorOf(connections.get(connectionId.value))?.capabilities.createDatabase === 'pg'
 )
+/** MongoDB creates a database with its first collection (no charset). */
+const isMongo = computed(
+  () =>
+    !!connectionId.value &&
+    descriptorOf(connections.get(connectionId.value))?.capabilities.createDatabase === 'mongo'
+)
+const firstCollection = ref('')
 const open = computed({
   get: () => ui.newDatabaseDialog.open,
   set: (value: boolean) => {
@@ -58,7 +65,8 @@ const canSave = computed(
     !!connectionId.value &&
     !!name.value.trim() &&
     !nameError.value &&
-    (isPg.value || !!charset.value) &&
+    (isPg.value || isMongo.value || !!charset.value) &&
+    (!isMongo.value || !!firstCollection.value.trim()) &&
     !saving.value
 )
 
@@ -92,7 +100,8 @@ watch(
     owner.value = ''
     template.value = ''
     encoding.value = ''
-    if (!isPg.value) void loadCharsets()
+    firstCollection.value = ''
+    if (!isPg.value && !isMongo.value) void loadCharsets()
   },
   { immediate: true }
 )
@@ -120,7 +129,17 @@ async function save(): Promise<void> {
     })
     if (!ok) return
     // Silent invoke: the error is shown inline in the dialog, not twice.
-    if (isPg.value) {
+    if (isMongo.value) {
+      await api.invokeSilent(
+        'db:createDatabase',
+        cid,
+        dbName,
+        '',
+        '',
+        { confirmProduction: true },
+        { collection: firstCollection.value.trim() }
+      )
+    } else if (isPg.value) {
       const engineOptions: Record<string, string> = {}
       if (owner.value.trim()) engineOptions.owner = owner.value.trim()
       if (template.value.trim()) engineOptions.template = template.value.trim()
@@ -192,8 +211,18 @@ async function save(): Promise<void> {
             data-test="newdb-encoding"
           />
         </template>
+        <v-text-field
+          v-if="isMongo"
+          v-model="firstCollection"
+          label="Primera colección"
+          hint="MongoDB crea la base de datos junto con su primera colección."
+          persistent-hint
+          class="newdb-dialog__name"
+          data-test="newdb-collection"
+          @keyup.enter="save"
+        />
         <v-autocomplete
-          v-if="!isPg"
+          v-if="!isPg && !isMongo"
           :model-value="charset"
           :items="charsetItems"
           :loading="loading"
@@ -201,7 +230,7 @@ async function save(): Promise<void> {
           @update:model-value="onCharsetChange"
         />
         <v-autocomplete
-          v-if="!isPg"
+          v-if="!isPg && !isMongo"
           v-model="collation"
           :items="collationItems"
           :loading="loading"

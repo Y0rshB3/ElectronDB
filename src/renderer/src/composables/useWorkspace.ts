@@ -174,6 +174,40 @@ export function useWorkspace() {
     })
   }
 
+  /** MongoDB documents browser of a collection or view (`schema` is the database). */
+  function openCollection(connectionId: string, database: string, collection: string): void {
+    tabs.open({
+      kind: 'collection',
+      id: objectTabId('collection', connectionId, undefined, database, collection),
+      title: tabTitle(collection, database, connections.nameOf(connectionId)),
+      connectionId,
+      schema: database,
+      objectName: collection,
+      objectType: 'collection'
+    })
+  }
+
+  /** MongoDB collection designer (indexes, validator, options); null = new collection. */
+  function openCollectionDesigner(
+    connectionId: string,
+    database: string,
+    collection: string | null,
+    section: 'indexes' | 'validator' | 'options' = 'indexes'
+  ): void {
+    tabs.open({
+      kind: 'collectionDesigner',
+      id: collection
+        ? objectTabId('collectionDesigner', connectionId, undefined, database, collection)
+        : undefined,
+      title: tabTitle(collection ?? 'Nueva colección', database, connections.nameOf(connectionId)),
+      connectionId,
+      schema: database,
+      objectName: collection ?? undefined,
+      objectType: 'collection',
+      payload: { section }
+    })
+  }
+
   function openBackups(connectionId?: string | null, schema?: string | null): void {
     const cid = connectionId ?? currentConnectionId()
     if (!cid) return notify.warning('Selecciona una conexión')
@@ -249,6 +283,7 @@ export function useWorkspace() {
     const { connectionId, schema, name, group, database } = node
     if (database !== undefined) return openPgNode(node)
     if (connections.get(connectionId)?.engine === 'sqlite') return openSqliteNode(node)
+    if (connections.get(connectionId)?.engine === 'mongodb') return openMongoNode(node)
     switch (group) {
       case 'tables':
         return openTableData(connectionId, schema, name)
@@ -322,8 +357,29 @@ export function useWorkspace() {
     }
   }
 
+  /** MongoDB: collections and views open their documents; indexes their collection's designer. */
+  function openMongoNode(node: TreeNode): void {
+    const { connectionId: c, schema, name, group } = node
+    if (!schema || !name) return
+    switch (group) {
+      case 'collections':
+      case 'views':
+        return openCollection(c, schema, name)
+      case 'indexes': {
+        const item = tree.itemsOf(c, schema, 'indexes').find((o) => o.name === name)
+        return openCollectionDesigner(c, schema, item?.table ?? name.split('.')[0], 'indexes')
+      }
+      case 'queries':
+        return openQuery(c, schema, { savedQueryId: name })
+    }
+  }
+
   function designNode(node: TreeNode): void {
     if (node.kind !== 'object' || !node.schema || !node.name) return
+    if (node.group === 'collections') {
+      openCollectionDesigner(node.connectionId, node.schema, node.name)
+      return
+    }
     if (node.group === 'tables')
       openTableDesigner(node.connectionId, node.schema, node.name, node.database)
     else void runSafely(() => openNode(node))
@@ -338,6 +394,8 @@ export function useWorkspace() {
     openTableDesigner,
     openDdlEditor,
     openQuery,
+    openCollection,
+    openCollectionDesigner,
     openBackups,
     openUsers,
     openAutomation,

@@ -35,13 +35,16 @@ function lazyView(loader: () => Promise<{ default: Component }>): Component {
 export const VIEW_REGISTRY: Record<TabKind, Component> = {
   objects: lazyView(() => import('./ObjectsView.vue')),
   tableData: lazyView(() => import('./TableDataView.vue')),
-  query: lazyView(() => import('./QueryView.vue')),
+  // MongoDB tabs run MongoQueryView; the router picks the view by the tab's engine.
+  query: lazyView(() => import('./QueryRouterView.vue')),
   tableDesigner: lazyView(() => import('./TableDesignerView.vue')),
   ddlEditor: lazyView(() => import('./DdlEditorView.vue')),
   users: lazyView(() => import('./UsersView.vue')),
   backups: lazyView(() => import('./BackupsView.vue')),
   automation: lazyView(() => import('./AutomationView.vue')),
-  jobEditor: lazyView(() => import('./JobEditorView.vue'))
+  jobEditor: lazyView(() => import('./JobEditorView.vue')),
+  collection: lazyView(() => import('./CollectionView.vue')),
+  collectionDesigner: lazyView(() => import('./CollectionDesignerView.vue'))
 }
 
 export function viewFor(kind: TabKind): Component {

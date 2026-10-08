@@ -1408,6 +1408,125 @@ const SQLITE_STEPS: Step[] = [
 ]
 STEPS.push(...SQLITE_STEPS)
 
+/**
+ * MongoDB (preview) screens (VORTAQ_SHOTS_ONLY=43): need the profile and the
+ * `tienda_shots` database of scripts/seed-mongo-shots.mjs (connection
+ * «Tienda (MongoDB)» on the throwaway test server).
+ */
+const MONGO_ID = 'shot-mongo'
+const MONGO_DB = 'tienda_shots'
+const MONGO_STEPS: Step[] = [
+  {
+    name: '43a-mongo-connection-dialog',
+    script: `
+      S.ui.openConnectionDialog(S.connections.get('${MONGO_ID}'))
+      await H.waitFor('[data-test="conn-mongo-topology"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    name: '43b-mongo-tree',
+    script: `
+      S.ui.toggleInfoPanel(true)
+      await S.tree.expand(S.tree.parse('c:${MONGO_ID}'))
+      if (!S.connections.isOpen('${MONGO_ID}')) throw new Error('could not open Tienda (MongoDB)')
+      S.tree.setExpanded('s:${MONGO_ID}:${MONGO_DB}', true)
+      for (const g of ['collections', 'views', 'indexes'])
+        await S.tree.expand(S.tree.parse('g:${MONGO_ID}:${MONGO_DB}:' + g))
+      S.tree.select('g:${MONGO_ID}:${MONGO_DB}:collections')
+      S.workspace.showObjects()
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '43c-mongo-documents-grid',
+    script: `
+      S.workspace.openCollection('${MONGO_ID}', '${MONGO_DB}', 'clientes')
+      await H.waitFor('[data-test="doc-row-0"]', 15000)
+      await H.click('[data-test="doc-row-1"] td', 5000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '43d-mongo-documents-json',
+    script: `
+      await H.click('[data-test="mode-json"]', 8000)
+      await H.waitFor('[data-test="document-json"]', 8000)
+      await H.sleep(700)`
+  },
+  {
+    name: '43e-mongo-documents-tree',
+    script: `
+      await H.click('[data-test="mode-tree"]', 8000)
+      await H.waitFor('[data-test="document-tree"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `H.$('[data-test="mode-table"]')?.click()`
+  },
+  {
+    name: '43f-mongo-document-editor',
+    script: `
+      await H.waitFor('[data-test="doc-row-0"]', 8000)
+      await H.click('[data-test="doc-row-0"] td', 5000)
+      await H.click('[data-test="doc-edit"]', 5000)
+      await H.waitFor('[data-test="document-editor"] .cm-content', 8000)
+      await H.sleep(900)`,
+    cleanup: `document.querySelector('[data-test="document-editor"]')?.closest('.v-overlay')?.querySelector('.v-btn')?.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    name: '43g-mongo-typed-editor',
+    script: `
+      await H.sleep(500)
+      const cells = [...document.querySelectorAll('[data-test="doc-row-0"] td')]
+      const header = [...document.querySelectorAll('.document-grid th')].map((th) => th.textContent.trim())
+      const col = header.findIndex((h) => h.startsWith('puntos'))
+      cells[col].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+      await H.waitFor('[data-test="typed-value-dialog"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    name: '43h-mongo-query-aggregate',
+    script: `
+      const sql = [
+        "db.pedidos.aggregate([",
+        "  { $match: { estado: { $in: ['pendiente', 'pagado'] } } },",
+        "  { $group: { _id: '$estado', pedidos: { $sum: 1 }, total: { $sum: '$total' } } },",
+        "  { $sort: { total: -1 } }",
+        "])",
+        "db.clientes.find({ 'direccion.ciudad': 'Lima' }, { nombre: 1, email: 1 })"
+      ].join('\\n')
+      S.workspace.openQuery('${MONGO_ID}', '${MONGO_DB}', { sql, name: 'Pedidos por estado' })
+      await H.sleep(1200)
+      await H.click('[data-test="run"]', 10000)
+      await H.waitFor('[data-test="tab-result-0"]', 15000)
+      await H.waitFor('[data-test="doc-row-0"]', 15000)
+      await H.sleep(900)`
+  },
+  {
+    name: '43i-mongo-index-manager',
+    script: `
+      S.workspace.openCollectionDesigner('${MONGO_ID}', '${MONGO_DB}', 'clientes', 'indexes')
+      await H.waitFor('[data-test="index-row-email_unico"]', 15000)
+      await H.click('[data-test="index-new"]', 5000)
+      await H.waitFor('[data-test="index-form"]', 5000)
+      await H.sleep(800)`
+  },
+  {
+    name: '43j-mongo-validator',
+    script: `
+      await H.click('[data-test="designer-validator"]', 8000)
+      await H.waitFor('.collection-designer__editor .cm-content', 8000)
+      await H.sleep(900)`
+  },
+  {
+    name: '43k-mongo-backup-dialog',
+    script: `
+      S.ui.openBackupDialog('${MONGO_ID}', '${MONGO_DB}')
+      await H.waitFor('[data-test="backup-dialog"], .v-overlay--active .v-card', 8000)
+      await H.sleep(1200)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  }
+]
+STEPS.push(...MONGO_STEPS)
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }

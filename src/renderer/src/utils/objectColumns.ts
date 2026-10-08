@@ -3,6 +3,7 @@ import type {
   DatabaseInfo,
   EngineId,
   EventInfo,
+  MongoCollectionInfo,
   ObjectSummary,
   RoutineInfo,
   SchemaInfo,
@@ -19,7 +20,14 @@ import type { GroupKind } from './objectTypes'
  */
 
 export type ObjectItem =
-  TableInfo | ViewInfo | RoutineInfo | EventInfo | SavedQuery | BackupFile | ObjectSummary
+  | TableInfo
+  | ViewInfo
+  | RoutineInfo
+  | EventInfo
+  | SavedQuery
+  | BackupFile
+  | ObjectSummary
+  | MongoCollectionInfo
 
 export interface ObjectColumn<T = unknown> {
   key: string
@@ -239,6 +247,68 @@ export const GROUP_COLUMNS: Record<GroupKind, ObjectColumn<unknown>[]> = {
       value: (o) => o.kind ?? '',
       display: (o) => (o.kind ?? '').toUpperCase()
     })
+  ],
+  // MongoDB (preview): $collStats columns (section 9.1)
+  collections: [
+    col<MongoCollectionInfo>({ key: 'name', title: 'Nombre', value: (c) => c.name }),
+    col<MongoCollectionInfo>({
+      key: 'count',
+      title: 'Documentos',
+      align: 'end',
+      value: (c) => c.count,
+      display: (c) => (c.count === null ? '—' : formatNumber(c.count))
+    }),
+    col<MongoCollectionInfo>({
+      key: 'size',
+      title: 'Tamaño',
+      align: 'end',
+      value: (c) => c.sizeBytes,
+      display: (c) => formatBytes(c.sizeBytes)
+    }),
+    col<MongoCollectionInfo>({
+      key: 'storage',
+      title: 'Almacenamiento',
+      align: 'end',
+      value: (c) => c.storageSizeBytes,
+      display: (c) => formatBytes(c.storageSizeBytes)
+    }),
+    col<MongoCollectionInfo>({
+      key: 'indexes',
+      title: 'Índices',
+      align: 'end',
+      value: (c) => c.indexCount,
+      display: (c) => (c.indexCount === null ? '—' : formatNumber(c.indexCount))
+    }),
+    col<MongoCollectionInfo>({
+      key: 'avg',
+      title: 'Tamaño medio',
+      align: 'end',
+      value: (c) => c.avgObjSizeBytes,
+      display: (c) => formatBytes(c.avgObjSizeBytes)
+    }),
+    col<MongoCollectionInfo>({
+      key: 'readOnly',
+      title: 'Notas',
+      value: (c) => (c.type === 'timeseries' ? 'serie temporal' : c.capped ? 'limitada' : '')
+    })
+  ]
+}
+
+/** MongoDB columns for the groups it shares (views and indexes). */
+const MONGO_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
+  views: [
+    col<MongoCollectionInfo>({ key: 'name', title: 'Nombre', value: (v) => v.name }),
+    col<MongoCollectionInfo>({ key: 'viewOn', title: 'Sobre', value: (v) => v.viewOn ?? '' })
+  ],
+  indexes: [
+    col<ObjectSummary>({
+      key: 'name',
+      title: 'Nombre',
+      value: (o) => (o.table ? o.name.slice(o.table.length + 1) : o.name)
+    }),
+    col<ObjectSummary>({ key: 'table', title: 'Colección', value: (o) => o.table ?? '' }),
+    col<ObjectSummary>({ key: 'kind', title: 'Tipo', value: (o) => o.kind ?? '' }),
+    col<ObjectSummary>({ key: 'detail', title: 'Claves', value: (o) => o.detail ?? '' })
   ]
 }
 
@@ -332,6 +402,7 @@ const PG_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
 export function columnsFor(group: GroupKind, engine?: EngineId | null): ObjectColumn<unknown>[] {
   if (engine === 'postgresql') return PG_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   if (engine === 'sqlite') return SQLITE_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
+  if (engine === 'mongodb') return MONGO_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   return GROUP_COLUMNS[group]
 }
 
@@ -435,6 +506,11 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
       ]
     }
     case 'views': {
+      if ('readOnlyReason' in (item as object)) {
+        // MongoDB view: its source collection.
+        const mv = item as MongoCollectionInfo
+        return [row('Sobre', mv.viewOn), row('Edición', mv.readOnlyReason)]
+      }
       const v = item as ViewInfo
       return [
         row('Definidor', v.definer),
@@ -530,6 +606,17 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
       const o = item as ObjectSummary
       return [row('Tabla', o.table), row('Cuándo', (o.kind ?? '').toUpperCase())]
     }
+    case 'collections': {
+      const c = item as MongoCollectionInfo
+      return [
+        row('Documentos', c.count === null ? '—' : formatNumber(c.count)),
+        row('Tamaño', formatBytes(c.sizeBytes)),
+        row('Almacenamiento', formatBytes(c.storageSizeBytes)),
+        row('Índices', c.indexCount === null ? '—' : formatNumber(c.indexCount)),
+        row('Tamaño medio', formatBytes(c.avgObjSizeBytes)),
+        row('Edición', c.readOnlyReason ?? 'Editable por _id')
+      ]
+    }
   }
 }
 
@@ -545,5 +632,6 @@ export const GROUP_SINGULAR: Record<GroupKind, string> = {
   sequences: 'secuencia',
   types: 'tipo',
   indexes: 'índice',
-  triggers: 'trigger'
+  triggers: 'trigger',
+  collections: 'colección'
 }

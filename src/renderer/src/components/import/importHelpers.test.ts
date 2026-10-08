@@ -71,7 +71,10 @@ describe('importHelpers', () => {
     expect(logEntryOf(event('object'), 1)).toMatchObject({ tone: 'ok', text: 'msg object' })
     expect(
       logEntryOf(
-        event('objectError', { message: 'Error en la línea 9', detail: { error: 'boom', objectName: 'INSERT' } }),
+        event('objectError', {
+          message: 'Error en la línea 9',
+          detail: { error: 'boom', objectName: 'INSERT' }
+        }),
         2
       )
     ).toEqual({ id: 2, tone: 'error', text: 'Error en la línea 9: boom', detail: 'INSERT' })
@@ -86,7 +89,8 @@ describe('importHelpers', () => {
     log = appendLog(log, { id: 2, tone: 'info', text: 'Copia previa · 2', sticky: 'safety' })
     expect(log.map((e) => e.text)).toEqual(['Copia previa · 2'])
     log = [{ id: 0, tone: 'error', text: 'first error' }]
-    for (let i = 1; i <= LOG_LIMIT + 5; i++) log = appendLog(log, { id: i, tone: 'ok', text: `${i}` })
+    for (let i = 1; i <= LOG_LIMIT + 5; i++)
+      log = appendLog(log, { id: i, tone: 'ok', text: `${i}` })
     expect(log).toHaveLength(LOG_LIMIT)
     expect(log[0].text).toBe('first error')
     expect(log[log.length - 1].text).toBe(`${LOG_LIMIT + 5}`)
@@ -94,7 +98,15 @@ describe('importHelpers', () => {
 
   it('describes object counts in Spanish, skipping zeros', () => {
     expect(
-      describeCounts({ databases: 0, tables: 3, views: 1, routines: 0, triggers: 2, events: 0, inserts: 9 })
+      describeCounts({
+        databases: 0,
+        tables: 3,
+        views: 1,
+        routines: 0,
+        triggers: 2,
+        events: 0,
+        inserts: 9
+      })
     ).toBe('3 tablas, 1 vista, 2 triggers')
     expect(describeCounts(null)).toBe('')
   })

@@ -12,6 +12,9 @@ export type TabKind =
   | 'automation'
   | 'users'
   | 'jobEditor'
+  // MongoDB (preview)
+  | 'collection'
+  | 'collectionDesigner'
 
 export interface WorkspaceTab {
   id: string
@@ -45,7 +48,9 @@ const ICONS: Record<TabKind, string> = {
   backups: 'mdi-archive',
   automation: 'mdi-robot',
   users: 'mdi-account-multiple',
-  jobEditor: 'mdi-robot-outline'
+  jobEditor: 'mdi-robot-outline',
+  collection: 'mdi-file-document-multiple-outline',
+  collectionDesigner: 'mdi-file-document-edit-outline'
 }
 
 export interface OpenTabInput {

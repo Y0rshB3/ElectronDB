@@ -14,7 +14,7 @@ function hasTabSession(
 ): boolean {
   if (tab.kind !== 'query' || !tab.connectionId) return false
   const engine = connections.get(tab.connectionId)?.engine
-  return engine === 'postgresql' || engine === 'sqlite'
+  return engine === 'postgresql' || engine === 'sqlite' || engine === 'mongodb'
 }
 
 /** Tab closing with an unsaved-changes guard, shared by the tab strip and keyboard shortcuts. */

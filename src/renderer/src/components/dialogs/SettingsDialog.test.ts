@@ -172,7 +172,9 @@ describe('SettingsDialog preview engines switch', () => {
     await openDialog()
     const field = wrapper!.get('[data-test="settings-preview-engines"]')
     expect(field.text()).toContain('Motores en vista previa')
-    expect(field.text()).toContain('motores que aún están en desarrollo: PostgreSQL, SQLite, MongoDB.')
+    expect(field.text()).toContain(
+      'motores que aún están en desarrollo: PostgreSQL, SQLite, MongoDB.'
+    )
     expect((switchInput().element as HTMLInputElement).checked).toBe(false)
   })
 

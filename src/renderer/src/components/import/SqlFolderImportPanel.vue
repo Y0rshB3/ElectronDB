@@ -90,7 +90,8 @@ async function loadFolder(dir: string): Promise<void> {
     const p = await api.importers.previewSqlFolder(dir)
     preview.value = p
     rows.value = p.items.map((i) => ({ ...i, selected: true }))
-    targetConnectionId.value ??= findLocalConnection(sqlImportConnections(connections.sorted))?.id ?? null
+    targetConnectionId.value ??=
+      findLocalConnection(sqlImportConnections(connections.sorted))?.id ?? null
     if (targetConnectionId.value) void schemaLoader.load(targetConnectionId.value)
     step.value = 3
   } catch (err) {

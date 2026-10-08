@@ -33,18 +33,12 @@ const hint = computed(() => replaceContentHint(includeData.value))
       :aria-describedby="`${id}-hint`"
       :disabled="disabled"
     >
-      <v-btn
-        :value="true"
-        prepend-icon="mdi-table-large"
-        data-test="replace-content-data"
-        >{{ WITH_DATA_LABEL }}</v-btn
-      >
-      <v-btn
-        :value="false"
-        prepend-icon="mdi-table-key"
-        data-test="replace-content-structure"
-        >{{ STRUCTURE_ONLY_LABEL }}</v-btn
-      >
+      <v-btn :value="true" prepend-icon="mdi-table-large" data-test="replace-content-data">{{
+        WITH_DATA_LABEL
+      }}</v-btn>
+      <v-btn :value="false" prepend-icon="mdi-table-key" data-test="replace-content-structure">{{
+        STRUCTURE_ONLY_LABEL
+      }}</v-btn>
     </v-btn-toggle>
     <div :id="`${id}-hint`" class="replace-content__hint" data-test="replace-content-hint">
       {{ hint }}

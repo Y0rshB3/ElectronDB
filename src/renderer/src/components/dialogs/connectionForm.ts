@@ -2,9 +2,11 @@ import { connectionFormErrors } from '@shared/connectionValidation'
 import {
   DEFAULT_NETWORK,
   ENGINES,
+  defaultMongoOptions,
   defaultPostgresOptions,
   defaultSqliteOptions
 } from '@shared/engines'
+import { mongoUriOf } from '@shared/mongo/uri'
 import type { ConnectionConfig, ConnectionInput, EngineId, SslMode } from '@shared/types'
 
 /** Marker colours per environment (Local green, Staging yellow, Production red, ...). */
@@ -22,7 +24,23 @@ export const COLOR_PRESETS: { value: string | null; label: string }[] = [
 /** Empty form of a new connection; MySQL unless another engine is picked. */
 export function emptyConnectionInput(engine: EngineId = 'mysql'): ConnectionInput {
   if (engine === 'sqlite') return emptySqliteInput()
+  if (engine === 'mongodb') return emptyMongoInput()
   return engine === 'postgresql' ? emptyPostgresInput() : emptyMysqlInput()
+}
+
+/** MongoDB: localhost:27017 without authentication until the user picks a mechanism. */
+export function emptyMongoInput(): ConnectionInput {
+  const base = emptyMysqlInput()
+  return {
+    ...base,
+    engine: 'mongodb',
+    port: ENGINES.mongodb.defaultPort,
+    username: '',
+    ssl: { ...base.ssl, enabled: false, verifyServer: true },
+    network: { ...DEFAULT_NETWORK },
+    authMode: 'none',
+    mongo: { ...defaultMongoOptions(), authMechanism: 'none' }
+  }
 }
 
 /** SQLite: a database file; no host, port, user, password, SSH or SSL. */
@@ -93,6 +111,7 @@ export function withSslMode(ssl: ConnectionInput['ssl'], mode: SslMode): Connect
  * config, never with the password. Null for engines without a URI form here.
  */
 export function connectionUri(c: ConnectionInput | ConnectionConfig): string | null {
+  if (c.engine === 'mongodb') return mongoUriOf(c)
   if (c.engine !== 'postgresql') return null
   const user = encodeURIComponent(c.username)
   const db = encodeURIComponent(c.postgres?.initialDatabase || 'postgres')
@@ -147,6 +166,16 @@ export function inputFromConnection(c: ConnectionConfig): ConnectionInput {
     ssl: { ...c.ssl },
     ...(c.postgres ? { postgres: { ...defaultPostgresOptions(), ...c.postgres } } : {}),
     ...(c.network ? { network: { ...c.network } } : {}),
+    ...(c.mongo
+      ? {
+          mongo: {
+            ...defaultMongoOptions(),
+            ...c.mongo,
+            members: (c.mongo.members ?? []).map((m) => ({ ...m })),
+            extraOptions: { ...c.mongo.extraOptions }
+          }
+        }
+      : {}),
     ...(c.sqlite
       ? {
           sqlite: {
@@ -201,6 +230,19 @@ export function normalizeConnectionInput(input: ConnectionInput): ConnectionInpu
               alias: a.alias.trim(),
               filePath: a.filePath.trim()
             }))
+          }
+        }
+      : {}),
+    ...(input.mongo
+      ? {
+          mongo: {
+            ...input.mongo,
+            replicaSet: input.mongo.replicaSet.trim(),
+            authSource: input.mongo.authSource.trim() || 'admin',
+            defaultDatabase: input.mongo.defaultDatabase.trim(),
+            members: input.mongo.members
+              .map((m) => ({ host: m.host.trim(), port: Number(m.port) || 27017 }))
+              .filter((m) => m.host)
           }
         }
       : {}),

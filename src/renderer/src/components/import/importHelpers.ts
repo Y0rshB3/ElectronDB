@@ -28,7 +28,9 @@ export function defaultSelection(preview: ImportConnectionsPreview): string[] {
 
 /** Keys of the rows that can be ticked (unsupported ones cannot). */
 export function selectableKeys(preview: ImportConnectionsPreview | null): string[] {
-  return (preview?.items ?? []).filter((i) => connectionRowStatus(i) !== 'unsupported').map((i) => i.key)
+  return (preview?.items ?? [])
+    .filter((i) => connectionRowStatus(i) !== 'unsupported')
+    .map((i) => i.key)
 }
 
 /** One line of the live log of a SQL import. */

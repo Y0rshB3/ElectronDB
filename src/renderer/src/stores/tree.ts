@@ -4,6 +4,7 @@ import type {
   BackupFile,
   DatabaseInfo,
   EventInfo,
+  MongoCollectionInfo,
   ObjectSummary,
   RoutineInfo,
   SchemaInfo,
@@ -53,6 +54,7 @@ export interface GroupItems {
   types: ObjectSummary[]
   indexes: ObjectSummary[]
   triggers: ObjectSummary[]
+  collections: MongoCollectionInfo[]
 }
 
 /*
@@ -301,8 +303,16 @@ export const useTreeStore = defineStore('tree', () => {
     if (!force && groupItems.value[key]) return groupItems.value[key]
     const id = nodeIds.group(connectionId, schema, group, database)
     const ref = schemaRef(schema, database)
+    const isMongo = connections.get(connectionId)?.engine === 'mongodb'
     const result = await withLoading(id, async () => {
       let items: unknown[] = []
+      if (isMongo && (group === 'collections' || group === 'views')) {
+        // One listCollections serves both groups; views are listed apart (read-only).
+        const all = await api.mongo.collections(connectionId, schema)
+        items = all.filter((c) => (group === 'views') === (c.type === 'view'))
+        groupItems.value = { ...groupItems.value, [key]: items }
+        return items
+      }
       switch (group) {
         case 'tables':
           items = await api.db.tables(connectionId, ref)
