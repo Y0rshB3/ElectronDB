@@ -32,6 +32,7 @@ import {
   isAuthRejected,
   isConnectionLost
 } from './errors'
+import { mariaDbAuthPlugins } from './authPlugins'
 import { fetchServerInfo, type Queryable } from './introspect'
 import { PooledSession } from './session'
 import { splitStatements } from './sqlSplit'
@@ -93,7 +94,9 @@ export async function buildOptions(
     multipleStatements: false,
     charset: 'utf8mb4',
     connectTimeout: CONNECT_TIMEOUT_MS,
-    ssl: await buildSsl(config)
+    ssl: await buildSsl(config),
+    // MariaDB ed25519 / parsec accounts; a MySQL server never asks for these plugins.
+    authPlugins: mariaDbAuthPlugins()
   }
 }
 

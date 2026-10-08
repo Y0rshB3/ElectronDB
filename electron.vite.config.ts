@@ -5,8 +5,9 @@ import vuetify from 'vite-plugin-vuetify'
 
 export default defineConfig({
   main: {
-    // plist v5 is ESM-only (no "require" export), so the CJS main bundle must inline it.
-    plugins: [externalizeDepsPlugin({ exclude: ['plist'] })],
+    // plist v5 and @noble/* 2.x (MariaDB ed25519/parsec sign-in) are ESM-only (no "require"
+    // export), so the CJS main bundle inlines them.
+    plugins: [externalizeDepsPlugin({ exclude: ['plist', '@noble/curves', '@noble/hashes'] })],
     resolve: {
       alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main') }
     },
