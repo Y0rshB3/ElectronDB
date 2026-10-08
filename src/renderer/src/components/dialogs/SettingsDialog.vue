@@ -386,6 +386,10 @@ async function save(): Promise<void> {
 .settings-dialog__switch {
   margin-top: 8px;
 }
+/* Help text under a switch: room before the next row. */
+.settings-dialog__switch + .settings-row {
+  margin-top: 14px;
+}
 .settings-version {
   margin-left: 6px;
   color: var(--nd-accent);
