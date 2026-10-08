@@ -5,15 +5,15 @@ relative to `~/Library/Application Support/PremiumSoft CyberTech/Navicat CC/`.
 
 ## Files
 
-| Path                                              | Format     | Content                                                                                                                                   |
-| ------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `Common/conn.plist`                               | XML plist  | Connections: `{"0": {"0": {"MySQL": {"<name>": {...}}}}}`                                                                                 |
-| `Common/pref.plist`                               | XML plist  | UI prefs. Connection colour at `connpref/0/0/MySQL/<name>/""/""/serverpref/markercolor` (two empty-string keys before `serverpref` on real installs; the importer accepts both)                                                         |
-| `Common/Settings/0/0/MySQL/<conn>/`               | dir        | Per-connection savepath. Contains `id_cache.db` (SQLite identifier cache) and one folder per schema                                       |
-| `Common/Settings/0/0/MySQL/<conn>/<schema>/*.nb3` | tar        | Backups. File name = `YYYYMMDDHHmmss[ -label                                                                                              | label].nb3` |
-| `Navicat for MySQL/Profiles/*.nbatmysql`          | JSON       | Batch jobs ("Automatización")                                                                                                             |
-| `Navicat for MySQL/schedule.plist`                | XML plist  | Schedules (an empty `<dict/>` on the installation inspected)                                                                             |
-| `Navicat for MySQL/Logs/QueryExec.log`            | text       | Query log                                                                                                                                 |
+| Path                                              | Format    | Content                                                                                                                                                                         |
+| ------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Common/conn.plist`                               | XML plist | Connections: `{"0": {"0": {"MySQL": {"<name>": {...}}}}}`                                                                                                                       |
+| `Common/pref.plist`                               | XML plist | UI prefs. Connection colour at `connpref/0/0/MySQL/<name>/""/""/serverpref/markercolor` (two empty-string keys before `serverpref` on real installs; the importer accepts both) |
+| `Common/Settings/0/0/MySQL/<conn>/`               | dir       | Per-connection savepath. Contains `id_cache.db` (SQLite identifier cache) and one folder per schema                                                                             |
+| `Common/Settings/0/0/MySQL/<conn>/<schema>/*.nb3` | tar       | Backups. File name = `YYYYMMDDHHmmss[ -label                                                                                                                                    | label].nb3` |
+| `Navicat for MySQL/Profiles/*.nbatmysql`          | JSON      | Batch jobs ("Automatización")                                                                                                                                                   |
+| `Navicat for MySQL/schedule.plist`                | XML plist | Schedules (an empty `<dict/>` on the installation inspected)                                                                                                                    |
+| `Navicat for MySQL/Logs/QueryExec.log`            | text      | Query log                                                                                                                                                                       |
 
 ## conn.plist connection keys (subset that matters)
 
@@ -168,9 +168,9 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   attributes**, so every attribute is optional (MySQL port 3306, SSH port 22, flags off).
 - `ConnType` (case-insensitive): `MYSQL`, `MARIADB` (imported as a MySQL connection while
   MariaDB has no driver of its own), `POSTGRESQL`, `SQLITE`, `MONGODB`, `SQLSERVER`,
-  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL` and
-  `SQLITE` are importable while «Motores en vista previa» is on (otherwise listed and
-  disabled with «PostgreSQL/SQLite está en vista previa…»); the rest are listed with «Motor no soportado en esta
+  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL`, `SQLITE` and
+  `MONGODB` are importable while «Motores en vista previa» is on (otherwise listed and
+  disabled with «… está en vista previa…»); the rest are listed with «Motor no soportado en esta
   versión». The import identity is
   `(type, ConnectionName)`, the same as for `conn.plist` imports, so an `.ncx` merges into
   connections imported from the folder.
@@ -191,6 +191,15 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   encrypted files: listed as not importable, and `SQLiteEncryptPassword` is never read.
   Imported SQLite connections keep foreign keys off and use no password. No attached
   databases are imported (no documented attribute).
+- MongoDB (`MONGODB`, importable while «Motores en vista previa» is on): attribute names from public
+  parsers and the design notes, **not confirmed by a sample** of the user's, read case-insensitively and never
+  required. `ConnMethod` (also `ConnectionMethod`): `Standalone`, `ReplicaSet` / `Replica Set`,
+  `ShardCluster`, `SRV`; `UseSRVRecord` (SRV: port unused, TLS on); `ReplicaSetName`; `AuthSource`;
+  `AuthMechanism` (`SCRAM-SHA-1`, `SCRAM-SHA-256`, `X509`, `PLAIN`/`LDAP`, `None`; `GSSAPI`/Kerberos, AWS and
+  OIDC make the row not importable); `ReadPreference`; `RetryWrites` / `RetryReads`; `ServiceProvider`
+  (`DocumentDB` and `AzureCosmosDB` turn retryable writes off with a warning; `MongoDBAtlas` turns TLS on).
+  A replica set's `Host="localhost"` is a placeholder: the seeds come from `<Member Host Port>` children and
+  the database from `<Advance Database>` (else `Database`). Passwords use the same slots as MySQL.
 - **Unverified** (accepted when present, never required): `SSL_VerifyCA`, a colour attribute
   (`Color` / `ConnectionColor`), and the PostgreSQL SSL mode attribute (`SSL_Mode` /
   `SSLMode`, any libpq spelling); no sample confirms how Navicat writes them.

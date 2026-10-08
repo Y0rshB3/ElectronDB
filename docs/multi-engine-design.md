@@ -1,6 +1,6 @@
 # Multi-engine architecture (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB)
 
-Status: **design; P1a, P1b, P2a, P2b and P3 implemented on branch `v2` (PostgreSQL and SQLite still behind the preview flag). Revision 3** (2026-10-07): the product is now
+Status: **design; P1a, P1b, P2a, P2b, P3 and P4a/P4b implemented on branch `v2` (PostgreSQL, SQLite and MongoDB still behind the preview flag). Revision 3** (2026-10-07): the product is now
 called **Vortaq** (formerly ElectronDB, and Navidog before that); revision 3 renames it, removes
 the Navicat Keychain recovery (section 12.3) and limits the sources to the ones in section 19.
 Revision 2 (2026-10-05, at `c147306`) answered two reviews: an adversarial review (guard bypasses,
@@ -1529,6 +1529,10 @@ default_transaction_read_only = off` before that script and restores `on` after 
 > (main or an attachment) with each cell's storage class, restored into a new file or replacing the
 > database after a VACUUM INTO safety copy; «Copia del archivo (VACUUM INTO)» is the fast native copy.
 > Automation stays off for SQLite.
+>
+> **P4 update (MongoDB).** MongoDB also has `.vqb` backups (`supportsBackupsVqb: true`) of one database (or
+> some of its collections): documents as canonical Extended JSON, collection options, validators, indexes and
+> views, restored into another database or replacing it after a safety copy. Automation stays off for MongoDB.
 
 All of these gates are checked in main and mirrored in the UI (coupling §5).
 
@@ -1645,7 +1649,7 @@ value becomes the default plus a warning.
   connection updates only its secrets (`passwordsOnly`) unless the user picks "reemplazar". This
   is how a user brings Mac passwords across: import the plist for metadata and colours, then
   import the `.ncx` for passwords.
-- **Renderer.** *Done in v0.2.0 as the «Importar…» wizard* (`components/import/ImportWizard.vue`, sources in
+- **Renderer.** _Done in v0.2.0 as the «Importar…» wizard_ (`components/import/ImportWizard.vue`, sources in
   `src/main/importers/registry.ts`): the `.ncx` is one source next to the Navicat folder (which keeps
   `ImportNavicatDialog.vue`), DBeaver, MySQL Workbench, `.sql` dumps, dump folders and `.nb3`. The original
   plan was: `ImportNavicatDialog.vue` with source tabs "Navicat de este Mac" and "Archivo .ncx".
@@ -2106,6 +2110,67 @@ What shipped, and where it differs from the text above (each point is deliberate
 - **Done when.** The user can run `db.orders.updateMany(...)` with confirmation on production,
   build a pipeline stage by stage with previews, manage indexes and the validator. MongoDB's
   preview flag is switched off.
+
+#### P4 (P4a + P4b) as implemented (2026-10-07)
+
+What shipped, and where it differs from the text above (each point is deliberate):
+
+- **Driver** (`src/main/mongo/`, official `mongodb` 7.7 + `bson` 7, Apache-2.0). Credentials only in `auth`,
+  timeouts from `network`, SRV ⇒ TLS, SSH forces `directConnection` (SRV and seed lists refused), TLS
+  `servername` = the real host, zlib only, GSSAPI/AWS/OIDC refused. `hello` gives topology and member role
+  (`ServerInfo.runtime.topology/memberRole/transactions`). **Deviation:** reads that return documents use
+  `promoteValues: false` as well as `promoteLongs: false` (`RAW_BSON`, per operation, not on the client):
+  with values promoted an integral Double would come back as `$numberInt`; command results (counts,
+  matchedCount) stay plain numbers. A direct connection to a secondary is reported («Secundario (solo
+  lectura)») but the read preference is not switched automatically.
+- **Grammar and guard** (`src/shared/mongo/`). As designed (acorn call chains, arguments parsed in main by
+  shell-bson-parser, never eval'd), with `db.getSiblingDB('x')` and dotted collection names added. **Deviations:**
+  comments are allowed (`allowComments: true`, still no calls); `Date.now()` is refused (strict mode refuses
+  calls); `.itcount()`/`.size()` count instead of being no-ops. The renderer's allowlist also treats an
+  aggregate whose arguments are not plain literals as a write (it cannot prove `$out`/`$merge` absent); main's
+  denylist reads decoded keys from the AST, and `mongo:execute` additionally decides from the **parsed**
+  pipeline at any depth (`valueHasWriteStage`), so `{'\u0024out': …}` is guarded. The implication
+  `isObviousWrite ⇒ analyzeWrites.writes` is tested over a corpus and 2,000 generated scripts. The whole script
+  is parsed (every argument too) before anything runs.
+- **Values.** Canonical EJSON both ways; `shellFormat.ts` round-trips every type through shell text (tested
+  with the parser). **Deviations:** a subtype-3 UUID shows as `BinData(3, …)` (only subtype 4 as `UUID('…')`,
+  which is what `UUID()` writes back); a regex with `/` comes back escaped (`a\/b`, same match); the deprecated
+  `symbol` and `undefined` types show as a string and `undefined`, so a whole-document replace turns them into
+  string/null. Documents over 256 KB are sent with their large fields replaced by `{$vortaqLarge}` (not
+  whole); editing one refetches it by `_id` (`mongo:document`).
+- **Edits.** As designed (typed cell editor, `$set`/`$unset` with the original of each path, whole-array `$set`,
+  dotted/`$` keys refused inline, replace only `fetchedWhole`), plus: a replace also compares the stored
+  document with the one loaded (`original`) before overwriting. On standalone servers a batch stops at the
+  first failure and says which change failed and how many were applied (instead of per-row results).
+- **Query tab** (`views/MongoQueryView.vue`, routed from the `query` tab kind). Reads and P4b writes, read-only
+  commands, `use`/`show`, completion (collections, methods, `$` operators, sampled field paths), `killOp`
+  cancel by `comment: vortaq:<executionId>`, per-tab database and, on replica sets, an explicit transaction
+  (`mongo:beginTransaction` — **new channel** — with `db:commit`/`db:rollback`; commit is guarded). Results
+  inside a transaction keep no «Cargar más» cursor. Documents of `find`/`findOne` and of aggregates limited to
+  `$match/$sort/$limit/$skip/inclusion $project` are editable.
+- **Not done in P4 (named for later):** the visual aggregation stage builder (`AggregateView.vue`,
+  `mongo:aggregate` with stage previews) — aggregates run in the query tab; «Duplicar colección»; the Navicat
+  folder (`conn.plist`) mapping of MongoDB rows (only `.ncx` and DBeaver import MongoDB, like SQLite in P3);
+  automation; the explain view; user/role screens. The preview flag stays on (the user decides).
+- **Tree and designer.** Groups `collections`, `views` **and `indexes`** (index nodes `<collection>.<index>`);
+  stats columns from `$collStats`; menus Abrir, Diseñar, Nueva consulta, Contar exacto, Renombrar (in the
+  designer's Opciones), Vaciar, Eliminar. The designer (`views/CollectionDesignerView.vue`) creates collections
+  (capped, validator), manages indexes and the validator (with «Generar esquema» from sampled types) and shows
+  the options; the documents view has a read-only index panel.
+- **Backups.** `.vqb` (see the update in section 11 and `docs/vqb-format.md`, «MongoDB»): `ddl.sql` holds the
+  canonical EJSON `create` command; no transactional DDL, so REPLACE drops the database after a safety copy.
+- **AI.** `ai/mongoMetadata.ts`: no query method; structure only (names, index keys, `$jsonSchema` shape,
+  sampled field types). No explain for MongoDB (it would run the user's pipeline).
+- **Import.** `.ncx` (method, seeds from `<Member>`, `<Advance Database>`, mechanisms, read preference, retry
+  options, DocumentDB/Cosmos `retryWrites=false`, Atlas/SRV TLS, passwords) and DBeaver (host/port/database or
+  the URL options; a password in the URL is not imported).
+- **Tests.** Unit: grammar/guard (corpus + generated), shellFormat round trip, URI, client options, document
+  staging. Integration against `mongo:8.2` on 57017 (standalone, auth) and 57018 (single-node replica set
+  without auth, `--port 57018` so the member address `127.0.0.1:57018` works from host and container):
+  types through edits, optimistic conflicts, replace safety, «Cargar más», read commands, guard (including the
+  escaped `$out`), killOp cancel and late cancel, indexes/validator/rename/empty, read-only reasons, sampling,
+  log redaction, atomic batches and tab transactions on the replica set, `.vqb` round trip/replace/encryption,
+  AI context without values. The smoke run has an optional MongoDB step.
 
 ### P5. MariaDB as its own engine
 

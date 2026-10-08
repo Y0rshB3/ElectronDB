@@ -41,6 +41,10 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 - **SQLite (vista previa)**: abre un archivo `.db` o crea uno nuevo (nunca se crea por error), bases de datos
   adjuntas, consultas con cancelación, datos editables por `rowid`, diseñador que reconstruye la tabla sin perder
   datos y copias `.vqb` ([SQLite (vista previa)](#sqlite-vista-previa)).
+- **MongoDB (vista previa)**: independiente, conjunto de réplicas o SRV (también por túnel SSH), documentos en
+  tabla, árbol o JSON que se editan **sin cambiar sus tipos BSON**, pestañas de consulta con órdenes del shell
+  (sin ejecutar JavaScript), índices, validador, transacciones en conjuntos de réplicas y copias `.vqb`
+  ([MongoDB (vista previa)](#mongodb-vista-previa)).
 - **Conexiones MySQL/MariaDB** con colores, entorno (Local, Staging, Producción, Otro), túnel SSH (contraseña o
   clave privada), SSL, sin contraseña para proxies o certificados, lista de bases de datos personalizada y
   consultas iniciales de sesión.
@@ -444,6 +448,76 @@ KEY`). El filtro «contiene» usa `LIKE`, que en SQLite no distingue mayúsculas
 - **Límites**: no se abren archivos cifrados (SQLCipher); como mucho 4 archivos SQLite abiertos a la vez (cada
   uno usa su propio proceso).
 
+### MongoDB (vista previa)
+
+Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión MongoDB**. Las conexiones MongoDB ya
+creadas se abren aunque desactives el ajuste.
+
+- **Conexión**: **Pegar URI** rellena los campos a partir de una URI `mongodb://` o `mongodb+srv://` (la
+  contraseña pasa a su campo y la URI no se guarda; una URI con credenciales en los parámetros, como
+  `authMechanismProperties` o `tlsCertificateKeyFilePassword`, se rechaza). Método **Independiente**,
+  **Conjunto de réplicas** (lista de miembros y nombre del conjunto) o **Clúster fragmentado**; **Registro SRV**
+  (activa TLS). Autenticación SCRAM (negociada, SHA-1 o SHA-256), LDAP (PLAIN), certificado X.509 o ninguna, con
+  su base de autenticación (`authSource`); Kerberos, AWS y OIDC no están soportados. Base de datos
+  predeterminada, preferencia de lectura, conexión directa, TLS (CA, certificado y clave de cliente con su
+  contraseña, verificación del nombre del servidor), tiempo de conexión (10 s por defecto), reintentos y
+  opciones extra sin credenciales. Por **túnel SSH** solo se conecta a un servidor (independiente o directo a un
+  miembro); TLS comprueba el nombre del servidor real, no `127.0.0.1`. **Copiar URI** (menú de la conexión) nunca
+  incluye la contraseña. **Probar conexión** dice la topología y el papel del miembro (un secundario es de solo
+  lectura).
+- **Árbol**: conexión › base de datos › **Colecciones** (con documentos, tamaño, almacenamiento, índices y
+  tamaño medio), **Vistas**, **Índices** y Consultas. Las colecciones `system.*` no se muestran.
+- **Documentos**: doble clic abre la colección. **Filtro**, **Orden** y **Proyección** con la sintaxis del shell
+  (`{ estado: 'A', creado: { $gt: ISODate('2026-01-01') } }`, `ObjectId('…')`, `NumberLong('…')`, `/re/i`…;
+  recuerda las últimas de cada colección), páginas con límite y **Cargar más** sobre el mismo cursor. Tres
+  modos: **Tabla** (un campo por columna, `_id` primero, icono de tipo en cada celda y aviso «mixto» si una
+  columna tiene varios tipos), **Árbol** (clave, valor y tipo, con añadir y quitar campos o elementos) y
+  **JSON**. Las fechas se ven en UTC con la hora local en el tooltip (o en hora local con **Hora local**); el
+  tooltip de un `ObjectId` dice cuándo se creó, y el menú copia el valor, el filtro `{ _id: … }` o el documento.
+- **Edición**: doble clic en un valor abre el editor con su **tipo BSON** (Int32, Int64, Double, Decimal128,
+  texto, booleano, fecha, ObjectId, null): escribir `5` en un Int32 lo deja en Int32. Los cambios se acumulan
+  hasta **Aplicar** y se envían como `$set`/`$unset` por `_id`, comprobando que el documento no ha cambiado
+  desde que se cargó («El documento ha cambiado… recarga»). Cambiar un elemento de un array reescribe el array
+  entero (un `$unset` dejaría un `null`). Los campos con `.` o que empiezan por `$` se editan desde el documento
+  completo. **Editar** abre el documento entero en sintaxis del shell (si estaba proyectado o era muy grande se
+  vuelve a leer completo antes; reemplazar un documento parcial borraría lo que no se ve), **Insertar** propone
+  los campos de la colección con valores de ejemplo de su tipo y **Duplicar** copia uno sin `_id`. Vistas,
+  colecciones limitadas, series temporales y fragmentos de GridFS son de solo lectura (con el motivo). En un
+  conjunto de réplicas, los cambios de **Aplicar** van en una transacción (todos o ninguno); en un servidor
+  independiente se aplican uno a uno y, si uno falla, se dice cuál y no se envían los siguientes.
+- **Pestañas de consulta**: `db.colección.find(…)`, `findOne`, `aggregate`, `countDocuments`,
+  `estimatedDocumentCount`, `distinct`, `getIndexes`, `stats`, `explain`, los de escritura (`insertOne/Many`,
+  `updateOne/Many`, `replaceOne`, `deleteOne/Many`, `findOneAnd…`, `bulkWrite`, `createIndex`, `dropIndex`,
+  `drop`, `renameCollection`), `db.stats()`, `db.getCollectionNames()`, `db.createCollection()`,
+  `rs.status()`, `use <bd>` y `show dbs|collections`. Se aceptan `.sort()`, `.limit()`, `.skip()`,
+  `.project()`, `.count()`, `.pretty()` y `.toArray()` copiados del shell. **Nunca se ejecuta JavaScript**: el
+  texto se analiza con una gramática cerrada y los argumentos solo pueden ser valores (con `ObjectId()`,
+  `ISODate()`, `new Date()`…); `var`, funciones, `forEach` o `runCommand` se rechazan con la posición del error
+  y no se ejecuta nada del script. Autocompletado de colecciones, métodos, operadores `$` y nombres de campos.
+  **Detener** corta la operación en el servidor (`killOp`). Cada pestaña tiene su base de datos (`use`) y, en
+  conjuntos de réplicas, **Iniciar transacción** / **Confirmar** / **Deshacer**. Los documentos de `find` y de un
+  `aggregate` con solo `$match`, `$sort`, `$limit`, `$skip` y `$project` de inclusión se editan en el resultado.
+- **Diseñar** una colección: **Índices** (crear con campos ascendentes, descendentes, texto, 2dsphere o hash,
+  único, disperso, oculto, TTL, filtro parcial e intercalación; eliminar con confirmación; `_id_` no se
+  elimina), **Validador** (`$jsonSchema` u operadores, nivel y acción, con **Generar esquema** a partir de una
+  muestra de tipos) y **Opciones** (solo lectura, y **Renombrar**). El menú de la colección también tiene
+  **Contar exacto**, **Vaciar** (`deleteMany({})`) y **Eliminar**; el de la base de datos, **Nueva colección** y
+  **Eliminar base de datos**. **Nueva base de datos** pide también la primera colección.
+- **Producción**: toda escritura (cuadrícula, editor, consultas, índices, validador, colecciones, copias)
+  pide el nombre de la conexión. Un `aggregate` con `$out` o `$merge` es una escritura, aunque esté escrito con
+  escapes: se decide con el pipeline ya analizado.
+- **Copias**: `.vqb` de una base de datos (o de algunas colecciones): documentos con todos sus tipos BSON,
+  opciones de cada colección, validador, índices y vistas. Se restaura en otra base de datos (nueva o
+  existente) o **reemplazando** la base de datos tras una copia previa. La automatización todavía no admite
+  MongoDB.
+- **Asistente de IA**: lee solo la estructura (nombres de colecciones, índices, la parte estructural del
+  `$jsonSchema` y los nombres y tipos de los campos de una muestra; nunca valores) y responde con órdenes del
+  shell.
+- **Importar**: las conexiones MongoDB de los `.ncx` de Navicat (con sus contraseñas) y de DBeaver se importan
+  con la vista previa activada (DocumentDB y Cosmos DB, sin reintento de escrituras).
+- **Límites**: sin pantallas de usuarios y roles; sin conjuntos de réplicas ni SRV por túnel SSH; sin GSSAPI,
+  AWS ni OIDC.
+
 ### Importar desde otros gestores
 
 **Más › Importar…** (también **Conexión › Importar…**, el botón **Importar…** de la lista vacía y el último paso
@@ -451,18 +525,18 @@ del tour) abre un asistente: eliges el **origen**, luego el **archivo o la carpe
 marcas qué traer. Vortaq solo lee el archivo o la carpeta que eliges (o que confirmas en su ubicación habitual):
 nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almacenes cifrados de otros programas.
 
-| Origen                          | Qué se importa                                                                        | Contraseñas                                |
-| ------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                               | No (no están en esos archivos)             |
-| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL (y PostgreSQL/SQLite en vista previa)          | Sí, si lo exportaste con «Export Password» |
-| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (y PostgreSQL/SQLite en vista previa) | No                                         |
-| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                                 | No                                         |
-| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                         | —                                          |
-| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                         | —                                          |
-| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada)      | —                                          |
-| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                           | —                                          |
+| Origen                          | Qué se importa                                                                                | Contraseñas                                |
+| ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                                       | No (no están en esos archivos)             |
+| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL (y PostgreSQL/SQLite/MongoDB en vista previa)          | Sí, si lo exportaste con «Export Password» |
+| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (y PostgreSQL/SQLite/MongoDB en vista previa) | No                                         |
+| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                                         | No                                         |
+| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                                 | —                                          |
+| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                                 | —                                          |
+| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada)              | —                                          |
+| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                                   | —                                          |
 
-Las conexiones PostgreSQL y SQLite se importan con **Ajustes › Motores en vista previa** activado; las de otros
+Las conexiones PostgreSQL, SQLite y MongoDB se importan con **Ajustes › Motores en vista previa** activado; las de otros
 motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
 el mismo programa (mismo nombre), sale como **ya importada**: al marcarla se actualizan sus datos y se
 conservan su entorno (Producción nunca se rebaja), su carpeta de copias y sus contraseñas guardadas.
@@ -660,6 +734,9 @@ de copia nuevos de la automatización. Su especificación es pública: [docs/vqb
   especificación trae un lector de ejemplo en Python.
 - **SQLite**: la copia incluye una base de datos entera (tablas con cada valor y su tipo exacto, índices, vistas,
   triggers y contadores de `AUTOINCREMENT`) y se restaura en un archivo nuevo o reemplazando la base de datos.
+- **MongoDB**: cada documento se guarda en Extended JSON canónico, así que un Int64, un Decimal128 o la
+  diferencia entre Int32 y Double vuelven tal cual; también las opciones de cada colección, su validador, sus
+  índices y las vistas. Se restaura en otra base de datos o reemplazando la base de datos.
 - **MySQL, MariaDB y PostgreSQL**: en PostgreSQL la copia incluye la base de datos entera (todos sus esquemas,
   extensiones, tipos, secuencias, tablas y datos, funciones, vistas, índices, claves foráneas y triggers). Una
   copia se restaura solo en el mismo motor. En PostgreSQL la restauración es una única transacción: si algo
@@ -1314,19 +1391,19 @@ el registro es más detallado y se copia también en la terminal.
 
 ## Desarrollo
 
-| Comando                             | Qué hace                                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------- |
-| `npm run dev`                       | App en modo desarrollo con recarga en caliente                                           |
-| `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio)              |
-| `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                                       |
-| `npm run test:watch`                | Tests en modo observación                                                                |
-| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)                       |
-| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, MariaDB 11 y PostgreSQL 17; falla si falta alguna URL |
-| `npm run lint`                      | ESLint                                                                                   |
-| `npm run format`                    | Prettier                                                                                 |
-| `npm run build`                     | Compila a `out/`                                                                         |
-| `npm run dist[:mac/:win/:linux]`    | Instaladores en `release/`                                                               |
-| `npm run screenshots`               | Capturas de todas las pantallas con un perfil y un MySQL desechables                     |
+| Comando                             | Qué hace                                                                                              |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `npm run dev`                       | App en modo desarrollo con recarga en caliente                                                        |
+| `npm run check`                     | Lint + typecheck + tests unitarios (debe pasar antes de entregar un cambio)                           |
+| `npm test`                          | Tests unitarios (Vitest, proyectos `node` y `web`)                                                    |
+| `npm run test:watch`                | Tests en modo observación                                                                             |
+| `npm run test:integration`          | Tests contra un MySQL real (se omiten sin `VORTAQ_TEST_MYSQL_URL`)                                    |
+| `npm run test:integration:required` | Igual, contra MySQL 8.4 **y** 5.7, MariaDB 11, PostgreSQL 17 y MongoDB 8.2; falla si falta alguna URL |
+| `npm run lint`                      | ESLint                                                                                                |
+| `npm run format`                    | Prettier                                                                                              |
+| `npm run build`                     | Compila a `out/`                                                                                      |
+| `npm run dist[:mac/:win/:linux]`    | Instaladores en `release/`                                                                            |
+| `npm run screenshots`               | Capturas de todas las pantallas con un perfil y un MySQL desechables                                  |
 
 ### Tests de integración
 
@@ -1355,9 +1432,23 @@ docker exec vortaq-test-mysql mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wai
 docker exec vortaq-test-mysql57 mysqladmin ping -h127.0.0.1 -uroot -pnavidog --wait=60
 ```
 
+MongoDB (8.2: `mongo:8` 8.3 no arranca en los kernels recientes de Docker Desktop) necesita dos contenedores:
+uno independiente con usuario y un conjunto de réplicas de un solo miembro para las transacciones:
+
+```sh
+docker run -d --name vortaq-test-mongo -p 127.0.0.1:57017:27017 -e MONGO_INITDB_ROOT_USERNAME=root -e MONGO_INITDB_ROOT_PASSWORD=navidog mongo:8.2
+docker run -d --name vortaq-test-mongo-rs -p 127.0.0.1:57018:57018 mongo:8.2 mongod --replSet rs0 --port 57018 --bind_ip_all
+# Una sola vez, cuando el segundo haya arrancado:
+docker exec vortaq-test-mongo-rs mongosh --port 57018 --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:57018" }] })'
+```
+
+(o `docker compose -f tests/docker-compose.yml up -d --wait mongo82 mongo82rs` y el mismo `rs.initiate` con
+`docker compose … exec mongo82rs`).
+
 `npm run test:integration:required` es la puerta de calidad: ejecuta las suites de MySQL y de backups contra
-los dos MySQL, las de MariaDB y PostgreSQL contra los suyos, y **falla** (en vez de omitirlas) si falta
-`VORTAQ_TEST_MYSQL_URL`, `VORTAQ_TEST_MYSQL57_URL`, `VORTAQ_TEST_MARIADB_URL` o `VORTAQ_TEST_PG_URL`.
+los dos MySQL, las de MariaDB, PostgreSQL y MongoDB contra los suyos, y **falla** (en vez de omitirlas) si falta
+`VORTAQ_TEST_MYSQL_URL`, `VORTAQ_TEST_MYSQL57_URL`, `VORTAQ_TEST_MARIADB_URL`, `VORTAQ_TEST_PG_URL`,
+`VORTAQ_TEST_MONGO_URL` o `VORTAQ_TEST_MONGO_RS_URL`.
 `VORTAQ_TEST_SSH_URL` es opcional: sin ella solo se omite el test del túnel SSH de PostgreSQL.
 `npm run test:integration` omite en silencio el servidor que no tenga URL.
 
@@ -1367,6 +1458,8 @@ VORTAQ_TEST_MYSQL_URL='mysql://root:navidog@127.0.0.1:33306/navidog_test' \
 VORTAQ_TEST_MYSQL57_URL='mysql://root:navidog@127.0.0.1:33357/navidog_test' \
 VORTAQ_TEST_MARIADB_URL='mysql://root:navidog@127.0.0.1:33311/navidog_test' \
 VORTAQ_TEST_PG_URL='postgres://postgres:navidog@127.0.0.1:55432/navidog_test' \
+VORTAQ_TEST_MONGO_URL='mongodb://root:navidog@127.0.0.1:57017/?authSource=admin' \
+VORTAQ_TEST_MONGO_RS_URL='mongodb://127.0.0.1:57018/?replicaSet=rs0' \
 VORTAQ_TEST_SSH_URL='ssh://vortaq:navidog@127.0.0.1:52222' \
 npm run test:integration:required
 ```
@@ -1377,6 +1470,8 @@ $env:VORTAQ_TEST_MYSQL_URL = 'mysql://root:navidog@127.0.0.1:33306/navidog_test'
 $env:VORTAQ_TEST_MYSQL57_URL = 'mysql://root:navidog@127.0.0.1:33357/navidog_test'
 $env:VORTAQ_TEST_MARIADB_URL = 'mysql://root:navidog@127.0.0.1:33311/navidog_test'
 $env:VORTAQ_TEST_PG_URL = 'postgres://postgres:navidog@127.0.0.1:55432/navidog_test'
+$env:VORTAQ_TEST_MONGO_URL = 'mongodb://root:navidog@127.0.0.1:57017/?authSource=admin'
+$env:VORTAQ_TEST_MONGO_RS_URL = 'mongodb://127.0.0.1:57018/?replicaSet=rs0'
 $env:VORTAQ_TEST_SSH_URL = 'ssh://vortaq:navidog@127.0.0.1:52222'
 npm run test:integration:required
 ```
@@ -1453,12 +1548,15 @@ ejecución, y su carpeta debe llamarse `profile`.
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VORTAQ_USER_DATA=<carpeta>`    | Usa otro perfil (conexiones, trabajos, contraseñas, copias, registros). Con un perfil alternativo no se instalan LaunchAgents.                                                                            |
 | `VORTAQ_PLAIN_SECRETS=1`        | Guarda las contraseñas solo en base64, sin cifrar. Solo para perfiles de prueba.                                                                                                                          |
-| `VORTAQ_SMOKE=1`                | Arranca, prueba varios canales IPC, imprime `[smoke] {...}` y sale (0 = todo bien).                                                                                                                       |
+| `VORTAQ_SMOKE=1`                | Arranca, prueba varios canales IPC, SQLite (y MongoDB si hay URL de prueba), imprime `[smoke] {...}` y sale (0 = todo bien).                                                                              |
 | `VORTAQ_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                  |
 | `VORTAQ_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                          |
 | `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
 | `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                                    |
 | `VORTAQ_TEST_PG_URL`            | PostgreSQL 17 desechable (`postgres://…:55432/…`) para `npm run test:integration[:required]`.                                                                                                             |
+| `VORTAQ_TEST_MONGO_URL`         | MongoDB 8.2 independiente desechable (`mongodb://root:…@127.0.0.1:57017/?authSource=admin`) para `npm run test:integration[:required]`; también activa el paso de MongoDB de `VORTAQ_SMOKE`.              |
+| `VORTAQ_TEST_MONGO_RS_URL`      | Conjunto de réplicas MongoDB 8.2 de un miembro (`mongodb://127.0.0.1:57018/?replicaSet=rs0`) para las transacciones en `npm run test:integration[:required]`.                                             |
+| `VORTAQ_SMOKE_MONGO_URL`        | Servidor MongoDB desechable para el paso de MongoDB de `VORTAQ_SMOKE` (si falta, se usa `VORTAQ_TEST_MONGO_URL`; sin ninguna, el paso se omite).                                                          |
 | `VORTAQ_TEST_SSH_URL`           | Servidor SSH de prueba (`ssh://usuario:clave@127.0.0.1:52222`, servicio `sshd` del compose) para el test del túnel de PostgreSQL; opcional.                                                               |
 | `VORTAQ_TEST_KEYCHAIN_DIR`      | Carpeta desechable para el test del llavero de macOS en `npm run test:integration`.                                                                                                                       |
 | `VORTAQ_SCREENSHOTS=<dir>`      | Arnés de capturas. Exige `VORTAQ_USER_DATA`.                                                                                                                                                              |

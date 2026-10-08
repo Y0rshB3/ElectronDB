@@ -7,9 +7,10 @@ document are parsed by the test suite (`src/main/backup/vqb/spec.test.ts`), so t
 valid.
 
 - File extension: `.vqb`. Suggested media type: `application/vnd.vortaq.backup+zip`.
-- Engines in version 1: MySQL and MariaDB (`"engine": {"id": "mysql"}`) and PostgreSQL
-  (`"engine": {"id": "postgresql"}`).
-- One file holds one MySQL schema or one PostgreSQL database (all of its non-system schemas).
+- Engines in version 1: MySQL and MariaDB (`"engine": {"id": "mysql"}`), PostgreSQL
+  (`"engine": {"id": "postgresql"}`), SQLite (`"sqlite"`) and MongoDB (`"mongodb"`).
+- One file holds one MySQL schema, one PostgreSQL database (all of its non-system schemas), one SQLite
+  database or one MongoDB database (all of its collections and views, or the ones selected).
 - Restores go to the same engine only.
 
 ## 1. Container
@@ -161,9 +162,9 @@ password).
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `format`, `formatVersion`            | Same as the header.                                                                                                                                                                                                    |
 | `app`                                | Program that wrote the file.                                                                                                                                                                                           |
-| `engine`                             | `id`: `mysql` (MySQL and MariaDB), `postgresql` or `sqlite`. `flavor`: `mysql`, `mariadb`, `postgresql` or `sqlite`. `serverVersion`: as the server reports it.                                                        |
+| `engine`                             | `id`: `mysql` (MySQL and MariaDB), `postgresql`, `sqlite` or `mongodb`. `flavor`: `mysql`, `mariadb`, `postgresql`, `sqlite` or `mongodb`. `serverVersion`: as the server reports it.                                  |
 | `source.connectionName`              | Name of the connection in the app. Omitted when the user chooses not to record it.                                                                                                                                     |
-| `source.database`                    | MySQL: the schema. PostgreSQL: the database. SQLite: the attached database alias (`main`).                                                                                                                             |
+| `source.database`                    | MySQL: the schema. PostgreSQL: the database. SQLite: the attached database alias (`main`). MongoDB: the database.                                                                                                      |
 | `source.schemas`                     | PostgreSQL only: schemas included (every non-system schema).                                                                                                                                                           |
 | `source.charset`, `source.collation` | MySQL only: the schema defaults, used when the schema is created again.                                                                                                                                                |
 | `source.encoding`                    | PostgreSQL: `server_encoding` of the database. SQLite: `PRAGMA encoding`.                                                                                                                                              |
@@ -176,6 +177,7 @@ password).
 | `warnings`                           | Optional: what the backup could not include, in the user's language (MariaDB system-versioned tables, PostgreSQL aggregates…).                                                                                         |
 
 Object `type`s: MySQL/MariaDB `table`, `view`, `function`, `procedure`, `event`; SQLite `table`, `view`;
+MongoDB `collection`, `view`;
 PostgreSQL `extension`, `type`, `sequence`, `table`, `function`, `procedure`, `view`,
 `materialized_view`.
 
@@ -327,6 +329,44 @@ kept (they are renumbered on restore).
 [{"$float":"-0"},"texto ñ",{"$bin":"AP8Q"},null]
 ```
 
+### MongoDB
+
+A collection is one object of type `collection` with a single column, `{"name": "document", "type":
+"bson"}`. Each row holds one document as a `$json` value whose text is the document's **canonical Extended
+JSON** (MongoDB Extended JSON v2, `relaxed: false`): every BSON type keeps its wrapper (`$oid`, `$date`
+with `$numberLong`, `$numberInt`, `$numberLong`, `$numberDouble`, `$numberDecimal`, `$binary` with its
+subtype, `$timestamp`, `$regularExpression`, `$minKey`, `$maxKey`, `$code`…), so an Int64 above 2^53, a
+Decimal128 or the difference between an Int32 and a Double with an integral value survive, and field order
+is kept. Documents are written in natural order.
+
+`ddl.sql` is not SQL for this engine: it is the canonical Extended JSON of the `create` command that
+recreates the object, built from `listCollections` (its `uuid` left out):
+
+```json
+{
+  "create": "people",
+  "validator": { "$jsonSchema": { "bsonType": "object", "required": ["name"] } },
+  "validationLevel": "moderate"
+}
+```
+
+A view's `ddl.sql` is `{"create": "<view>", "viewOn": "<collection>", "pipeline": [...]}`. A collection's
+`indexes` (meta.json) holds the canonical Extended JSON of every index specification except `_id_`
+(`{"key": {"name": {"$numberInt": "1"}}, "name": "name_u", "unique": true}`), without `v` and `ns`.
+
+```jsonl vqb-rows
+[
+  {
+    "$json": "{\"_id\":{\"$oid\":\"6ac6f781fc637c60b5590643\"},\"n\":{\"$numberLong\":\"9007199254740993\"}}"
+  }
+]
+```
+
+Restore: parse each document with an Extended JSON parser in canonical mode and insert it (Vortaq uses
+`insertMany` in batches with `bypassDocumentValidation`, so documents written under an older validator come
+back as they were). MongoDB has no snapshot across collections outside a transaction: each collection is read
+as it is when its turn comes.
+
 ### Restore order
 
 - MySQL/MariaDB: tables (DDL, rows, triggers, `AUTO_INCREMENT`), functions and procedures,
@@ -338,6 +378,10 @@ kept (they are renumbered on restore).
   sequences' `postDdl` and `setval` of `sequences`. Vortaq runs it all in one transaction
   with `search_path = pg_catalog` and `check_function_bodies = off`, and does not restore
   owners or privileges.
+- MongoDB: collections (created with the options of `ddl.sql`), their documents, their `indexes`, then
+  views. There is no transactional DDL: a failure stops the restore (unless «Continuar en caso de error») and
+  leaves what was already restored; «Reemplazar la base de datos» takes a safety copy first and drops the
+  database before restoring.
 - SQLite: tables and their rows, `sqlite_sequence` values (`autoIncrement`), every table's
   `indexes`, views (archive order is creation order), then the `triggers` of tables and views.
   Vortaq runs it all in one transaction with `PRAGMA foreign_keys = OFF` (restored afterwards),
@@ -461,4 +505,6 @@ for obj in manifest["objects"]:
 - MariaDB: system-versioned tables and sequences are left out (listed in `warnings`).
 - SQLite: virtual tables (FTS, R-Tree…) are left out (listed in `warnings`), and so are rowids
   of tables without an `INTEGER PRIMARY KEY`.
+- MongoDB: users, roles and `system.*` collections are not included; a backup is not a point-in-time
+  snapshot of the whole database (each collection is read in turn).
 - Restores go to the same engine only.
