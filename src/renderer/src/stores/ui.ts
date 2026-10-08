@@ -87,6 +87,14 @@ export const useUiStore = defineStore('ui', () => {
     open: false,
     connectionId: null
   })
+  /** «Duplicar colección» (MongoDB); `view` duplicates a view's pipeline. */
+  const duplicateCollectionDialog = ref<{
+    open: boolean
+    connectionId: string | null
+    database: string | null
+    collection: string | null
+    view: boolean
+  }>({ open: false, connectionId: null, database: null, collection: null, view: false })
   const backupDialog = ref<{
     open: boolean
     connectionId: string | null
@@ -116,6 +124,14 @@ export const useUiStore = defineStore('ui', () => {
   }
   function openNewDatabaseDialog(connectionId: string): void {
     newDatabaseDialog.value = { open: true, connectionId }
+  }
+  function openDuplicateCollection(
+    connectionId: string,
+    database: string,
+    collection: string,
+    view = false
+  ): void {
+    duplicateCollectionDialog.value = { open: true, connectionId, database, collection, view }
   }
   function openBackupDialog(
     connectionId: string,
@@ -193,6 +209,7 @@ export const useUiStore = defineStore('ui', () => {
     settingsDialog,
     aboutDialog,
     newDatabaseDialog,
+    duplicateCollectionDialog,
     backupDialog,
     restoreDialog,
     confirm,
@@ -206,6 +223,7 @@ export const useUiStore = defineStore('ui', () => {
     toggleInfoPanel,
     toggleAiPanel,
     openNewDatabaseDialog,
+    openDuplicateCollection,
     openBackupDialog,
     openRestoreDialog,
     ask,

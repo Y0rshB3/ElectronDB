@@ -122,6 +122,16 @@ export function createMongoHandlers(
       guard(id, writeOptions, `Renombrar la colección «${from}»`)
       await admin.renameCollection(await connectionOf(id), database(db), from, to)
     },
+    'mongo:duplicateCollection': async (id, db, source, target, includeDocuments, writeOptions) => {
+      guard(id, writeOptions, `Duplicar la colección «${source}»`)
+      return admin.duplicateCollection(
+        await connectionOf(id),
+        database(db),
+        source,
+        target,
+        includeDocuments === true
+      )
+    },
     'mongo:clearCollection': async (id, db, coll, writeOptions) => {
       guard(id, writeOptions, `Vaciar la colección «${coll}»`)
       return admin.clearCollection(await connectionOf(id), database(db), coll)

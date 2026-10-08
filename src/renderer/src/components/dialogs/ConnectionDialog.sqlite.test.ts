@@ -6,8 +6,9 @@ import { useUiStore } from '@renderer/stores/ui'
 import ConnectionDialog from './ConnectionDialog.vue'
 import { emptyConnectionInput, sqliteNameFromPath } from './connectionForm'
 import { freshPinia, makeConnection, mockVortaq, mountWith, settle } from './testing'
+import { installDomPolyfills } from '@renderer/__tests__/shellTestUtils'
 
-describe('ConnectionDialog · SQLite (preview)', () => {
+describe('ConnectionDialog · SQLite', () => {
   let invoke: Mock
   let wrapper: ReturnType<typeof mountWith> | null = null
   let picked: string | null
@@ -67,6 +68,32 @@ describe('ConnectionDialog · SQLite (preview)', () => {
     })
     expect(invoke.mock.calls.some((c) => c[0] === 'connections:setPassword')).toBe(false)
     expect(invoke.mock.calls.some((c) => c[0] === 'sqlite:createFile')).toBe(false)
+  })
+
+  it('offers the recent SQLite files of earlier connections («Recientes»)', async () => {
+    installDomPolyfills()
+    localStorage.removeItem('electrondb.sqlite.recentFiles')
+    await openNew()
+    expect(wrapper!.find('[data-test="sqlite-recent"]').exists()).toBe(false)
+    await wrapper!.get('[data-test="sqlite-open-file"]').trigger('click')
+    await settle()
+    wrapper!.unmount()
+    // A new dialog lists the file picked before; choosing it fills the path.
+    localStorage.setItem(
+      'electrondb.sqlite.recentFiles',
+      JSON.stringify(['/data/notas.db', '/data/shop.sqlite3'])
+    )
+    await openNew()
+    await wrapper!.get('[data-test="sqlite-recent"]').trigger('click')
+    await settle()
+    const item = document.querySelector('[data-test="sqlite-recent-notas.db"]') as HTMLElement
+    expect(item).not.toBeNull()
+    item.click()
+    await settle()
+    expect(
+      (wrapper!.get('[data-test="sqlite-path"] input').element as HTMLInputElement).value
+    ).toBe('/data/notas.db')
+    localStorage.removeItem('electrondb.sqlite.recentFiles')
   })
 
   it('«Crear base de datos nueva…» creates the file and turns foreign keys on', async () => {

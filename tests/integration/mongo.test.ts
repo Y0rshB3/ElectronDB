@@ -428,6 +428,52 @@ describeServer(MONGO_TARGET, 'MongoDB driver (integration)', (url) => {
     expect(await h.channels['mongo:clearCollection'](id, DB, 'renamed')).toBe(2)
   })
 
+  it('duplicates a collection with its options, indexes and typed documents', async () => {
+    await h.channels['mongo:createCollection'](id, DB, 'dup_src', {
+      validator: "{ $jsonSchema: { bsonType: 'object', required: ['k'] } }"
+    })
+    ok(
+      await run(
+        "db.dup_src.insertMany([{ k: NumberLong('9007199254740993'), d: NumberDecimal('1.10') }, { k: 2 }])"
+      )
+    )
+    await h.channels['mongo:createIndex'](id, DB, 'dup_src', { keys: '{ k: 1 }', unique: true })
+    // Production needs the typed confirmation.
+    await expect(
+      h.channels['mongo:duplicateCollection'](prodId, DB, 'dup_src', 'dup_x', true)
+    ).rejects.toThrow(/confirmación/)
+    const result = await h.channels['mongo:duplicateCollection'](
+      id,
+      DB,
+      'dup_src',
+      'dup_copy',
+      true
+    )
+    expect(result).toEqual({ documents: 2, indexes: 1, warnings: [] })
+    const details = await h.channels['mongo:collectionDetails'](id, DB, 'dup_copy')
+    expect(details.indexes.map((i) => i.name).sort()).toEqual(['_id_', 'k_1'])
+    expect(details.validator).toContain('required')
+    const page = await h.channels['mongo:find'](id, {
+      database: DB,
+      collection: 'dup_copy',
+      filter: '',
+      sort: '',
+      projection: '',
+      skip: 0,
+      limit: 10
+    })
+    expect(page.docs.join()).toContain('$numberLong')
+    expect(page.docs.join()).toContain('$numberDecimal')
+    // Without documents; an existing name is refused.
+    expect(
+      await h.channels['mongo:duplicateCollection'](id, DB, 'dup_src', 'dup_empty', false)
+    ).toMatchObject({ documents: 0, indexes: 1 })
+    expect(await h.channels['mongo:countDocuments'](id, DB, 'dup_empty')).toBe(0)
+    await expect(
+      h.channels['mongo:duplicateCollection'](id, DB, 'dup_src', 'dup_copy', true)
+    ).rejects.toThrow(/Ya existe/)
+  })
+
   it('marks views, capped and GridFS chunks read-only', async () => {
     await h.channels['mongo:createCollection'](id, DB, 'log', { capped: true, size: 65536 })
     ok(

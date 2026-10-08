@@ -282,6 +282,15 @@ export const api = {
       to: string,
       writeOptions?: WriteOptions
     ) => invoke('mongo:renameCollection', c, db, from, to, writeOptions),
+    duplicateCollection: (
+      c: string,
+      db: string,
+      source: string,
+      target: string,
+      includeDocuments: boolean,
+      writeOptions?: WriteOptions
+    ) =>
+      invoke('mongo:duplicateCollection', c, db, source, target, includeDocuments, writeOptions),
     clearCollection: (c: string, db: string, coll: string, writeOptions?: WriteOptions) =>
       invoke('mongo:clearCollection', c, db, coll, writeOptions),
     countDocuments: (c: string, db: string, coll: string) =>

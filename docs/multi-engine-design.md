@@ -2092,9 +2092,9 @@ What shipped, and where it differs from the text above (each point is deliberate
   Debian 12 container (amd64 emulated, cancel 592 ms): `utilityProcess.fork` starts the worker from
   inside `app.asar`, so no `asarUnpack` is needed. The Windows build was produced and checked
   (worker in app.asar, no native modules) but not run.
-- **Not done in P3:** the preview flag stays on (the user decides when to switch it off); the Windows
-  packaged smoke; SQLite recent files and drag-and-drop remain named for later; automation jobs for
-  SQLite backups are off.
+- **Not done in P3:** the preview flag stayed on (removed for 2.0.0 on 2026-10-08); the Windows
+  packaged smoke; drag-and-drop of files remains named for later (recent files and automation jobs for
+  SQLite backups were done on 2026-10-08).
 - `package.json` `engines.node` is `>=24` (tests use `columns()` and `setReturnArrays`).
 
 ### P4a. MongoDB: connect, browse, edit, read queries
@@ -2162,9 +2162,10 @@ What shipped, and where it differs from the text above (each point is deliberate
   inside a transaction keep no «Cargar más» cursor. Documents of `find`/`findOne` and of aggregates limited to
   `$match/$sort/$limit/$skip/inclusion $project` are editable.
 - **Not done in P4 (named for later):** the visual aggregation stage builder (`AggregateView.vue`,
-  `mongo:aggregate` with stage previews) — aggregates run in the query tab; «Duplicar colección»; the Navicat
-  folder (`conn.plist`) mapping of MongoDB rows (only `.ncx` and DBeaver import MongoDB, like SQLite in P3);
-  automation; the explain view; user/role screens. The preview flag stays on (the user decides).
+  `mongo:aggregate` with stage previews) — aggregates run in the query tab; «Duplicar colección» (done
+  2026-10-08: `mongo:duplicateCollection`, options + indexes + raw documents, views by pipeline); the Navicat
+  folder (`conn.plist`) mapping of MongoDB rows (done 2026-10-08); automation (done 2026-10-08); the explain
+  view; user/role screens. The preview flag stayed on until 2026-10-08 (removed for 2.0.0).
 - **Tree and designer.** Groups `collections`, `views` **and `indexes`** (index nodes `<collection>.<index>`);
   stats columns from `$collStats`; menus Abrir, Diseñar, Nueva consulta, Contar exacto, Renombrar (in the
   designer's Opciones), Vaciar, Eliminar. The designer (`views/CollectionDesignerView.vue`) creates collections
@@ -2332,7 +2333,8 @@ refused by `navicatBlockReason` too. Tested with synthetic files only; never a c
   the UI as absent features rather than broken ones): PostgreSQL has no users/roles screen
   (`hasUsers: false`; `db:users` answers that it is not available), no "Ejecutar función…" runner, and
   RLS policies/rules are not shown; SQLite has no drag-and-drop of `.db` files and its Windows packaged
-  smoke was never run; MongoDB has no visual aggregation stage builder (aggregates run in the query
+  smoke was never run (recent files: «Recientes» in the connection dialog, localStorage
+  `electrondb.sqlite.recentFiles`, paths only); MongoDB has no visual aggregation stage builder (aggregates run in the query
   tab), no explain view and no users/roles screens; job query steps are MySQL/MariaDB only.
 
 #### AI assistant scope and per-engine AI capability (2026-10-07)

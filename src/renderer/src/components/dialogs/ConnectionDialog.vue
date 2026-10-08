@@ -46,6 +46,7 @@ import {
   validateConnectionInput,
   withSslMode
 } from './connectionForm'
+import { recentSqliteFiles, rememberSqliteFile } from '@renderer/utils/sqliteRecent'
 
 const ui = useUiStore()
 const connections = useConnectionsStore()
@@ -126,7 +127,19 @@ const litePathNeedsReview = computed(() => {
 })
 const liteBusy = ref(false)
 
+/** «Recientes»: SQLite files opened or created here before (new connections only). */
+const recentLiteFiles = ref<string[]>([])
+const recentLiteItems = computed(() =>
+  recentLiteFiles.value
+    .filter((p) => p !== liteOptions.value.filePath)
+    .map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }))
+)
+function refreshRecentLiteFiles(): void {
+  recentLiteFiles.value = recentSqliteFiles()
+}
+
 function useLiteFile(path: string): void {
+  rememberSqliteFile(path)
   patchSqlite({ filePath: path, pathNeedsReview: false })
   if (!form.value.name.trim()) form.value = { ...form.value, name: sqliteNameFromPath(path) }
   testResult.value = null
@@ -385,7 +398,10 @@ async function reset(): Promise<void> {
 watch(
   () => ui.connectionDialog.open,
   (value) => {
-    if (value) void reset()
+    if (value) {
+      void reset()
+      refreshRecentLiteFiles()
+    }
   },
   { immediate: true }
 )
@@ -451,6 +467,8 @@ async function save(): Promise<void> {
     password.value = ''
     sshPassword.value = ''
     sslKeyPassword.value = ''
+    if (input.engine === 'sqlite' && input.sqlite?.filePath && !input.sqlite.pathNeedsReview)
+      rememberSqliteFile(input.sqlite.filePath)
     notify.success(
       wasEditing ? `Conexión «${saved.name}» actualizada` : `Conexión «${saved.name}» creada`
     )
@@ -631,6 +649,29 @@ async function save(): Promise<void> {
                       @click="createLiteFile"
                       >Crear base de datos nueva…</v-btn
                     >
+                    <v-menu v-if="!editing && recentLiteItems.length" location="bottom start">
+                      <template #activator="{ props: menuProps }">
+                        <v-btn
+                          v-bind="menuProps"
+                          size="small"
+                          prepend-icon="mdi-history"
+                          append-icon="mdi-menu-down"
+                          data-test="sqlite-recent"
+                          >Recientes</v-btn
+                        >
+                      </template>
+                      <v-list density="compact" max-width="460">
+                        <v-list-item
+                          v-for="item in recentLiteItems"
+                          :key="item.path"
+                          :title="item.name"
+                          :subtitle="item.path"
+                          prepend-icon="mdi-database-outline"
+                          :data-test="`sqlite-recent-${item.name}`"
+                          @click="useLiteFile(item.path)"
+                        />
+                      </v-list>
+                    </v-menu>
                   </div>
                   <v-alert
                     v-if="litePathNeedsReview"

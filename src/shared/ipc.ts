@@ -441,6 +441,21 @@ export interface IpcInvokeMap {
     ]
     result: void
   }
+  /**
+   * «Duplicar colección»: a new collection with the options and indexes of
+   * `source` (and its documents with `includeDocuments`); views copy their pipeline.
+   */
+  'mongo:duplicateCollection': {
+    args: [
+      connectionId: string,
+      database: string,
+      source: string,
+      target: string,
+      includeDocuments: boolean,
+      writeOptions?: WriteOptions
+    ]
+    result: { documents: number; indexes: number; warnings: string[] }
+  }
   /** «Vaciar»: deleteMany({}); resolves the number of documents deleted. */
   'mongo:clearCollection': {
     args: [connectionId: string, database: string, collection: string, writeOptions?: WriteOptions]
@@ -739,6 +754,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'mongo:beginTransaction',
   'mongo:createCollection',
   'mongo:renameCollection',
+  'mongo:duplicateCollection',
   'mongo:clearCollection',
   'mongo:countDocuments',
   'mongo:createIndex',

@@ -442,7 +442,7 @@ MySQL nada cambia.
 contraseña, SSH ni SSL.
 
 - **Abrir o crear**: **Abrir archivo…** elige un archivo existente; **Crear base de datos nueva…** pregunta dónde
-  guardarlo y lo crea. Es la única forma en que Vortaq crea un archivo SQLite: abrir, probar o importar una ruta
+  guardarlo y lo crea; **Recientes** ofrece los últimos archivos que abriste o creaste (solo en este equipo). Es la única forma en que Vortaq crea un archivo SQLite: abrir, probar o importar una ruta
   que no existe (o una ruta de Windows en un Mac) **nunca crea un archivo vacío**, y un `ATTACH` de un archivo
   que no existe se rechaza. Las rutas importadas de otro equipo quedan marcadas hasta que eliges el archivo.
 - **Opciones**: **Solo lectura** (activada por defecto en Producción; el menú de la conexión tiene **Reabrir en
@@ -541,7 +541,8 @@ KEY`). El filtro «contiene» usa `LIKE`, que en SQLite no distingue mayúsculas
   único, disperso, oculto, TTL, filtro parcial e intercalación; eliminar con confirmación; `_id_` no se
   elimina), **Validador** (`$jsonSchema` u operadores, nivel y acción, con **Generar esquema** a partir de una
   muestra de tipos) y **Opciones** (solo lectura, y **Renombrar**). El menú de la colección también tiene
-  **Contar exacto**, **Vaciar** (`deleteMany({})`) y **Eliminar**; el de la base de datos, **Nueva colección** y
+  **Duplicar…** (opciones, validador e índices, y los documentos con sus tipos si lo marcas; una vista se
+  duplica con su pipeline), **Contar exacto**, **Vaciar** (`deleteMany({})`) y **Eliminar**; el de la base de datos, **Nueva colección** y
   **Eliminar base de datos**. **Nueva base de datos** pide también la primera colección.
 - **Producción**: toda escritura (cuadrícula, editor, consultas, índices, validador, colecciones, copias)
   pide el nombre de la conexión. Un `aggregate` con `$out` o `$merge` es una escritura, aunque esté escrito con

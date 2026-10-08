@@ -1402,6 +1402,12 @@ export function useObjectActions() {
           label: 'Copiar nombre',
           icon: 'mdi-content-copy',
           action: () => copyText(name, 'Nombre')
+        },
+        {
+          key: 'duplicate',
+          label: 'Duplicar…',
+          icon: 'mdi-content-duplicate',
+          action: () => ui.openDuplicateCollection(c, s, name, group === 'views')
         }
       )
       if (group === 'collections')

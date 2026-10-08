@@ -22,6 +22,7 @@ import ImportWizard from '@renderer/components/import/ImportWizard.vue'
 import SettingsDialog from '@renderer/components/dialogs/SettingsDialog.vue'
 import AboutDialog from '@renderer/components/dialogs/AboutDialog.vue'
 import NewDatabaseDialog from '@renderer/components/dialogs/NewDatabaseDialog.vue'
+import DuplicateCollectionDialog from '@renderer/components/mongo/DuplicateCollectionDialog.vue'
 import BackupDialog from '@renderer/components/dialogs/BackupDialog.vue'
 import RestoreDialog from '@renderer/components/dialogs/RestoreDialog.vue'
 import UpdateDialog from '@renderer/components/updates/UpdateDialog.vue'
@@ -132,6 +133,7 @@ onBeforeUnmount(() => {
     <SettingsDialog />
     <AboutDialog />
     <NewDatabaseDialog />
+    <DuplicateCollectionDialog />
     <BackupDialog />
     <RestoreDialog />
     <UpdateDialog />

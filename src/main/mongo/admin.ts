@@ -5,6 +5,7 @@
  * (create/rename/empty a collection, create/drop an index, collMod for the
  * validator). The IPC layer checks the production guard before every write.
  */
+import { calculateObjectSize } from 'bson'
 import type { Document } from 'mongodb'
 import type {
   DatabaseInfo,
@@ -338,6 +339,107 @@ export async function renameCollection(
   } catch (err) {
     throw conn.errorOf(err)
   }
+}
+
+/** Documents per insertMany of «Duplicar colección» (also capped by bytes). */
+const DUPLICATE_BATCH_DOCS = 1000
+const DUPLICATE_BATCH_BYTES = 8 * 1024 * 1024
+
+export interface DuplicateCollectionResult {
+  documents: number
+  indexes: number
+  /** Indexes that could not be recreated (names and the server's reason). */
+  warnings: string[]
+}
+
+/**
+ * «Duplicar colección»: creates `target` with the options of `source`
+ * (validator, capped size, collation, time series, or a view's pipeline),
+ * recreates its indexes and, with `includeDocuments`, copies every document
+ * with its BSON types (raw reads, batched inserts that skip validation, since
+ * the documents already passed it or predate the validator). Refused when
+ * `target` exists; a failure while copying leaves the partial copy, which
+ * the message names.
+ */
+export async function duplicateCollection(
+  conn: MongoDriverConnection,
+  database: string,
+  source: string,
+  target: string,
+  includeDocuments: boolean
+): Promise<DuplicateCollectionResult> {
+  const name = checkName(target, 'Duplicar colección')
+  if (name === source) throw new MongoUserError('Elige un nombre distinto del original.')
+  const db = conn.rawDb(database)
+  let listed: Document[]
+  try {
+    listed = await db.listCollections({ name: { $in: [source, name] } }).toArray()
+  } catch (err) {
+    throw conn.errorOf(err)
+  }
+  const original = listed.find((c) => c.name === source)
+  if (!original) throw new MongoUserError(`La colección «${source}» ya no existe.`)
+  if (listed.some((c) => c.name === name))
+    throw new MongoUserError(`Ya existe una colección o vista «${name}» en ${database}.`)
+  const options = { ...((original.options as Document | undefined) ?? {}) }
+  try {
+    await db.createCollection(name, options)
+  } catch (err) {
+    throw conn.errorOf(err)
+  }
+  const result: DuplicateCollectionResult = { documents: 0, indexes: 0, warnings: [] }
+  if (original.type === 'view') return result
+
+  let specs: Document[] = []
+  try {
+    specs = await conn.rawColl(database, source).listIndexes().toArray()
+  } catch (err) {
+    throw conn.errorOf(err)
+  }
+  for (const spec of specs) {
+    // _id_ and clustered indexes come with the collection itself.
+    if (spec.name === '_id_' || spec.clustered === true) continue
+    const { v: _v, ns: _ns, key, ...indexOptions } = spec
+    try {
+      await conn.coll(database, name).createIndex(key as Document, indexOptions)
+      result.indexes++
+    } catch (err) {
+      result.warnings.push(`Índice ${String(spec.name)}: ${conn.errorOf(err).message}`)
+    }
+  }
+  if (!includeDocuments) return result
+
+  const into = conn.coll(database, name)
+  let batch: Document[] = []
+  let bytes = 0
+  const flush = async (): Promise<void> => {
+    if (!batch.length) return
+    const docs = batch
+    batch = []
+    bytes = 0
+    await into.insertMany(docs, { ordered: true, bypassDocumentValidation: true })
+    result.documents += docs.length
+  }
+  try {
+    for await (const doc of conn
+      .rawColl(database, source)
+      .find({}, { batchSize: DUPLICATE_BATCH_DOCS })) {
+      const size = calculateObjectSize(doc)
+      if (
+        batch.length &&
+        (batch.length >= DUPLICATE_BATCH_DOCS || bytes + size > DUPLICATE_BATCH_BYTES)
+      )
+        await flush()
+      batch.push(doc)
+      bytes += size
+    }
+    await flush()
+  } catch (err) {
+    throw new MongoUserError(
+      `La copia «${name}» quedó a medias (${result.documents} documentos copiados): ${conn.errorOf(err).message} Elimínala o vuelve a duplicar con otro nombre.`
+    )
+  }
+  return result
 }
 
 export async function dropCollection(
