@@ -677,7 +677,17 @@ export class AiService {
           instructions: preview.instructions,
           context: preview.context,
           history: trimHistory(request.history),
-          userMessage: buildUserMessage(request, plan, mongo ? 'mongodb' : undefined),
+          userMessage: buildUserMessage(
+            request,
+            plan,
+            mongo
+              ? 'mongodb'
+              : this.isPg(request.connectionId)
+                ? 'postgresql'
+                : this.isLite(request.connectionId)
+                  ? 'sqlite'
+                  : undefined
+          ),
           effort: settings.aiEffort,
           maxTokens: settings.aiMaxTokens,
           signal: controller.signal,
