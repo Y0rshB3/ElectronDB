@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { engineOf } from '@shared/engines'
+import { engineAvailabilityError } from '@shared/connectionValidation'
+import { defaultPostgresOptions, engineOf } from '@shared/engines'
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -9,9 +10,11 @@ import type {
   JobTask,
   NavicatImportRequest,
   NavicatImportResult,
-  NavicatJobPreview
+  NavicatJobPreview,
+  NavicatSection
 } from '@shared/types'
 import type { AppContext } from '../context'
+import { previewEngineReason } from '../importers/connections/util'
 import { newId, nowIso } from '../storage/ids'
 import { isJobImportedFromNavicat, readNavicatJobs } from './batchJobs'
 import {
@@ -53,6 +56,21 @@ function mergeExtraDirs(current: string[], navicatDir: string | null): string[] 
   return dirs
 }
 
+/**
+ * Why a row cannot be imported: an unsupported server, an engine without a
+ * driver, or a preview engine while «Motores en vista previa» is off.
+ */
+export function navicatBlockReason(
+  connection: Pick<NavicatConnectionEntry['connection'], 'engine' | 'unsupportedReason'>,
+  previewEngines: boolean
+): string | null {
+  if (!connection.engine) return connection.unsupportedReason ?? 'Motor no soportado'
+  const unavailable = engineAvailabilityError({ engine: connection.engine })
+  if (unavailable) return unavailable
+  const engine = engineOf({ engine: connection.engine })
+  return engine.capabilities.preview && !previewEngines ? previewEngineReason(engine.label) : null
+}
+
 function toConnectionInput(
   entry: NavicatConnectionEntry,
   existing: ConnectionConfig | null,
@@ -60,11 +78,21 @@ function toConnectionInput(
   importedAt: string
 ): ConnectionInput {
   const { connection, backupSourceDir } = entry
+  const engine = connection.engine ?? 'mysql'
   return {
     id: existing?.id,
-    // Navicat's MySQL section: ConnectionsRepo.save refuses to turn a record of
-    // another engine into MySQL.
-    engine: 'mysql',
+    // The section's engine. ConnectionsRepo.save refuses to turn a record of another engine
+    // into this one (a `mysql` record may become `mariadb`, and a `mariadb` one stays so).
+    engine,
+    ...(engine === 'postgresql'
+      ? {
+          postgres: {
+            ...defaultPostgresOptions(),
+            ...existing?.postgres,
+            initialDatabase: connection.initialDatabase || 'postgres'
+          }
+        }
+      : {}),
     name: existing?.name ?? connection.name,
     color: connection.color,
     environment: mergeEnvironment(existing, connection.environment),
@@ -81,12 +109,22 @@ function toConnectionInput(
     ssl: connection.ssl,
     backupDir: existing?.backupDir ?? join(backupsRootDir, safeDirName(connection.name)),
     extraBackupDirs: mergeExtraDirs(existing?.extraBackupDirs ?? [], backupSourceDir),
-    source: { app: 'navicat', name: connection.name, importedAt }
+    source: {
+      app: 'navicat',
+      name: connection.name,
+      importedAt,
+      // Earlier versions stored no section for MySQL rows: keep it that way for them.
+      ...(connection.navicatType !== 'MySQL' ? { navicatType: connection.navicatType } : {})
+    }
   }
 }
 
-function findByNavicatName(connections: ConnectionConfig[], name: string): ConnectionConfig | null {
-  return connections.find((c) => isImportedFromNavicat(c, name)) ?? null
+function findByNavicatName(
+  connections: ConnectionConfig[],
+  name: string,
+  type: NavicatSection = 'MySQL'
+): ConnectionConfig | null {
+  return connections.find((c) => isImportedFromNavicat(c, name, type)) ?? null
 }
 
 /**
@@ -183,14 +221,23 @@ export async function importFromNavicat(
     wantedJobs.size > 0 ? await readNavicatJobs(rootPath, ctx.jobs.list(), warnings) : []
 
   if (wantedConnections.size > 0) {
-    const byName = new Map(connectionEntries.map((e) => [e.connection.name, e]))
-    for (const name of wantedConnections) {
-      const entry = byName.get(name)
+    const byKey = new Map(connectionEntries.map((e) => [e.preview.key, e]))
+    const previewEngines = ctx.settings.get().previewEngines === true
+    for (const key of wantedConnections) {
+      const entry = byKey.get(key)
+      const name = entry?.connection.name ?? key.split('\u001f').pop() ?? key
       if (!entry) {
         warnings.push(`La conexión "${name}" no existe en conn.plist de Navicat`)
         continue
       }
-      const existing = findByNavicatName(ctx.connections.list(), name)
+      // Main enforces what the preview shows (unsupported server, preview engine off).
+      const blocked = navicatBlockReason(entry.connection, previewEngines)
+      if (blocked) {
+        warnings.push(`La conexión "${name}" no se ha importado: ${blocked}`)
+        continue
+      }
+      for (const w of entry.connection.warnings) warnings.push(`«${name}»: ${w}`)
+      const existing = findByNavicatName(ctx.connections.list(), name, entry.connection.navicatType)
       const saved = ctx.connections.save(
         toConnectionInput(entry, existing, ctx.settings.get().backupsRootDir, importedAt)
       )
@@ -200,8 +247,11 @@ export async function importFromNavicat(
 
   if (wantedJobs.size > 0) {
     const byFile = new Map(jobPreviews.map((p) => [p.fileName, p]))
+    // Batch jobs belong to Navicat for MySQL: only MySQL-section rows can be their servers.
     const importedConnections = new Map(
-      result.connections.map((c) => [c.source?.name ?? c.name, c])
+      result.connections
+        .filter((c) => (c.source?.navicatType ?? 'MySQL') === 'MySQL')
+        .map((c) => [c.source?.name ?? c.name, c])
     )
     const allConnections = ctx.connections.list()
     for (const fileName of wantedJobs) {

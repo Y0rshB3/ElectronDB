@@ -1,3 +1,4 @@
+import type { NavicatSection } from '@shared/types'
 import { isPlistDict as isDict, parsePlistXml } from './plist'
 
 /**
@@ -85,23 +86,38 @@ function findMarkerColor(node: unknown, depth: number): unknown {
  * marker colour are absent from the map. Garbled input yields an empty map.
  */
 export async function readMarkerColors(prefPlistXml: string): Promise<Map<string, string>> {
-  const colors = new Map<string, string>()
+  return (await readMarkerColorsByType(prefPlistXml)).get('MySQL') ?? new Map()
+}
+
+/** Colours of every type section (`connpref/0/0/<TypeKey>/<name>/…`), keyed by section then name. */
+export async function readMarkerColorsByType(
+  prefPlistXml: string
+): Promise<Map<NavicatSection, Map<string, string>>> {
+  const out = new Map<NavicatSection, Map<string, string>>()
   let root: unknown
   try {
     root = await parsePlistXml(prefPlistXml)
   } catch {
-    return colors
+    return out
   }
-  if (!isDict(root) || !isDict(root.connpref)) return colors
+  if (!isDict(root) || !isDict(root.connpref)) return out
   for (const level1 of Object.values(root.connpref)) {
     if (!isDict(level1)) continue
     for (const level2 of Object.values(level1)) {
-      if (!isDict(level2) || !isDict(level2.MySQL)) continue
-      for (const [name, pref] of Object.entries(level2.MySQL)) {
-        const color = decodeMarkerColor(findMarkerColor(pref, 0))
-        if (color) colors.set(name, color)
+      if (!isDict(level2)) continue
+      for (const type of COLOR_SECTIONS) {
+        const section = level2[type]
+        if (!isDict(section)) continue
+        const colors = out.get(type) ?? new Map<string, string>()
+        for (const [name, pref] of Object.entries(section)) {
+          const color = decodeMarkerColor(findMarkerColor(pref, 0))
+          if (color) colors.set(name, color)
+        }
+        out.set(type, colors)
       }
     }
   }
-  return colors
+  return out
 }
+
+const COLOR_SECTIONS: readonly NavicatSection[] = ['MySQL', 'MariaDB', 'PostgreSQL']

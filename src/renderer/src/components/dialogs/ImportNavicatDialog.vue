@@ -8,6 +8,7 @@ import type {
   NavicatImportResult,
   NavicatJobPreview
 } from '@shared/types'
+import { ENGINES } from '@shared/engines'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
 import { useConnectionsStore } from '@renderer/stores/connections'
@@ -49,6 +50,19 @@ const error = ref('')
 const connPreviews = ref<NavicatConnectionPreview[]>([])
 const jobPreviews = ref<NavicatJobPreview[]>([])
 const selectedConnections = ref<string[]>([])
+
+/** Why a row cannot be imported (unsupported server or a preview engine with previews off). */
+function blockOf(c: NavicatConnectionPreview): string | null {
+  if (c.blockedReason) return c.blockedReason
+  const engine = c.engine ? ENGINES[c.engine] : null
+  if (engine?.capabilities.preview && settingsStore.settings.previewEngines !== true)
+    return `${engine.label} está en vista previa: actívalo en Ajustes › Motores en vista previa`
+  return null
+}
+/** Rows that can be selected (the others show their reason). */
+const importablePreviews = computed(() => connPreviews.value.filter((c) => !blockOf(c)))
+const engineLabelOf = (c: NavicatConnectionPreview): string =>
+  c.engine ? ENGINES[c.engine].label : c.navicatType
 const selectedJobs = ref<string[]>([])
 const importResult = ref<NavicatImportResult | null>(null)
 
@@ -87,7 +101,8 @@ const busy = computed(
 const pathArg = computed(() => rootPath.value.trim() || null)
 const allConnectionsSelected = computed(
   () =>
-    connPreviews.value.length > 0 && selectedConnections.value.length === connPreviews.value.length
+    importablePreviews.value.length > 0 &&
+    selectedConnections.value.length === importablePreviews.value.length
 )
 const allJobsSelected = computed(
   () => jobPreviews.value.length > 0 && selectedJobs.value.length === jobPreviews.value.length
@@ -227,7 +242,9 @@ async function goToPreview(): Promise<void> {
     connPreviews.value = conns
     jobPreviews.value = jobList
     // Preselect what has not been imported yet; re-importing updates existing items.
-    selectedConnections.value = conns.filter((c) => !c.alreadyImported).map((c) => c.name)
+    selectedConnections.value = conns
+      .filter((c) => !c.alreadyImported && !blockOf(c))
+      .map((c) => c.key)
     selectedJobs.value = jobList.filter((j) => !j.alreadyImported).map((j) => j.fileName)
     step.value = 2
     void rememberRoot(pathArg.value)
@@ -239,7 +256,7 @@ async function goToPreview(): Promise<void> {
 }
 
 function toggleAllConnections(value: boolean | null): void {
-  selectedConnections.value = value ? connPreviews.value.map((c) => c.name) : []
+  selectedConnections.value = value ? importablePreviews.value.map((c) => c.key) : []
 }
 
 function toggleAllJobs(value: boolean | null): void {
@@ -524,14 +541,16 @@ watch(
           <div class="import-dialog__section">
             <v-icon icon="mdi-lan" size="16" aria-hidden="true" />
             <span class="import-dialog__section-title">Conexiones</span>
-            <span class="nd-pill">{{ selectedConnections.length }}/{{ connPreviews.length }}</span>
+            <span class="nd-pill"
+              >{{ selectedConnections.length }}/{{ importablePreviews.length }}</span
+            >
             <v-spacer />
             <v-checkbox
               :model-value="allConnectionsSelected"
               label="Seleccionar todas"
               density="compact"
               hide-details
-              :disabled="!connPreviews.length"
+              :disabled="!importablePreviews.length"
               @update:model-value="toggleAllConnections"
             />
           </div>
@@ -542,13 +561,18 @@ watch(
           >
             <tbody>
               <tr v-if="!connPreviews.length">
-                <td class="text-medium-emphasis">No hay conexiones de MySQL en Navicat.</td>
+                <td class="text-medium-emphasis">No hay conexiones en Navicat.</td>
               </tr>
-              <tr v-for="c in connPreviews" :key="c.name">
+              <tr
+                v-for="c in connPreviews"
+                :key="c.key"
+                :class="{ 'import-dialog__row--blocked': !!blockOf(c) }"
+              >
                 <td style="width: 40px">
                   <v-checkbox-btn
                     v-model="selectedConnections"
-                    :value="c.name"
+                    :value="c.key"
+                    :disabled="!!blockOf(c)"
                     :aria-label="`Importar conexión ${c.name}`"
                   />
                 </td>
@@ -560,7 +584,24 @@ watch(
                       aria-hidden="true"
                     />
                     <span class="nd-ellipsis" :title="c.name">{{ c.name }}</span>
+                    <span
+                      v-if="c.navicatType !== 'MySQL'"
+                      class="nd-pill"
+                      data-test="import-engine"
+                      >{{ engineLabelOf(c) }}</span
+                    >
                     <span v-if="c.alreadyImported" class="nd-pill">ya importado</span>
+                  </div>
+                  <div v-if="blockOf(c)" class="import-dialog__reason" data-test="import-blocked">
+                    {{ blockOf(c) }}
+                  </div>
+                  <div
+                    v-for="(w, i) in c.warnings"
+                    :key="i"
+                    class="import-dialog__reason"
+                    data-test="import-warning"
+                  >
+                    {{ w }}
                   </div>
                 </td>
                 <td class="import-dialog__nowrap">
@@ -578,7 +619,9 @@ watch(
                   />
                 </td>
                 <td class="import-dialog__meta">
-                  <span class="nd-mono">{{ c.backupCount }}</span> copias
+                  <template v-if="c.navicatType !== 'PostgreSQL'"
+                    ><span class="nd-mono">{{ c.backupCount }}</span> copias</template
+                  >
                 </td>
               </tr>
             </tbody>
@@ -883,6 +926,15 @@ watch(
 }
 .import-dialog__nowrap {
   white-space: nowrap;
+}
+.import-dialog__reason {
+  margin: 2px 0 0 16px;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-muted);
+  white-space: normal;
+}
+.import-dialog__row--blocked .import-dialog__name {
+  opacity: 0.6;
 }
 .import-dialog__host {
   font-size: var(--nd-fs-xs);

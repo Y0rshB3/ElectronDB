@@ -1,18 +1,46 @@
 import { readFile } from 'node:fs/promises'
 import type {
   ConnectionConfig,
+  EngineId,
   Environment,
   NavicatConnectionPreview,
+  NavicatSection,
   SshConfig,
   SslConfig
 } from '@shared/types'
+import { applySslMode, firstHost, mysqlFamily, postgresFamily } from '../importers/connections/util'
 import { countNb3Files, resolveBackupSourceDir } from './backupsScan'
-import { readMarkerColors } from './colors'
+import { readMarkerColorsByType } from './colors'
 import { connectionSettingsDir, navicatPaths } from './paths'
 import { isPlistDict as isDict, parsePlistXml, type PlistDict as Dict } from './plist'
 
+/**
+ * `conn.plist` type sections Vortaq maps (docs/multi-engine-design.md, 12.1).
+ * `MySQL` is verified on real files; `MariaDB` (same keys as MySQL) and
+ * `PostgreSQL` follow the design's mapping and are tested with synthetic
+ * files only. Every other section is left out, as before.
+ */
+export const NAVICAT_SECTIONS: readonly NavicatSection[] = ['MySQL', 'MariaDB', 'PostgreSQL']
+
+/**
+ * Selection key of a preview row: the plain name for MySQL (what earlier
+ * versions sent), `<section>/<name>` with a unit separator for the others.
+ */
+export function navicatKey(type: NavicatSection, name: string): string {
+  return type === 'MySQL' ? name : `${type}\u001f${name}`
+}
+
 /** A connection as stored by Navicat, independent of Vortaq state. */
 export interface NavicatConnection {
+  /** Section of conn.plist the connection came from. */
+  navicatType: NavicatSection
+  /** Engine Vortaq creates; null when the server kind is not supported (a PostgreSQL fork). */
+  engine: EngineId | null
+  unsupportedReason: string | null
+  /** Things the import could not map exactly (names only, shown to the user, never logged). */
+  warnings: string[]
+  /** PostgreSQL: `initialdatabase`. */
+  initialDatabase?: string
   name: string
   host: string
   port: number
@@ -90,36 +118,62 @@ function parseSsl(raw: Dict): SslConfig {
   return ssl
 }
 
-function parseConnection(name: string, raw: Dict): NavicatConnection {
-  const host = str(raw.host)
+function parseConnection(
+  name: string,
+  raw: Dict,
+  type: NavicatSection = 'MySQL'
+): NavicatConnection {
   const ssh = parseSsh(raw)
+  const warnings: string[] = []
   const customList = Array.isArray(raw.customdblist)
     ? raw.customdblist.filter((x): x is string => typeof x === 'string')
     : []
+  const pg = type === 'PostgreSQL'
+  // PostgreSQL: `hostportlist` (failover) imports its first host only, with a warning.
+  const listed = pg && !str(raw.host) ? firstHost(str(raw.hostportlist), warnings) : null
+  const host = listed?.host ?? str(raw.host)
+  let ssl = parseSsl(raw)
+  if (pg) {
+    const p = isDict(raw.ssl_param) ? raw.ssl_param : {}
+    const rootCert = optionalPath(p.rootcert)
+    if (rootCert && !ssl.caCertPath) ssl = { ...ssl, caCertPath: rootCert }
+    ssl = applySslMode(ssl, str(p.mode ?? p.sslmode), warnings)
+  }
+  const choice = pg ? postgresFamily(str(raw.serviceprovider)) : mysqlFamily(type === 'MariaDB')
   return {
+    navicatType: type,
+    engine: choice.engine,
+    unsupportedReason: choice.unsupportedReason,
+    warnings,
+    ...(pg ? { initialDatabase: str(raw.initialdatabase).trim() || 'postgres' } : {}),
     name,
     host,
-    port: int(raw.port, 3306),
+    port: listed?.port ?? int(raw.port, pg ? 5432 : 3306),
     username: str(raw.username),
     savePassword: bool(raw.savepassword),
     color: null,
     environment: inferEnvironment(name, host, ssh.enabled),
     ssh,
-    ssl: parseSsl(raw),
+    ssl,
     savePath: optionalPath(raw.savepath) ?? null,
+    // `usecustomdblist` is a boolean for MySQL and an integer for PostgreSQL: bool() reads both.
     customDatabases: bool(raw.usecustomdblist) ? customList : [],
     initialQueries: str(raw.initialsessionqueries)
   }
 }
 
-/** Finds every `MySQL` dict at `<root>/<x>/<y>/MySQL` (Navicat uses `0/0`). */
-function mysqlSections(root: unknown): Dict[] {
+/** Every mapped section at `<root>/<user>/<project>/<TypeKey>` (Navicat uses `0/0`). */
+function typeSections(root: unknown): { type: NavicatSection; dict: Dict }[] {
   if (!isDict(root)) return []
-  const sections: Dict[] = []
+  const sections: { type: NavicatSection; dict: Dict }[] = []
   for (const level1 of Object.values(root)) {
     if (!isDict(level1)) continue
     for (const level2 of Object.values(level1)) {
-      if (isDict(level2) && isDict(level2.MySQL)) sections.push(level2.MySQL)
+      if (!isDict(level2)) continue
+      for (const type of NAVICAT_SECTIONS) {
+        const dict = level2[type]
+        if (isDict(dict)) sections.push({ type, dict })
+      }
     }
   }
   return sections
@@ -136,17 +190,36 @@ export async function parseConnPlist(xml: string): Promise<NavicatConnection[]> 
     )
   }
   const connections: NavicatConnection[] = []
-  for (const section of mysqlSections(root)) {
-    for (const [name, raw] of Object.entries(section)) {
-      if (isDict(raw)) connections.push(parseConnection(name, raw))
+  for (const { type, dict } of typeSections(root)) {
+    for (const [name, raw] of Object.entries(dict)) {
+      if (isDict(raw)) connections.push(parseConnection(name, raw, type))
     }
   }
-  return connections.sort((a, b) => a.name.localeCompare(b.name))
+  // MySQL first (as before), then by name.
+  const order = (t: NavicatSection): number => NAVICAT_SECTIONS.indexOf(t)
+  return connections.sort(
+    (a, b) => order(a.navicatType) - order(b.navicatType) || a.name.localeCompare(b.name)
+  )
 }
 
-export function isImportedFromNavicat(connection: ConnectionConfig, navicatName: string): boolean {
-  return connection.source?.app === 'navicat' && connection.source.name === navicatName
+/**
+ * Identity of an imported connection: (section, name). Records imported
+ * before the section was kept count as `MySQL`, the only section read then.
+ */
+export function isImportedFromNavicat(
+  connection: ConnectionConfig,
+  navicatName: string,
+  type: NavicatSection = 'MySQL'
+): boolean {
+  return (
+    connection.source?.app === 'navicat' &&
+    connection.source.name === navicatName &&
+    (connection.source.navicatType ?? 'MySQL') === type
+  )
 }
+
+/** Sections whose connections keep Navicat `.nb3` backups Vortaq can read. */
+const hasNb3Backups = (type: NavicatSection): boolean => type === 'MySQL' || type === 'MariaDB'
 
 /**
  * Reads connections + colours from a Navicat root and enriches them with
@@ -158,22 +231,30 @@ export async function readNavicatConnections(
 ): Promise<NavicatConnectionEntry[]> {
   const paths = navicatPaths(root)
   const connections = await parseConnPlist(await readTextFile(paths.connPlist))
-  let colors = new Map<string, string>()
+  let colors = new Map<NavicatSection, Map<string, string>>()
   try {
-    colors = await readMarkerColors(await readTextFile(paths.prefPlist))
+    colors = await readMarkerColorsByType(await readTextFile(paths.prefPlist))
   } catch {
     /* pref.plist is optional: colours stay null */
   }
 
   const entries: NavicatConnectionEntry[] = []
   for (const connection of connections) {
-    connection.color = colors.get(connection.name) ?? null
-    const backupSourceDir = await resolveBackupSourceDir(
-      connection.savePath,
-      connectionSettingsDir(paths, connection.name)
-    )
+    const type = connection.navicatType
+    connection.color = colors.get(type)?.get(connection.name) ?? null
+    const backupSourceDir = hasNb3Backups(type)
+      ? await resolveBackupSourceDir(
+          connection.savePath,
+          connectionSettingsDir(paths, connection.name, type)
+        )
+      : null
     const backupCount = backupSourceDir ? await countNb3Files(backupSourceDir) : 0
     const preview: NavicatConnectionPreview = {
+      key: navicatKey(type, connection.name),
+      navicatType: type,
+      engine: connection.engine,
+      blockedReason: connection.unsupportedReason,
+      warnings: [...connection.warnings],
       name: connection.name,
       host: connection.host,
       port: connection.port,
@@ -186,7 +267,7 @@ export async function readNavicatConnections(
       customDatabases: connection.customDatabases,
       initialQueries: connection.initialQueries,
       backupCount,
-      alreadyImported: existing.some((c) => isImportedFromNavicat(c, connection.name))
+      alreadyImported: existing.some((c) => isImportedFromNavicat(c, connection.name, type))
     }
     entries.push({ connection, preview, backupSourceDir })
   }

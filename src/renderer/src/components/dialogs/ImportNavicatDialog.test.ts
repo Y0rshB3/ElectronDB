@@ -15,6 +15,11 @@ const ssh = {
 }
 const ssl = { enabled: false, verifyServer: true }
 const preview = (name: string, alreadyImported: boolean) => ({
+  key: name,
+  navicatType: 'MySQL',
+  engine: 'mysql',
+  blockedReason: null,
+  warnings: [] as string[],
   name,
   host: '127.0.0.1',
   port: 13306,
@@ -113,6 +118,71 @@ describe('ImportNavicatDialog', () => {
     expect(wrapper.get('[data-test="import-passwords-manual"]').text()).toContain(
       'Navicat no guarda las contraseñas'
     )
+  })
+
+  it('imports MariaDB rows by key and blocks PostgreSQL while previews are off', async () => {
+    invoke = mockVortaq({
+      'navicat:detect': () => ({
+        found: true,
+        rootPath: '/nav',
+        connPlistPath: '/nav/Common/conn.plist',
+        prefPlistPath: null,
+        profilesDir: null,
+        connectionCount: 3,
+        jobCount: 0,
+        backupCount: 0
+      }),
+      'navicat:previewConnections': () => [
+        preview('Local', false),
+        {
+          ...preview('Maria', false),
+          key: 'MariaDB\u001fMaria',
+          navicatType: 'MariaDB',
+          engine: 'mariadb'
+        },
+        {
+          ...preview('PG', false),
+          key: 'PostgreSQL\u001fPG',
+          navicatType: 'PostgreSQL',
+          engine: 'postgresql',
+          warnings: ['Varios servidores: solo se usa el primero (pg1)']
+        },
+        {
+          ...preview('Red', false),
+          key: 'PostgreSQL\u001fRed',
+          navicatType: 'PostgreSQL',
+          engine: null,
+          blockedReason: 'Amazon Redshift no es compatible'
+        }
+      ],
+      'navicat:previewJobs': () => [],
+      'navicat:import': () => ({ connections: [], jobs: [], warnings: [] }),
+      'connections:list': () => [],
+      'jobs:list': () => [],
+      'jobs:runs': () => []
+    })
+    const pinia = freshPinia()
+    useSettingsStore().settings.navicatRootPath = '/nav'
+    useUiStore().importDialog = true
+    wrapper = mountWith(ImportNavicatDialog, pinia)
+    await settle()
+    await wrapper.get('[data-test="import-next"]').trigger('click')
+    await settle()
+    const table = wrapper.get('[data-test="import-connections"]')
+    expect(table.findAll('[data-test="import-engine"]').map((e) => e.text())).toEqual([
+      'MariaDB',
+      'PostgreSQL',
+      'PostgreSQL'
+    ])
+    const blocked = table.findAll('[data-test="import-blocked"]').map((e) => e.text())
+    expect(blocked[0]).toContain('vista previa')
+    expect(blocked[1]).toBe('Amazon Redshift no es compatible')
+    expect(table.get('[data-test="import-warning"]').text()).toContain('solo se usa el primero')
+    await wrapper.get('[data-test="import-run"]').trigger('click')
+    await settle()
+    expect(calls(invoke, 'navicat:import')).toEqual([
+      [{ connections: ['Local', 'MariaDB\u001fMaria'], jobs: [] }, '/nav']
+    ])
   })
 
   it('does not show the copied-folder notice on macOS', async () => {

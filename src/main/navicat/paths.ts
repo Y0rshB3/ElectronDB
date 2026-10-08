@@ -25,9 +25,15 @@ export function navicatPaths(root: string): NavicatPaths {
   }
 }
 
-/** Default per-connection savepath (`Common/Settings/0/0/MySQL/<conn>`). */
-export function connectionSettingsDir(paths: NavicatPaths, connectionName: string): string {
-  return join(paths.settingsDir, connectionName)
+/** Default per-connection savepath (`Common/Settings/0/0/<Section>/<conn>`; MySQL by default). */
+export function connectionSettingsDir(
+  paths: NavicatPaths,
+  connectionName: string,
+  section = 'MySQL'
+): string {
+  return section === 'MySQL'
+    ? join(paths.settingsDir, connectionName)
+    : join(paths.root, 'Common', 'Settings', '0', '0', section, connectionName)
 }
 
 /** Lists `*.nbatmysql` file names in the profiles dir; empty when missing. */

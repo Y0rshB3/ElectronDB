@@ -1,11 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CredentialStore, plainCodec } from '../credentials/store'
 import { ConnectionsRepo, ENGINE_CHANGE_MESSAGE, JobsRepo, SettingsRepo } from '../storage/repos'
 import { importFromNavicat, safeDirName, type ImportContext } from './importer'
-import { FIXTURE_ROOT } from './testing'
+import { FIXTURE_ROOT, MULTI_TYPE_CONN_PLIST } from './testing'
 
 const ALL_CONNECTIONS = ['Dev', 'Home Lab', 'Production', 'Staging']
 const ALL_JOBS = ['Backup dev.nbatmysql', 'Backup staging.nbatmysql', 'backup prod.nbatmysql']
@@ -236,5 +236,84 @@ describe('importFromNavicat engine model', () => {
     })
     expect(result.jobs[0].tasks).toEqual([])
     expect(result.warnings[0]).toMatch(/"Production"/)
+  })
+})
+
+describe('importFromNavicat: MariaDB and PostgreSQL sections (P5)', () => {
+  let dir: string
+  let root: string
+  let ctx: ImportContext
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'vortaq-import-multi-'))
+    root = join(dir, 'Navicat CC')
+    mkdirSync(join(root, 'Common'), { recursive: true })
+    writeFileSync(join(root, 'Common', 'conn.plist'), MULTI_TYPE_CONN_PLIST)
+    const settings = new SettingsRepo(dir, dir)
+    settings.update({ navicatRootPath: root, backupsRootDir: join(dir, 'backups') })
+    ctx = { connections: new ConnectionsRepo(dir), jobs: new JobsRepo(dir), settings }
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  const keys = ['Shared name', 'MariaDB\u001fShared name', 'PostgreSQL\u001fPG local']
+
+  it('creates one connection per section, with the section kept for identity', async () => {
+    const result = await importFromNavicat(ctx, { connections: keys, jobs: [] })
+    // PostgreSQL is a preview engine: refused (with the reason) while previews are off.
+    expect(result.connections.map((c) => `${c.engine}:${c.name}`)).toEqual([
+      'mysql:Shared name',
+      'mariadb:Shared name'
+    ])
+    expect(result.warnings).toEqual([
+      'La conexión "PG local" no se ha importado: PostgreSQL está en vista previa: actívalo en Ajustes › Motores en vista previa'
+    ])
+    const [mysql, maria] = result.connections
+    expect(mysql.source?.navicatType).toBeUndefined()
+    expect(maria.source).toMatchObject({
+      app: 'navicat',
+      name: 'Shared name',
+      navicatType: 'MariaDB'
+    })
+    expect(maria).toMatchObject({ host: 'maria.example.test', port: 3307 })
+
+    // Re-import updates in place, per section.
+    const again = await importFromNavicat(ctx, { connections: keys.slice(0, 2), jobs: [] })
+    expect(again.connections.map((c) => c.id)).toEqual([mysql.id, maria.id])
+    expect(ctx.connections.list()).toHaveLength(2)
+  })
+
+  it('imports PostgreSQL with previews on, and never an unsupported fork', async () => {
+    ctx.settings.update({ previewEngines: true })
+    const result = await importFromNavicat(ctx, {
+      connections: [
+        'PostgreSQL\u001fPG local',
+        'PostgreSQL\u001fPG cluster',
+        'PostgreSQL\u001fWarehouse'
+      ],
+      jobs: []
+    })
+    expect(result.connections.map((c) => c.name)).toEqual(['PG local', 'PG cluster'])
+    const pg = result.connections[0]
+    expect(pg).toMatchObject({
+      engine: 'postgresql',
+      port: 55432,
+      customDatabases: ['shop'],
+      ssl: { mode: 'verify-full', caCertPath: '/certs/root.crt' },
+      postgres: { initialDatabase: 'shop', showSystemSchemas: false },
+      source: { navicatType: 'PostgreSQL' }
+    })
+    expect(result.warnings).toContain(
+      '«PG cluster»: Varios servidores: solo se usa el primero (pg1.example.test)'
+    )
+    expect(result.warnings.some((w) => w.includes('"Warehouse" no se ha importado'))).toBe(true)
+  })
+
+  it('a MySQL-section record promoted to MariaDB keeps matching and stays MariaDB', async () => {
+    const [first] = (await importFromNavicat(ctx, { connections: ['Shared name'], jobs: [] }))
+      .connections
+    expect(ctx.connections.promoteToMariaDb(first.id)?.engine).toBe('mariadb')
+    const [again] = (await importFromNavicat(ctx, { connections: ['Shared name'], jobs: [] }))
+      .connections
+    expect(again).toMatchObject({ id: first.id, engine: 'mariadb' })
   })
 })

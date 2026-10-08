@@ -39,3 +39,32 @@ export function buildPrefPlist(colors: Record<string, Buffer | null>): string {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>connpref</key><dict><key>0</key><dict><key>0</key><dict><key>MySQL</key><dict>${entries}</dict></dict></dict></dict></dict></plist>`
 }
+
+/**
+ * Synthetic multi-type conn.plist (docs/multi-engine-design.md, 12.1): the `MySQL`
+ * keys are the verified ones; `MariaDB` uses the same keys and `PostgreSQL` the
+ * design's mapping. Fictitious names and documentation addresses only.
+ */
+export const MULTI_TYPE_CONN_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>0</key><dict><key>0</key><dict>
+<key>MySQL</key><dict>
+  <key>Shared name</key><dict><key>host</key><string>127.0.0.1</string><key>port</key><integer>3306</integer><key>username</key><string>root</string></dict>
+</dict>
+<key>MariaDB</key><dict>
+  <key>Shared name</key><dict><key>host</key><string>maria.example.test</string><key>port</key><integer>3307</integer><key>username</key><string>app</string><key>usetunnel</key><true/><key>ssh_param</key><dict><key>host</key><string>jump.example.test</string><key>username</key><string>tunnel</string></dict></dict>
+  <key>Maria prod</key><dict><key>host</key><string>203.0.113.20</string><key>username</key><string>ro</string></dict>
+</dict>
+<key>PostgreSQL</key><dict>
+  <key>PG local</key><dict>
+    <key>host</key><string>localhost</string><key>port</key><integer>55432</integer><key>username</key><string>postgres</string>
+    <key>initialdatabase</key><string>shop</string>
+    <key>usessl</key><true/>
+    <key>ssl_param</key><dict><key>mode</key><string>VERIFY_FULL</string><key>rootcert</key><string>/certs/root.crt</string></dict>
+    <key>usecustomdblist</key><integer>1</integer>
+    <key>customdblist</key><array><string>shop</string></array>
+  </dict>
+  <key>PG cluster</key><dict><key>hostportlist</key><string>pg1.example.test:5433,pg2.example.test:5434</string><key>username</key><string>u</string><key>ssl_param</key><dict><key>mode</key><string>bogus</string></dict></dict>
+  <key>Warehouse</key><dict><key>host</key><string>wh.example.test</string><key>serviceprovider</key><string>Redshift</string></dict>
+</dict>
+<key>SQL Server</key><dict><key>Ignored</key><dict><key>host</key><string>x</string></dict></dict>
+</dict></dict></dict></plist>`

@@ -3,9 +3,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ConnectionConfig } from '@shared/types'
-import { inferEnvironment, parseConnPlist, readNavicatConnections, readTextFile } from './connPlist'
+import {
+  inferEnvironment,
+  navicatKey,
+  parseConnPlist,
+  readNavicatConnections,
+  readTextFile
+} from './connPlist'
 import { navicatPaths } from './paths'
-import { buildPrefPlist, encodeMarkerColor, FIXTURE_ROOT } from './testing'
+import { buildPrefPlist, encodeMarkerColor, FIXTURE_ROOT, MULTI_TYPE_CONN_PLIST } from './testing'
 
 const fixturePaths = navicatPaths(FIXTURE_ROOT)
 
@@ -164,5 +170,61 @@ describe('readNavicatConnections', () => {
     expect(entries.every((e) => e.preview.backupCount === 0 && !e.preview.alreadyImported)).toBe(
       true
     )
+  })
+})
+
+describe('conn.plist sections (P5: MariaDB, PostgreSQL)', () => {
+  it('maps the MariaDB and PostgreSQL sections; other sections are left out', async () => {
+    const connections = await parseConnPlist(MULTI_TYPE_CONN_PLIST)
+    expect(connections.map((c) => `${c.navicatType}:${c.name}`)).toEqual([
+      'MySQL:Shared name',
+      'MariaDB:Maria prod',
+      'MariaDB:Shared name',
+      'PostgreSQL:PG cluster',
+      'PostgreSQL:PG local',
+      'PostgreSQL:Warehouse'
+    ])
+    const by = (type: string, name: string) =>
+      connections.find((c) => c.navicatType === type && c.name === name)!
+    expect(by('MySQL', 'Shared name')).toMatchObject({ engine: 'mysql', port: 3306 })
+    expect(by('MariaDB', 'Shared name')).toMatchObject({
+      engine: 'mariadb',
+      host: 'maria.example.test',
+      port: 3307,
+      ssh: { enabled: true, host: 'jump.example.test', username: 'tunnel' }
+    })
+    expect(by('MariaDB', 'Maria prod')).toMatchObject({ port: 3306, environment: 'production' })
+    expect(by('PostgreSQL', 'PG local')).toMatchObject({
+      engine: 'postgresql',
+      port: 55432,
+      initialDatabase: 'shop',
+      customDatabases: ['shop'],
+      ssl: {
+        enabled: true,
+        mode: 'verify-full',
+        verifyServer: true,
+        caCertPath: '/certs/root.crt'
+      },
+      warnings: []
+    })
+    expect(by('PostgreSQL', 'PG cluster')).toMatchObject({
+      host: 'pg1.example.test',
+      port: 5433,
+      initialDatabase: 'postgres'
+    })
+    expect(by('PostgreSQL', 'PG cluster').warnings).toEqual([
+      'Varios servidores: solo se usa el primero (pg1.example.test)',
+      'Modo SSL desconocido «bogus»: se usa el predeterminado'
+    ])
+    expect(by('PostgreSQL', 'Warehouse')).toMatchObject({
+      engine: null,
+      unsupportedReason:
+        'Amazon Redshift no es compatible: su catálogo es distinto del de PostgreSQL'
+    })
+  })
+
+  it('keys MySQL rows by name and the others by section and name', () => {
+    expect(navicatKey('MySQL', 'Dev')).toBe('Dev')
+    expect(navicatKey('MariaDB', 'Dev')).toBe('MariaDB\u001fDev')
   })
 })

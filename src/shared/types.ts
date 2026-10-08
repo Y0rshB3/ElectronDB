@@ -1469,7 +1469,19 @@ export interface NavicatCandidatesResult {
   candidates: NavicatCandidate[]
 }
 
+/** conn.plist sections the Navicat folder import maps (MySQL, MariaDB, PostgreSQL). */
+export type NavicatSection = 'MySQL' | 'MariaDB' | 'PostgreSQL'
+
 export interface NavicatConnectionPreview {
+  /** What `navicat:import` takes: the name for MySQL rows, `<section>\u001f<name>` otherwise. */
+  key: string
+  navicatType: NavicatSection
+  /** Engine Vortaq creates; null for an unsupported server (a PostgreSQL fork). */
+  engine: EngineId | null
+  /** Why the row cannot be imported (unsupported server); the preview flag is checked apart. */
+  blockedReason: string | null
+  /** Fields the import could not map exactly (e.g. «solo se usa el primer host»). */
+  warnings: string[]
   name: string
   host: string
   port: number
