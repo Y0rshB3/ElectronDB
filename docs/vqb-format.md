@@ -354,12 +354,9 @@ A view's `ddl.sql` is `{"create": "<view>", "viewOn": "<collection>", "pipeline"
 `indexes` (meta.json) holds the canonical Extended JSON of every index specification except `_id_`
 (`{"key": {"name": {"$numberInt": "1"}}, "name": "name_u", "unique": true}`), without `v` and `ns`.
 
+<!-- prettier-ignore -->
 ```jsonl vqb-rows
-[
-  {
-    "$json": "{\"_id\":{\"$oid\":\"6ac6f781fc637c60b5590643\"},\"n\":{\"$numberLong\":\"9007199254740993\"}}"
-  }
-]
+[{"$json":"{\"_id\":{\"$oid\":\"6ac6f781fc637c60b5590643\"},\"n\":{\"$numberLong\":\"7\"}}"}]
 ```
 
 Restore: parse each document with an Extended JSON parser in canonical mode and insert it (Vortaq uses
