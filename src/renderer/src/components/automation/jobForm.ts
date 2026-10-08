@@ -137,51 +137,87 @@ export function draftFromJob(job: Job): JobDraft {
   }
 }
 
+type Lookup = (id: string) => ConnectionConfig | null | undefined
+
+/**
+ * Problems of one step (same messages and order as validateDraft), so the
+ * sequence can show them on the step's row. `index` is the step's position.
+ */
+export function taskProblems(
+  task: JobTask,
+  index: number,
+  tasks: JobTask[],
+  lookup: Lookup = () => null,
+  typedEnvironments: readonly Environment[] = []
+): string[] {
+  const errors: string[] = []
+  const n = index + 1
+  if (!task.connectionId) errors.push(`Tarea ${n}: selecciona una conexión.`)
+  // Mirrors main's validateJobInput: only backups need a schema (SQL tasks may run without one).
+  if (task.type === 'backupschema' && !task.schema)
+    errors.push(`Tarea ${n}: selecciona un esquema.`)
+  if (task.type === 'runquery' && !task.sql?.trim())
+    errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
+  // Same per-engine rules as main (restore steps get them through restoreTaskProblem).
+  if (task.type !== 'restoreschema') {
+    const problem = jobStepEngineProblem(task, tasks, lookup, `paso ${n}`)
+    if (problem) errors.push(problem)
+  }
+  if (task.type === 'restoreschema' && task.connectionId) {
+    // Same rules as main (production targets, targets in the typed-confirmation environments
+    // and self-restores are refused).
+    const named = {
+      ...task,
+      referenceName: task.referenceName.trim() || defaultReferenceName(task, tasks)
+    }
+    const problem = restoreTaskProblem(named, tasks, lookup, `paso ${n}`, { typedEnvironments })
+    if (problem) errors.push(problem)
+  }
+  return errors
+}
+
+/** Problems of every step by step id (steps without problems are left out). */
+export function problemsByTask(
+  tasks: JobTask[],
+  lookup: Lookup = () => null,
+  typedEnvironments: readonly Environment[] = []
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  tasks.forEach((task, i) => {
+    const problems = taskProblems(task, i, tasks, lookup, typedEnvironments)
+    if (problems.length) out[task.id] = problems
+  })
+  return out
+}
+
+/** Problem of the job's backup password, or null. */
+export function backupPasswordProblem(draft: JobDraft): string | null {
+  if (!encryptsBackups(draft.tasks) && !draft.backupPassword) return null
+  const typed = draft.backupPassword ?? ''
+  if (!typed && !draft.hasBackupPassword)
+    return 'Escribe la contraseña de cifrado de las copias (al menos 8 caracteres).'
+  if (typed && typed.length < MIN_BACKUP_PASSWORD)
+    return 'La contraseña de cifrado debe tener al menos 8 caracteres.'
+  if (typed && typed !== draft.backupPasswordAgain)
+    return 'Las contraseñas de cifrado no coinciden.'
+  return null
+}
+
 /** Client-side checks; the main process validates again and its messages are shown too. */
 export function validateDraft(
   draft: JobDraft,
-  lookup: (id: string) => ConnectionConfig | null | undefined = () => null,
+  lookup: Lookup = () => null,
   typedEnvironments: readonly Environment[] = []
 ): string[] {
   const errors: string[] = []
   if (!draft.name.trim()) errors.push('El nombre de la tarea es obligatorio.')
   if (/[/\\:]/.test(draft.name)) errors.push('El nombre no puede contener "/", "\\" ni ":".')
   if (!draft.tasks.length) errors.push('Añade al menos una tarea.')
-  draft.tasks.forEach((task, i) => {
-    const n = i + 1
-    if (!task.connectionId) errors.push(`Tarea ${n}: selecciona una conexión.`)
-    // Mirrors main's validateJobInput: only backups need a schema (SQL tasks may run without one).
-    if (task.type === 'backupschema' && !task.schema)
-      errors.push(`Tarea ${n}: selecciona un esquema.`)
-    if (task.type === 'runquery' && !task.sql?.trim())
-      errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
-    // Same per-engine rules as main (restore steps get them through restoreTaskProblem).
-    if (task.type !== 'restoreschema') {
-      const problem = jobStepEngineProblem(task, draft.tasks, lookup, `paso ${n}`)
-      if (problem) errors.push(problem)
-    }
-    if (task.type === 'restoreschema' && task.connectionId) {
-      // Same rules as main (production targets, targets in the typed-confirmation environments
-      // and self-restores are refused).
-      const named = {
-        ...task,
-        referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
-      }
-      const problem = restoreTaskProblem(named, draft.tasks, lookup, `paso ${n}`, {
-        typedEnvironments
-      })
-      if (problem) errors.push(problem)
-    }
-  })
-  if (encryptsBackups(draft.tasks) || draft.backupPassword) {
-    const typed = draft.backupPassword ?? ''
-    if (!typed && !draft.hasBackupPassword)
-      errors.push('Escribe la contraseña de cifrado de las copias (al menos 8 caracteres).')
-    else if (typed && typed.length < MIN_BACKUP_PASSWORD)
-      errors.push('La contraseña de cifrado debe tener al menos 8 caracteres.')
-    else if (typed && typed !== draft.backupPasswordAgain)
-      errors.push('Las contraseñas de cifrado no coinciden.')
-  }
+  draft.tasks.forEach((task, i) =>
+    errors.push(...taskProblems(task, i, draft.tasks, lookup, typedEnvironments))
+  )
+  const password = backupPasswordProblem(draft)
+  if (password) errors.push(password)
   const cron = cronFromForm(draft.schedule)
   if (draft.scheduleEnabled && !isValidCron(cron))
     errors.push(`La programación "${cron}" no es una expresión cron válida de 5 campos.`)
@@ -232,4 +268,11 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
   const [item] = next.splice(from, 1)
   next.splice(to, 0, item)
   return next
+}
+
+/** Copy of a step with a new id (a restore keeps its source; nothing points at the copy). */
+export function duplicateTask(task: JobTask): JobTask {
+  const copy: JobTask = { ...task, id: randomId() }
+  if (task.restoreSource) copy.restoreSource = { ...task.restoreSource }
+  return copy
 }
