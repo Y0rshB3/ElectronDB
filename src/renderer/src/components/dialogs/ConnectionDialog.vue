@@ -6,9 +6,18 @@ import type {
   ConnectionTestResult,
   EngineId,
   MysqlAuthMode,
+  SqliteAttachedDatabase,
+  SqliteOptions,
   SslMode
 } from '@shared/types'
-import { DEFAULT_NETWORK, ENGINES, defaultPostgresOptions, pickableEngines } from '@shared/engines'
+import {
+  DEFAULT_NETWORK,
+  ENGINES,
+  defaultPostgresOptions,
+  defaultSqliteOptions,
+  pickableEngines
+} from '@shared/engines'
+import { isAbsolutePathFor } from '@shared/connectionValidation'
 import { can } from '@renderer/engines/capabilities'
 import { api } from '@renderer/api'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -23,9 +32,11 @@ import { ENVIRONMENTS, environmentLabel } from '@renderer/components/backups/bac
 import {
   COLOR_PRESETS,
   PG_SSL_MODES,
+  SQLITE_FILE_FILTERS,
   emptyConnectionInput,
   inputFromConnection,
   normalizeConnectionInput,
+  sqliteNameFromPath,
   validateConnectionInput,
   withSslMode
 } from './connectionForm'
@@ -56,6 +67,7 @@ const clearSslKeyPassword = ref(false)
 
 const engine = computed<EngineId>(() => form.value.engine ?? 'mysql')
 const isPg = computed(() => engine.value === 'postgresql')
+const isSqlite = computed(() => engine.value === 'sqlite')
 const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
 /** Backups are MySQL-only: the backup folder fields follow the capability. */
 const showBackupDirs = computed(
@@ -82,6 +94,100 @@ function selectEngine(id: EngineId): void {
   testResult.value = null
   errors.value = []
 }
+
+/* ---------- SQLite: a database file (design 8.2) ---------- */
+
+const liteOptions = computed<SqliteOptions>(() => ({
+  ...defaultSqliteOptions(form.value.environment === 'production'),
+  ...form.value.sqlite
+}))
+function patchSqlite(patch: Partial<SqliteOptions>): void {
+  form.value = { ...form.value, sqlite: { ...liteOptions.value, ...patch } }
+}
+const hostPlatform = (): string => {
+  try {
+    return window.vortaq?.platform ?? 'any'
+  } catch {
+    return 'any'
+  }
+}
+const liteFileName = computed(() => {
+  const path = liteOptions.value.filePath
+  return path ? (path.split(/[\\/]/).pop() ?? path) : ''
+})
+/** The stored path came from another computer, or is not a valid path here. */
+const litePathNeedsReview = computed(() => {
+  const path = liteOptions.value.filePath.trim()
+  if (!path) return false
+  return liteOptions.value.pathNeedsReview === true || !isAbsolutePathFor(path, hostPlatform())
+})
+const liteBusy = ref(false)
+
+function useLiteFile(path: string): void {
+  patchSqlite({ filePath: path, pathNeedsReview: false })
+  if (!form.value.name.trim()) form.value = { ...form.value, name: sqliteNameFromPath(path) }
+  testResult.value = null
+}
+
+/** «Abrir archivo…»: an existing file (never created). */
+async function pickLiteFile(): Promise<void> {
+  const path = await api.app.pickFile('Abrir base de datos SQLite', SQLITE_FILE_FILTERS)
+  if (path) useLiteFile(path)
+}
+
+/**
+ * «Crear base de datos nueva…»: the only way the app creates a SQLite file.
+ * Files created here apply foreign keys (design section 20).
+ */
+async function createLiteFile(): Promise<void> {
+  const path = await api.app.pickSaveFile(
+    'Crear base de datos SQLite',
+    'nueva.db',
+    SQLITE_FILE_FILTERS.slice(0, 1)
+  )
+  if (!path) return
+  liteBusy.value = true
+  try {
+    const created = await api.sqlite.createFile(path)
+    useLiteFile(created.filePath)
+    patchSqlite({ foreignKeys: true })
+    notify.success(`Base de datos ${liteFileName.value} creada`)
+  } catch {
+    /* api.invoke already showed the error; nothing was saved */
+  } finally {
+    liteBusy.value = false
+  }
+}
+
+function patchAttached(index: number, patch: Partial<SqliteAttachedDatabase>): void {
+  const attached = liteOptions.value.attached.map((a, i) => (i === index ? { ...a, ...patch } : a))
+  patchSqlite({ attached })
+}
+function addAttached(): void {
+  patchSqlite({ attached: [...liteOptions.value.attached, { alias: '', filePath: '' }] })
+}
+function removeAttached(index: number): void {
+  patchSqlite({ attached: liteOptions.value.attached.filter((_, i) => i !== index) })
+}
+async function pickAttachedFile(index: number): Promise<void> {
+  const path = await api.app.pickFile('Base de datos adjunta', SQLITE_FILE_FILTERS)
+  if (!path) return
+  const current = liteOptions.value.attached[index]
+  patchAttached(index, {
+    filePath: path,
+    pathNeedsReview: false,
+    alias: current?.alias.trim() ? current.alias : sqliteNameFromPath(path).replace(/\W+/g, '_')
+  })
+}
+
+// A new SQLite connection opens read-only by default in production (defaultSqliteOptions).
+watch(
+  () => form.value.environment,
+  (env, previous) => {
+    if (!isSqlite.value || editing.value || env === previous) return
+    patchSqlite({ readOnly: env === 'production' })
+  }
+)
 
 const pgOptions = computed(() => form.value.postgres ?? defaultPostgresOptions())
 function patchPostgres(patch: Partial<NonNullable<ConnectionInput['postgres']>>): void {
@@ -154,7 +260,7 @@ async function reset(): Promise<void> {
   errors.value = []
   hasPassword.value = false
   hasSshPassword.value = false
-  if (editing.value) {
+  if (editing.value && editing.value.engine !== 'sqlite') {
     const id = editing.value.id
     const [pw, sshPw] = await Promise.all([
       api.connections.hasPassword(id).catch(() => false),
@@ -181,8 +287,8 @@ async function test(): Promise<void> {
   try {
     testResult.value = await connections.test(
       normalizeConnectionInput(form.value),
-      noPassword.value ? null : password.value || null,
-      sshPassword.value || null
+      noPassword.value || isSqlite.value ? null : password.value || null,
+      isSqlite.value ? null : sshPassword.value || null
     )
   } catch (err) {
     testResult.value = { ok: false, durationMs: 0, error: errorMessage(err) }
@@ -258,17 +364,21 @@ async function save(): Promise<void> {
         :title="editing ? `Editar conexión · ${editing.name}` : `Nueva conexión ${engineLabel}`"
         :subtitle="
           editing
-            ? `${editing.host}:${editing.port}`
+            ? editing.engine === 'sqlite'
+              ? (editing.sqlite?.filePath ?? '')
+              : `${editing.host}:${editing.port}`
             : isPg
               ? 'PostgreSQL (vista previa), con SSH y SSL opcionales'
-              : 'MySQL / MariaDB, con SSH y SSL opcionales'
+              : isSqlite
+                ? 'SQLite (vista previa): un archivo de base de datos'
+                : 'MySQL / MariaDB, con SSH y SSL opcionales'
         "
         :danger="form.environment === 'production'"
       />
       <v-tabs v-model="tab" density="compact" color="primary">
         <v-tab value="general" prepend-icon="mdi-tune-variant">General</v-tab>
-        <v-tab value="ssh" prepend-icon="mdi-console-network-outline">SSH</v-tab>
-        <v-tab value="ssl" prepend-icon="mdi-shield-lock-outline">SSL</v-tab>
+        <v-tab v-if="!isSqlite" value="ssh" prepend-icon="mdi-console-network-outline">SSH</v-tab>
+        <v-tab v-if="!isSqlite" value="ssl" prepend-icon="mdi-shield-lock-outline">SSL</v-tab>
         <v-tab value="advanced" prepend-icon="mdi-cog-outline">Avanzado</v-tab>
       </v-tabs>
       <v-card-text class="connection-dialog__body">
@@ -297,9 +407,9 @@ async function save(): Promise<void> {
             >
           </button>
         </div>
-        <div v-else-if="editing && isPg" class="mb-2">
-          <v-chip size="small" :prepend-icon="ENGINES.postgresql.icon" data-test="conn-engine-chip"
-            >PostgreSQL · vista previa</v-chip
+        <div v-else-if="editing && (isPg || isSqlite)" class="mb-2">
+          <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip"
+            >{{ engineLabel }} · vista previa</v-chip
           >
         </div>
         <v-window v-model="tab">
@@ -378,103 +488,244 @@ async function save(): Promise<void> {
                   <span>{{ environmentHint }}</span>
                 </div>
               </v-col>
-              <v-col cols="12" sm="8">
-                <v-text-field
-                  v-model="form.host"
-                  label="Host"
-                  prepend-inner-icon="mdi-server-network"
-                  class="nd-mono-input"
-                  data-test="conn-host"
-                />
-              </v-col>
-              <v-col cols="12" sm="4">
-                <v-text-field
-                  v-model.number="form.port"
-                  label="Puerto"
-                  type="number"
-                  min="1"
-                  max="65535"
-                  class="nd-mono-input"
-                  data-test="conn-port"
-                />
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field
-                  v-model="form.username"
-                  label="Usuario"
-                  prepend-inner-icon="mdi-account-outline"
-                  autocomplete="off"
-                  data-test="conn-user"
-                />
-              </v-col>
-              <v-col cols="12" sm="6">
-                <v-select
-                  v-model="form.authMode"
-                  :items="AUTH_MODES"
-                  label="Autenticación"
-                  prepend-inner-icon="mdi-shield-key-outline"
-                  data-test="conn-auth-mode"
-                />
-              </v-col>
-              <v-col v-if="noPassword" cols="12">
-                <v-alert
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                  icon="mdi-certificate-outline"
-                  data-test="conn-no-password-hint"
-                >
-                  Útil con Cloud SQL Auth Proxy, túneles o certificados de cliente (pestaña SSL).
+              <template v-if="isSqlite">
+                <v-col cols="12">
+                  <div class="nd-section-title mb-1">Archivo de la base de datos</div>
+                  <v-text-field
+                    v-path-tail="liteOptions.filePath"
+                    :model-value="liteOptions.filePath"
+                    :title="liteOptions.filePath || undefined"
+                    label="Archivo"
+                    placeholder="Elige un archivo existente o crea uno nuevo"
+                    persistent-placeholder
+                    readonly
+                    prepend-inner-icon="mdi-file-outline"
+                    class="nd-mono-input nd-path-field"
+                    :hint="liteFileName ? `Archivo: ${liteFileName}` : ''"
+                    persistent-hint
+                    data-test="sqlite-path"
+                  />
+                  <div class="d-flex flex-wrap ga-2 mt-2">
+                    <v-btn
+                      size="small"
+                      prepend-icon="mdi-folder-open-outline"
+                      data-test="sqlite-open-file"
+                      @click="pickLiteFile"
+                      >Abrir archivo…</v-btn
+                    >
+                    <v-btn
+                      size="small"
+                      prepend-icon="mdi-file-plus-outline"
+                      :loading="liteBusy"
+                      data-test="sqlite-create-file"
+                      @click="createLiteFile"
+                      >Crear base de datos nueva…</v-btn
+                    >
+                  </div>
+                  <v-alert
+                    v-if="litePathNeedsReview"
+                    type="warning"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                    data-test="sqlite-path-review"
+                  >
+                    La ruta viene de otro equipo o no existe aquí: elige el archivo con «Abrir
+                    archivo…».
+                  </v-alert>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-switch
+                    :model-value="liteOptions.readOnly"
+                    label="Solo lectura"
+                    color="primary"
+                    density="compact"
+                    :hint="
+                      form.environment === 'production'
+                        ? 'Las conexiones de producción se abren en solo lectura; usa «Reabrir en modo escritura» en el menú de la conexión para escribir.'
+                        : 'Abre el archivo sin poder modificarlo.'
+                    "
+                    persistent-hint
+                    data-test="sqlite-readonly"
+                    @update:model-value="patchSqlite({ readOnly: $event === true })"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-switch
+                    :model-value="liteOptions.foreignKeys"
+                    label="Aplicar claves foráneas"
+                    color="primary"
+                    density="compact"
+                    hint="PRAGMA foreign_keys. Desactivado por defecto en archivos abiertos o importados."
+                    persistent-hint
+                    data-test="sqlite-foreign-keys"
+                    @update:model-value="patchSqlite({ foreignKeys: $event === true })"
+                  />
+                </v-col>
+                <v-col cols="12">
+                  <div class="d-flex align-center mb-1">
+                    <span class="nd-section-title">Bases de datos adjuntas</span>
+                    <v-spacer />
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      prepend-icon="mdi-plus"
+                      data-test="sqlite-attach-add"
+                      @click="addAttached"
+                      >Añadir</v-btn
+                    >
+                  </div>
+                  <div
+                    v-if="!liteOptions.attached.length"
+                    class="text-caption text-medium-emphasis"
+                  >
+                    Opcional: otros archivos que se adjuntan con ATTACH al abrir (nunca se crean).
+                  </div>
+                  <div
+                    v-for="(db, i) in liteOptions.attached"
+                    :key="i"
+                    class="d-flex align-center ga-2 mb-1"
+                    :data-test="`sqlite-attach-row-${i}`"
+                  >
+                    <v-text-field
+                      :model-value="db.alias"
+                      label="Alias"
+                      density="compact"
+                      hide-details
+                      class="nd-mono-input connection-dialog__alias"
+                      :data-test="`sqlite-attach-alias-${i}`"
+                      @update:model-value="patchAttached(i, { alias: $event })"
+                    />
+                    <v-text-field
+                      v-path-tail="db.filePath"
+                      :model-value="db.filePath"
+                      :title="db.filePath || undefined"
+                      label="Archivo"
+                      density="compact"
+                      hide-details
+                      readonly
+                      class="nd-mono-input nd-path-field"
+                      :data-test="`sqlite-attach-path-${i}`"
+                    />
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      icon="mdi-folder-open-outline"
+                      :aria-label="`Elegir archivo de ${db.alias || 'la base adjunta'}`"
+                      title="Elegir archivo…"
+                      :data-test="`sqlite-attach-pick-${i}`"
+                      @click="pickAttachedFile(i)"
+                    />
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      icon="mdi-close"
+                      :aria-label="`Quitar ${db.alias || 'la base adjunta'}`"
+                      :data-test="`sqlite-attach-remove-${i}`"
+                      @click="removeAttached(i)"
+                    />
+                  </div>
+                </v-col>
+              </template>
+              <template v-if="!isSqlite">
+                <v-col cols="12" sm="8">
+                  <v-text-field
+                    v-model="form.host"
+                    label="Host"
+                    prepend-inner-icon="mdi-server-network"
+                    class="nd-mono-input"
+                    data-test="conn-host"
+                  />
+                </v-col>
+                <v-col cols="12" sm="4">
+                  <v-text-field
+                    v-model.number="form.port"
+                    label="Puerto"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    class="nd-mono-input"
+                    data-test="conn-port"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="form.username"
+                    label="Usuario"
+                    prepend-inner-icon="mdi-account-outline"
+                    autocomplete="off"
+                    data-test="conn-user"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-select
+                    v-model="form.authMode"
+                    :items="AUTH_MODES"
+                    label="Autenticación"
+                    prepend-inner-icon="mdi-shield-key-outline"
+                    data-test="conn-auth-mode"
+                  />
+                </v-col>
+                <v-col v-if="noPassword" cols="12">
+                  <v-alert
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    icon="mdi-certificate-outline"
+                    data-test="conn-no-password-hint"
+                  >
+                    Útil con Cloud SQL Auth Proxy, túneles o certificados de cliente (pestaña SSL).
+                    <template v-if="hasPassword">
+                      La contraseña guardada de esta conexión se borrará al guardar.</template
+                    >
+                  </v-alert>
+                </v-col>
+                <v-col v-if="!noPassword" cols="12" sm="6">
+                  <v-text-field
+                    v-model="password"
+                    label="Contraseña"
+                    persistent-placeholder
+                    prepend-inner-icon="mdi-lock-outline"
+                    :type="showPassword ? 'text' : 'password'"
+                    autocomplete="new-password"
+                    :placeholder="hasPassword && !clearPassword ? '•••••• (guardada)' : ''"
+                    :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                    data-test="conn-password"
+                    @click:append-inner="showPassword = !showPassword"
+                  />
+                </v-col>
+                <v-col v-if="!noPassword" cols="12" class="d-flex align-center flex-wrap ga-2">
+                  <v-checkbox
+                    v-model="form.savePassword"
+                    label="Guardar contraseña"
+                    density="compact"
+                    hide-details
+                  />
                   <template v-if="hasPassword">
-                    La contraseña guardada de esta conexión se borrará al guardar.</template
-                  >
-                </v-alert>
-              </v-col>
-              <v-col v-if="!noPassword" cols="12" sm="6">
-                <v-text-field
-                  v-model="password"
-                  label="Contraseña"
-                  persistent-placeholder
-                  prepend-inner-icon="mdi-lock-outline"
-                  :type="showPassword ? 'text' : 'password'"
-                  autocomplete="new-password"
-                  :placeholder="hasPassword && !clearPassword ? '•••••• (guardada)' : ''"
-                  :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                  data-test="conn-password"
-                  @click:append-inner="showPassword = !showPassword"
-                />
-              </v-col>
-              <v-col v-if="!noPassword" cols="12" class="d-flex align-center flex-wrap ga-2">
-                <v-checkbox
-                  v-model="form.savePassword"
-                  label="Guardar contraseña"
-                  density="compact"
-                  hide-details
-                />
-                <template v-if="hasPassword">
-                  <v-chip
-                    v-if="!clearPassword"
-                    size="small"
-                    color="success"
-                    prepend-icon="mdi-key"
-                    data-test="conn-password-saved"
-                    >contraseña guardada</v-chip
-                  >
-                  <v-chip v-else size="small" color="warning" prepend-icon="mdi-key-remove"
-                    >se borrará al guardar</v-chip
-                  >
-                  <v-btn
-                    size="small"
-                    variant="text"
-                    :prepend-icon="clearPassword ? 'mdi-undo-variant' : 'mdi-key-remove'"
-                    class="connection-dialog__clear-password"
-                    :class="{ 'connection-dialog__clear-password--danger': !clearPassword }"
-                    @click="clearPassword = !clearPassword"
-                  >
-                    {{ clearPassword ? 'Mantener contraseña' : 'Borrar contraseña guardada' }}
-                  </v-btn>
-                </template>
-              </v-col>
+                    <v-chip
+                      v-if="!clearPassword"
+                      size="small"
+                      color="success"
+                      prepend-icon="mdi-key"
+                      data-test="conn-password-saved"
+                      >contraseña guardada</v-chip
+                    >
+                    <v-chip v-else size="small" color="warning" prepend-icon="mdi-key-remove"
+                      >se borrará al guardar</v-chip
+                    >
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      :prepend-icon="clearPassword ? 'mdi-undo-variant' : 'mdi-key-remove'"
+                      class="connection-dialog__clear-password"
+                      :class="{ 'connection-dialog__clear-password--danger': !clearPassword }"
+                      @click="clearPassword = !clearPassword"
+                    >
+                      {{ clearPassword ? 'Mantener contraseña' : 'Borrar contraseña guardada' }}
+                    </v-btn>
+                  </template>
+                </v-col>
+              </template>
               <template v-if="isPg">
                 <v-col cols="12" sm="6">
                   <v-text-field
@@ -724,7 +975,7 @@ async function save(): Promise<void> {
 
           <v-window-item value="advanced">
             <v-combobox
-              v-if="!isPg"
+              v-if="!isPg && !isSqlite"
               v-model="form.customDatabases"
               label="Lista de bases de datos personalizada"
               hint="Si no está vacía, solo se muestran estos esquemas. Pulsa Enter para añadir."
@@ -737,13 +988,31 @@ async function save(): Promise<void> {
             <v-textarea
               v-model="form.initialQueries"
               label="Consultas iniciales de sesión"
-              hint="Se ejecutan al abrir cada sesión, p. ej. SET time_zone = '+00:00';"
+              :hint="
+                isSqlite
+                  ? 'Se ejecutan al abrir el archivo, p. ej. PRAGMA cache_size = -20000;'
+                  : 'Se ejecutan al abrir cada sesión, p. ej. SET time_zone = \'+00:00\';'
+              "
               persistent-hint
               rows="3"
               variant="outlined"
               density="compact"
               class="mb-3"
             />
+            <v-row v-if="isSqlite" dense class="mb-1">
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  :model-value="liteOptions.busyTimeoutMs"
+                  label="Espera si el archivo está bloqueado (ms)"
+                  type="number"
+                  min="0"
+                  hint="busy_timeout: útil si otra aplicación tiene el archivo abierto"
+                  persistent-hint
+                  data-test="sqlite-busy-timeout"
+                  @update:model-value="patchSqlite({ busyTimeoutMs: Number($event) || 0 })"
+                />
+              </v-col>
+            </v-row>
             <v-row v-if="isPg" dense class="mb-1">
               <v-col cols="12" sm="6">
                 <v-text-field
@@ -854,7 +1123,7 @@ async function save(): Promise<void> {
         >
           <span class="connection-dialog__result-dot" aria-hidden="true" />
           <span class="nd-ellipsis">
-            <template v-if="testResult.ok && isPg"
+            <template v-if="testResult.ok && (isPg || isSqlite)"
               >Conectado · {{ testResult.serverVersion }} ({{ testResult.durationMs }} ms)<template
                 v-if="testResult.details?.length"
               >
@@ -1002,6 +1271,9 @@ async function save(): Promise<void> {
   background: var(--nd-error-soft);
   border-color: color-mix(in srgb, var(--nd-error) 35%, transparent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--nd-error) 14%, transparent);
+}
+.connection-dialog__alias {
+  flex: 0 0 120px;
 }
 .connection-dialog__clear-password {
   color: var(--nd-text-2);

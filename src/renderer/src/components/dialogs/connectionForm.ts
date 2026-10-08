@@ -1,5 +1,10 @@
 import { connectionFormErrors } from '@shared/connectionValidation'
-import { DEFAULT_NETWORK, ENGINES, defaultPostgresOptions } from '@shared/engines'
+import {
+  DEFAULT_NETWORK,
+  ENGINES,
+  defaultPostgresOptions,
+  defaultSqliteOptions
+} from '@shared/engines'
 import type { ConnectionConfig, ConnectionInput, EngineId, SslMode } from '@shared/types'
 
 /** Marker colours per environment (Local green, Staging yellow, Production red, ...). */
@@ -16,7 +21,38 @@ export const COLOR_PRESETS: { value: string | null; label: string }[] = [
 
 /** Empty form of a new connection; MySQL unless another engine is picked. */
 export function emptyConnectionInput(engine: EngineId = 'mysql'): ConnectionInput {
+  if (engine === 'sqlite') return emptySqliteInput()
   return engine === 'postgresql' ? emptyPostgresInput() : emptyMysqlInput()
+}
+
+/** SQLite: a database file; no host, port, user, password, SSH or SSL. */
+export function emptySqliteInput(): ConnectionInput {
+  const base = emptyMysqlInput()
+  return {
+    ...base,
+    engine: 'sqlite',
+    host: '',
+    port: 0,
+    username: '',
+    authMode: 'none',
+    savePassword: false,
+    ssh: { ...base.ssh, savePassword: false },
+    ssl: { ...base.ssl, verifyServer: false },
+    sqlite: defaultSqliteOptions(false)
+  }
+}
+
+/** Open/save dialog filters for SQLite database files. */
+export const SQLITE_FILE_FILTERS: { name: string; extensions: string[] }[] = [
+  { name: 'Bases de datos SQLite', extensions: ['db', 'sqlite', 'sqlite3', 'db3', 's3db'] },
+  { name: 'Todos los archivos', extensions: ['*'] }
+]
+
+/** File name of a path (either separator) without its extension: the default connection name. */
+export function sqliteNameFromPath(path: string): string {
+  const file = path.split(/[\\/]/).pop() ?? ''
+  const dot = file.lastIndexOf('.')
+  return dot > 0 ? file.slice(0, dot) : file
 }
 
 function emptyPostgresInput(): ConnectionInput {
@@ -110,7 +146,16 @@ export function inputFromConnection(c: ConnectionConfig): ConnectionInput {
     ssh: { ...c.ssh },
     ssl: { ...c.ssl },
     ...(c.postgres ? { postgres: { ...defaultPostgresOptions(), ...c.postgres } } : {}),
-    ...(c.network ? { network: { ...c.network } } : {})
+    ...(c.network ? { network: { ...c.network } } : {}),
+    ...(c.sqlite
+      ? {
+          sqlite: {
+            ...defaultSqliteOptions(c.environment === 'production'),
+            ...c.sqlite,
+            attached: (c.sqlite.attached ?? []).map((a) => ({ ...a }))
+          }
+        }
+      : {})
   }
 }
 
@@ -142,6 +187,20 @@ export function normalizeConnectionInput(input: ConnectionInput): ConnectionInpu
             initialDatabase: input.postgres.initialDatabase.trim(),
             timeZone: input.postgres.timeZone.trim(),
             searchPath: input.postgres.searchPath.trim()
+          }
+        }
+      : {}),
+    ...(input.sqlite
+      ? {
+          sqlite: {
+            ...input.sqlite,
+            filePath: input.sqlite.filePath.trim(),
+            busyTimeoutMs: Math.max(0, Number(input.sqlite.busyTimeoutMs) || 0),
+            attached: input.sqlite.attached.map((a) => ({
+              ...a,
+              alias: a.alias.trim(),
+              filePath: a.filePath.trim()
+            }))
           }
         }
       : {}),
