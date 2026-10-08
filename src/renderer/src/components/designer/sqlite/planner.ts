@@ -400,7 +400,7 @@ function rebuildReason(dd: Diff, original: TableStructure): string | null {
   if (dd.pkChanged || dd.autoIncrementChanged) return 'cambia la clave primaria'
   if (dd.fkChanged) return 'cambian las claves foráneas'
   if (dd.changed.length)
-    return `cambia la definición de ${dd.changed.map((c) => `«${c.name}»`).join(', ')} (tipo, nulos o valor predeterminado)`
+    return `cambia la definición de ${dd.changed.map((c) => `«${c.name}»`).join(', ')}: tipo, nulos o valor predeterminado`
   if (dd.reordered) return 'cambia el orden de las columnas'
   for (const c of dd.added) {
     if (c.primaryKey) return `la columna nueva «${c.name}» es clave primaria`

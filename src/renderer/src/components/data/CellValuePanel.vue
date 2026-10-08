@@ -375,6 +375,8 @@ function onSplitKey(event: KeyboardEvent): void {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  /* A panel squeezed to its header must not paint its text over the footer below. */
+  overflow: hidden;
 }
 .vpanel__pre,
 .vpanel__text {
@@ -389,6 +391,7 @@ function onSplitKey(event: KeyboardEvent): void {
   color: var(--nd-text);
   white-space: pre;
   tab-size: 2;
+  box-sizing: border-box;
 }
 .vpanel__pre.is-wrap,
 .vpanel__text.is-wrap {
