@@ -206,6 +206,14 @@ describeServer(MARIADB_TARGET, 'MariaDB engine (integration)', (url) => {
     }
   })
 
+  it('lists the full UCA 14.0 collation names under their charset (designer pickers)', async () => {
+    await withRoot(async (s) => {
+      const utf8mb4 = (await introspect.listCharsets(s)).find((c) => c.charset === 'utf8mb4')
+      expect(utf8mb4?.collations).toContain(utf8mb4?.defaultCollation)
+      expect(utf8mb4?.collations).toContain('utf8mb4_uca1400_ai_ci')
+    })
+  })
+
   it('lists, shows and drops sequences', async () => {
     await withRoot(async (s) => {
       const sequences = await introspect.listSequences(s, SCHEMA)

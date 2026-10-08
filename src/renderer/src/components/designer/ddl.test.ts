@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildDdlScript, parseObjectName, stripDefiner } from './ddl'
-import { joinColumnType, splitColumnType } from './columnType'
+import { joinColumnType, lengthForBase, splitColumnType } from './columnType'
 import { validateDraft } from './validateDraft'
 import { emptyColumn, emptyTable } from '@renderer/utils/tableDesigner'
 
@@ -93,6 +93,16 @@ describe('column type helpers', () => {
     })
     expect(joinColumnType({ base: 'decimal', length: '10,2', suffix: '' })).toBe('decimal(10,2)')
     expect(joinColumnType({ base: 'text', length: '', suffix: '' })).toBe('text')
+    // MariaDB type names with digits stay whole, and take no length.
+    expect(lengthForBase('inet6', '255')).toBe('')
+    expect(lengthForBase('uuid', '36')).toBe('')
+    expect(splitColumnType('inet6')).toEqual({ base: 'inet6', length: '', suffix: '' })
+    expect(splitColumnType('inet4')).toEqual({ base: 'inet4', length: '', suffix: '' })
+    expect(splitColumnType('int(11) unsigned')).toEqual({
+      base: 'int',
+      length: '11',
+      suffix: 'unsigned'
+    })
   })
 })
 

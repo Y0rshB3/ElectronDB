@@ -896,9 +896,7 @@ async function save(): Promise<void> {
                     autocomplete="new-password"
                     :placeholder="hasPassword && !clearPassword ? '•••••• (guardada)' : ''"
                     :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-                    :hint="
-                      isMariaDb ? 'Admite cuentas mysql_native_password, ed25519 y parsec' : ''
-                    "
+                    :hint="isMariaDb ? 'También cuentas ed25519 y parsec' : ''"
                     :persistent-hint="isMariaDb"
                     data-test="conn-password"
                     @click:append-inner="showPassword = !showPassword"
@@ -1484,6 +1482,7 @@ async function save(): Promise<void> {
 <style scoped>
 .connection-dialog__engines {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }

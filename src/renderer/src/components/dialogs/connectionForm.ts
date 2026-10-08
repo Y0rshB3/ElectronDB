@@ -25,6 +25,7 @@ export const COLOR_PRESETS: { value: string | null; label: string }[] = [
 export function emptyConnectionInput(engine: EngineId = 'mysql'): ConnectionInput {
   if (engine === 'sqlite') return emptySqliteInput()
   if (engine === 'mongodb') return emptyMongoInput()
+  if (engine === 'mariadb') return { ...emptyMysqlInput(), engine: 'mariadb' }
   return engine === 'postgresql' ? emptyPostgresInput() : emptyMysqlInput()
 }
 

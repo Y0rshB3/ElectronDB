@@ -35,6 +35,30 @@ describe('ConnectionDialog · PostgreSQL (preview)', () => {
     expect(wrapper.find('[data-test="conn-pg-database"]').exists()).toBe(false)
   })
 
+  it('creates a MariaDB connection from the picker (engine mariadb, MySQL defaults)', async () => {
+    expect(emptyConnectionInput('mariadb')).toMatchObject({
+      engine: 'mariadb',
+      port: 3306,
+      username: 'root'
+    })
+    const pinia = freshPinia()
+    const ui = useUiStore()
+    ui.connectionDialog = { open: true, editing: null, engine: 'mariadb' }
+    wrapper = mountWith(ConnectionDialog, pinia)
+    await settle()
+    expect(wrapper.get('[data-test="conn-engine-mariadb"]').attributes('aria-checked')).toBe('true')
+    await wrapper.get('[data-test="conn-engine-mysql"]').trigger('click')
+    await settle()
+    await wrapper.get('[data-test="conn-engine-mariadb"]').trigger('click')
+    await settle()
+    expect(wrapper.text()).toContain('ed25519 y parsec')
+    await wrapper.get('[data-test="conn-name"] input').setValue('Maria local')
+    await wrapper.get('[data-test="conn-save"]').trigger('click')
+    await settle()
+    const call = invoke.mock.calls.find((c) => c[0] === 'connections:save')!
+    expect(call[1]).toMatchObject({ engine: 'mariadb', name: 'Maria local', port: 3306 })
+  })
+
   it('offers PostgreSQL with previews on and saves the postgres block', async () => {
     const pinia = freshPinia()
     useSettingsStore().settings.previewEngines = true

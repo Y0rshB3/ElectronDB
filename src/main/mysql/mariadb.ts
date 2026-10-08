@@ -66,6 +66,11 @@ export function jsonColumnsFromChecks(rows: { name: unknown; clause: unknown }[]
   return out
 }
 
+/** Full collation names per charset (MariaDB 11.x; absent before, the caller ignores errors). */
+export const MARIADB_FULL_COLLATIONS_SQL = `SELECT FULL_COLLATION_NAME AS collation, CHARACTER_SET_NAME AS charset
+       FROM information_schema.COLLATION_CHARACTER_SET_APPLICABILITY
+      WHERE FULL_COLLATION_NAME <> COLLATION_NAME`
+
 /** Tables in the tree: system-versioned tables are tables too (MariaDB only). */
 export const MARIADB_LIST_TABLES_SQL = `SELECT TABLE_NAME, ENGINE, TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, AUTO_INCREMENT,
             CREATE_TIME, UPDATE_TIME, TABLE_COLLATION, TABLE_COMMENT

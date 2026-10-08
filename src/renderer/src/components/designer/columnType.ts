@@ -46,9 +46,12 @@ export interface SplitType {
   suffix: string
 }
 
-/** "varchar(255)" -> { base: 'varchar', length: '255' }. Keeps enum lists intact. */
+/**
+ * "varchar(255)" -> { base: 'varchar', length: '255' }. Keeps enum lists intact.
+ * Type names may contain digits after the first letter (MariaDB `inet4`/`inet6`).
+ */
 export function splitColumnType(columnType: string): SplitType {
-  const m = /^\s*([a-zA-Z]+)\s*(?:\((.*)\))?\s*(.*)$/s.exec(columnType)
+  const m = /^\s*([a-zA-Z][a-zA-Z0-9_]*)\s*(?:\((.*)\))?\s*(.*)$/s.exec(columnType)
   if (!m) return { base: columnType.trim(), length: '', suffix: '' }
   return { base: m[1].toLowerCase(), length: m[2] ?? '', suffix: m[3].trim() }
 }
@@ -66,7 +69,7 @@ export function isNumericType(base: string): boolean {
 }
 
 const NO_LENGTH =
-  /^(tinytext|text|mediumtext|longtext|tinyblob|blob|mediumblob|longblob|date|year|json|geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|boolean|bool|serial)$/
+  /^(tinytext|text|mediumtext|longtext|tinyblob|blob|mediumblob|longblob|date|year|json|geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection|boolean|bool|serial|uuid|inet4|inet6)$/
 const INTEGER = /^(tinyint|smallint|mediumint|int|integer|bigint)$/
 
 /**

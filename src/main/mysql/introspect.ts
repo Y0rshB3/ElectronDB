@@ -19,6 +19,7 @@ import { detectMysqlFlavor, mysqlReturning, mysqlVersionNumber } from '@shared/s
 import type { EngineId } from '@shared/types'
 import {
   MARIADB_COLUMN_CHECKS_SQL,
+  MARIADB_FULL_COLLATIONS_SQL,
   MARIADB_LIST_TABLES_SQL,
   isMariaDbSession,
   jsonColumnsFromChecks,
@@ -551,6 +552,16 @@ export async function listCharsets(q: Queryable): Promise<CharsetInfo[]> {
   for (const r of collations) {
     const cs = byCharset.get(text(r.Charset))
     if (cs) cs.collations.push(text(r.Collation))
+  }
+  // MariaDB 11: UCA 14.0 collations are charset-independent in SHOW COLLATION; their full
+  // names (utf8mb4_uca1400_ai_ci, the default) come from the applicability table.
+  if (isMariaDbSession(q)) {
+    const full = await q.query<Row>(MARIADB_FULL_COLLATIONS_SQL).catch(() => [] as Row[])
+    for (const r of full) {
+      const cs = byCharset.get(text(r.charset))
+      const name = text(r.collation)
+      if (cs && name && !cs.collations.includes(name)) cs.collations.push(name)
+    }
   }
   const list = [...byCharset.values()].sort((a, b) => a.charset.localeCompare(b.charset))
   for (const cs of list) cs.collations.sort()
