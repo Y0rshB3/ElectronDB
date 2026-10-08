@@ -185,6 +185,21 @@ export function createClient(spec: ClientSpec): pg.Client {
 }
 
 /** Network options with defaults (connect timeout, keepalive). */
+/**
+ * client.connect() that never leaves a half-open socket behind: when the
+ * sign-in fails (wrong password, or pg refusing an empty one client-side
+ * after the server asked for SCRAM), the socket is closed right away instead
+ * of keeping a server backend waiting until authentication_timeout.
+ */
+export async function connectOrClose(client: pg.Client): Promise<void> {
+  try {
+    await client.connect()
+  } catch (err) {
+    void client.end().catch(() => undefined)
+    throw err
+  }
+}
+
 export function networkOf(config: Pick<ConnectionInput, 'network'>): {
   connectTimeoutMs: number
   keepAliveSec: number

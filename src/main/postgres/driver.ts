@@ -9,6 +9,7 @@ import type { ConnectionConfig, ConnectionInput, ConnectionTestResult } from '@s
 import type { Driver, DriverHooks, DriverSecrets, Endpoint } from '../db/driver'
 import {
   buildSslPlan,
+  connectOrClose,
   createClient,
   networkOf,
   postgresOf,
@@ -48,7 +49,7 @@ async function connectOnce(
       keepAliveSec: network.keepAliveSec
     })
     client.on('error', () => undefined)
-    await client.connect()
+    await connectOrClose(client)
     return client
   }
   try {
