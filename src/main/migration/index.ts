@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StartupNotice } from '@shared/types'
 import { AiProvidersRepo } from '../ai/providers'
-import { APP_NAME, LEGACY_APPS, type LegacyApp } from '../brand'
+import { APP_NAME, LEGACY_APPS, LEGACY_ELECTRONDB, type LegacyApp } from '../brand'
 import type { AppContext } from '../context'
 import { getLogger } from '../log'
 import {
@@ -21,6 +21,7 @@ import {
   type MigrationMarker,
   type ProfileMigrationResult
 } from './profile'
+import { LEGACY_APP_NOTICE, legacyAppNotice } from './legacyApp'
 import { migrateLegacySecrets, reenterPasswordsMessage, type RawSecrets } from './secrets'
 
 /**
@@ -215,14 +216,29 @@ function movedNotice(marker: MigrationMarker): StartupNotice {
   }
 }
 
-/** Notices the renderer shows once after start (see app:startupNotices). */
-export function startupNotices(userDataPath: string): StartupNotice[] {
+/**
+ * Notices the renderer shows once after start (see app:startupNotices).
+ * `legacyApps`: ElectronDB bundles still installed (installedLegacyApps), offered
+ * for the Trash once after a migration from ElectronDB.
+ */
+export function startupNotices(
+  userDataPath: string,
+  legacyApps: () => string[] = () => []
+): StartupNotice[] {
   const marker = readMigrationMarker(userDataPath)
   if (!marker) return []
   const notices: StartupNotice[] = []
   // Only markers written by Vortaq carry movedNoticeShown (false until the
   // user closes the notice); ElectronDB's own Navidog markers never show it.
   if (marker.movedNoticeShown === false) notices.push(movedNotice(marker))
+  if (
+    marker.movedNoticeShown !== undefined &&
+    marker.source === LEGACY_ELECTRONDB.name &&
+    !marker.legacyAppNoticeShown
+  ) {
+    const apps = legacyApps()
+    if (apps.length) notices.push(legacyAppNotice(apps))
+  }
   const names = marker.passwordsToReenter ?? []
   if (marker.noticeShown || names.length === 0) return notices
   const source = marker.source ?? 'Navidog'
@@ -255,9 +271,12 @@ export function startupNotices(userDataPath: string): StartupNotice[] {
 }
 
 export function dismissStartupNotice(userDataPath: string, id: string): void {
-  if (id !== REENTER_PASSWORDS_NOTICE && id !== PROFILE_MOVED_NOTICE) return
+  if (id !== REENTER_PASSWORDS_NOTICE && id !== PROFILE_MOVED_NOTICE && id !== LEGACY_APP_NOTICE)
+    return
   const marker = readMigrationMarker(userDataPath)
   if (!marker) return
+  if (id === LEGACY_APP_NOTICE && !marker.legacyAppNoticeShown)
+    writeMigrationMarker(userDataPath, { ...marker, legacyAppNoticeShown: true })
   if (id === PROFILE_MOVED_NOTICE && marker.movedNoticeShown === false)
     writeMigrationMarker(userDataPath, { ...marker, movedNoticeShown: true })
   if (id === REENTER_PASSWORDS_NOTICE && !marker.noticeShown)

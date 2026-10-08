@@ -1,6 +1,6 @@
 import { app, BrowserWindow, safeStorage } from 'electron'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import { APP_NAME, LOG_FILE_NAME } from './brand'
 import type { StartupNotice } from '@shared/types'
 import type { AppContext } from './context'
@@ -55,11 +55,24 @@ export interface EnvSwitches {
    * "ElectronDB Safe Storage" / "Navidog Safe Storage" items.
    */
   legacyKeychain: string | null
+  /**
+   * VORTAQ_LEGACY_APP_PATHS (tests and screenshots only): ElectronDB bundles to
+   * check instead of /Applications and ~/Applications (path-delimiter list).
+   */
+  legacyAppPaths: string[] | null
 }
 
 const absolute = (dir: string | undefined): string | null => {
   const value = dir?.trim()
   return value ? (isAbsolute(value) ? value : resolve(value)) : null
+}
+
+const listOfPaths = (raw: string | undefined): string[] | null => {
+  const paths = (raw ?? '')
+    .split(delimiter)
+    .map((p) => absolute(p))
+    .filter((p): p is string => p !== null)
+  return paths.length ? paths : null
 }
 
 export function readEnvSwitches(env: NodeJS.ProcessEnv = process.env): EnvSwitches {
@@ -68,7 +81,8 @@ export function readEnvSwitches(env: NodeJS.ProcessEnv = process.env): EnvSwitch
     plainSecrets: envVar('PLAIN_SECRETS', env) === '1',
     smoke: envVar('SMOKE', env) === '1',
     legacyUserDataPath: absolute(env.VORTAQ_LEGACY_USER_DATA ?? env.ELECTRONDB_LEGACY_USER_DATA),
-    legacyKeychain: absolute(env.VORTAQ_LEGACY_KEYCHAIN ?? env.ELECTRONDB_LEGACY_KEYCHAIN)
+    legacyKeychain: absolute(env.VORTAQ_LEGACY_KEYCHAIN ?? env.ELECTRONDB_LEGACY_KEYCHAIN),
+    legacyAppPaths: listOfPaths(env.VORTAQ_LEGACY_APP_PATHS)
   }
 }
 

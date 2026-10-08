@@ -14,6 +14,7 @@ import {
   runSecretMigration,
   startupNotices
 } from './index'
+import { LEGACY_APP_NOTICE } from './legacyApp'
 import type { KeychainExecFn } from './legacyKeychain'
 import { deriveMacOsCryptKey, encryptMacOsCrypt } from './osCrypt'
 import { readMigrationMarker, writeMigrationMarker } from './profile'
@@ -132,6 +133,12 @@ describe('Navidog -> Vortaq migration flow', () => {
       legacyUserDataOverride: null
     })
   }
+  it('a migration from Navidog never offers to trash an ElectronDB app', () => {
+    migrate()
+    const ids = startupNotices(current, () => ['/Applications/ElectronDB.app']).map((n) => n.id)
+    expect(ids).not.toContain(LEGACY_APP_NOTICE)
+  })
+
   const denied: KeychainExecFn = async () =>
     Promise.reject(Object.assign(new Error('User canceled the operation.'), { code: 128 }))
   const allowed: KeychainExecFn = async () => ({ stdout: `${OLD_PASSWORD}\n` })
@@ -406,6 +413,28 @@ describe('ElectronDB -> Vortaq migration flow', () => {
     dismissStartupNotice(current, PROFILE_MOVED_NOTICE)
     expect(startupNotices(current).some((n) => n.id === PROFILE_MOVED_NOTICE)).toBe(false)
     expect(readMigrationMarker(current)).toMatchObject({ movedNoticeShown: true })
+  })
+
+  it('offers once to move the ElectronDB app left installed to the Trash', () => {
+    migrate()
+    const apps = ['/Applications/ElectronDB.app']
+    const notice = startupNotices(current, () => apps).find((n) => n.id === LEGACY_APP_NOTICE)
+    expect(notice).toMatchObject({
+      title: 'ElectronDB sigue instalado',
+      action: { kind: 'trashLegacyApp', label: 'Mover ElectronDB a la Papelera' }
+    })
+    expect(notice?.message).toContain('/Applications/ElectronDB.app')
+    // Nothing installed: no notice, and the bundles are looked up only when needed.
+    expect(startupNotices(current, () => []).some((n) => n.id === LEGACY_APP_NOTICE)).toBe(false)
+    dismissStartupNotice(current, LEGACY_APP_NOTICE)
+    expect(readMigrationMarker(current)).toMatchObject({ legacyAppNoticeShown: true })
+    let looked = false
+    const after = startupNotices(current, () => {
+      looked = true
+      return apps
+    })
+    expect(after.some((n) => n.id === LEGACY_APP_NOTICE)).toBe(false)
+    expect(looked).toBe(false)
   })
 
   it('an ElectronDB-era marker (no source) never shows the "moved" notice', () => {

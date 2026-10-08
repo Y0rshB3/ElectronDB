@@ -146,7 +146,7 @@ function confirm(): void {
           :autofocus="!!request.danger && !needsTyping"
           data-test="confirm-cancel"
           @click="ui.answer(false)"
-          >Cancelar</v-btn
+          >{{ request.cancelText ?? 'Cancelar' }}</v-btn
         >
         <v-btn
           :color="request.color ?? 'primary'"

@@ -49,6 +49,7 @@ import type {
   SqliteMaintenanceResult,
   SqliteTableDependents,
   StartupNotice,
+  TrashLegacyAppResult,
   TabSessionState,
   TableDataPage,
   TableDataRequest,
@@ -131,6 +132,8 @@ export interface IpcInvokeMap {
   /** One-off messages for the user after start (e.g. passwords to type again after the rename). */
   'app:startupNotices': { args: []; result: StartupNotice[] }
   'app:dismissStartupNotice': { args: [id: string]; result: void }
+  /** Moves the ElectronDB app left installed to the Trash (main re-checks the paths). */
+  'app:trashLegacyApp': { args: []; result: TrashLegacyAppResult }
   /**
    * Opens a URL in the default browser. Main only accepts this repository's
    * GitHub release pages and downloads (https://github.com/<owner>/<repo>/releases/...).
@@ -677,6 +680,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'app:pickSaveFile',
   'app:startupNotices',
   'app:dismissStartupNotice',
+  'app:trashLegacyApp',
   'app:openExternal',
   'app:licenses',
   'app:openRepository',

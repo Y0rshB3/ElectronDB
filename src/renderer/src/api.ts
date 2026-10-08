@@ -113,6 +113,8 @@ export const api = {
     ) => invoke('app:pickSaveFile', title, defaultName, filters),
     startupNotices: () => invokeSilent('app:startupNotices'),
     dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id),
+    /** Moves the ElectronDB app left installed to the Trash (only on the user's click). */
+    trashLegacyApp: () => invoke('app:trashLegacyApp'),
     /** Only GitHub release pages/downloads of Vortaq (main rejects anything else). */
     openExternal: (url: string) => invoke('app:openExternal', url),
     licenses: () => invoke('app:licenses'),

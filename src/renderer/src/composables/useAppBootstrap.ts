@@ -10,6 +10,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useTreeStore } from '@renderer/stores/tree'
 import { useUiStore } from '@renderer/stores/ui'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useNotify } from '@renderer/composables/useNotify'
 
 let disposers: (() => void)[] = []
 
@@ -75,6 +76,10 @@ export async function showStartupNotices(): Promise<void> {
     return
   }
   for (const notice of notices) {
+    if (notice.action?.kind === 'trashLegacyApp') {
+      await showTrashLegacyAppNotice(notice, notice.action.label)
+      continue
+    }
     await ui.ask({
       title: notice.title,
       message: notice.message,
@@ -83,5 +88,32 @@ export async function showStartupNotices(): Promise<void> {
       notice: true
     })
     await api.app.dismissStartupNotice(notice.id).catch(() => undefined)
+  }
+}
+
+/**
+ * «ElectronDB sigue instalado»: the app goes to the Trash only when the user
+ * clicks the button. Shown once either way.
+ */
+async function showTrashLegacyAppNotice(notice: StartupNotice, label: string): Promise<void> {
+  const ui = useUiStore()
+  const move = await ui.ask({
+    title: notice.title,
+    message: notice.message,
+    confirmText: label,
+    cancelText: 'Ahora no'
+  })
+  await api.app.dismissStartupNotice(notice.id).catch(() => undefined)
+  if (!move) return
+  try {
+    const { trashed } = await api.app.trashLegacyApp()
+    if (trashed.length)
+      useNotify().success(
+        trashed.length === 1
+          ? 'ElectronDB se movió a la Papelera'
+          : `ElectronDB se movió a la Papelera (${trashed.length} copias)`
+      )
+  } catch {
+    // invoke() already showed the error with what to do.
   }
 }

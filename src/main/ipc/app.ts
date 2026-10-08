@@ -3,10 +3,24 @@ import { join } from 'node:path'
 import { LOG_FILE_NAME } from '../brand'
 import type { AppContext } from '../context'
 import { readLicenses, REPOSITORY_URL } from '../licenses'
+import { readEnvSwitches } from '../bootstrap'
 import { dismissStartupNotice, startupNotices } from '../migration'
+import { installedLegacyApps, LEGACY_APP_NOTICE } from '../migration/legacyApp'
 import { dismissRaisedNotice, raisedNotices } from '../notices'
 import { titleBarOverlayFor, usesTitleBarOverlay } from '../windowOptions'
 import { handle } from './typed'
+
+/** ElectronDB bundles still installed (macOS; a scratch profile checks only VORTAQ_LEGACY_APP_PATHS). */
+function legacyApps(): string[] {
+  const switches = readEnvSwitches()
+  return installedLegacyApps({
+    platform: process.platform,
+    home: app.getPath('home'),
+    candidates: switches.legacyAppPaths,
+    scratchProfile: switches.userDataPath !== null,
+    execPath: process.execPath
+  })
+}
 
 export function registerAppHandlers(ctx: AppContext): void {
   handle('app:info', () => ({
@@ -52,12 +66,32 @@ export function registerAppHandlers(ctx: AppContext): void {
     return res.canceled || !res.filePath ? null : res.filePath
   })
   handle('app:startupNotices', () => [
-    ...startupNotices(ctx.userDataPath),
+    ...startupNotices(ctx.userDataPath, legacyApps),
     ...raisedNotices(ctx.userDataPath)
   ])
   handle('app:dismissStartupNotice', (id) => {
     dismissStartupNotice(ctx.userDataPath, id)
     dismissRaisedNotice(ctx.userDataPath, id)
+  })
+  // Only on the user's click in the «ElectronDB sigue instalado» notice; the
+  // paths are found again here, never taken from the renderer.
+  handle('app:trashLegacyApp', async () => {
+    const paths = legacyApps()
+    if (!paths.length)
+      throw new Error('ElectronDB ya no está instalado: no hay nada que mover a la Papelera.')
+    const trashed: string[] = []
+    for (const path of paths) {
+      try {
+        await shell.trashItem(path)
+        trashed.push(path)
+      } catch (err) {
+        throw new Error(
+          `No se pudo mover ${path} a la Papelera (${err instanceof Error ? err.message : String(err)}). Arrástrala a la Papelera desde Finder.`
+        )
+      }
+    }
+    dismissStartupNotice(ctx.userDataPath, LEGACY_APP_NOTICE)
+    return { trashed }
   })
   handle('settings:get', () => ctx.settings.get())
   handle('settings:update', (patch) => {

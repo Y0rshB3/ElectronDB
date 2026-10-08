@@ -84,6 +84,8 @@ export interface MigrationMarker {
    * Absent in markers written by ElectronDB (no notice for those).
    */
   movedNoticeShown?: boolean
+  /** macOS: the «ElectronDB sigue instalado» notice was shown (once). */
+  legacyAppNoticeShown?: boolean
 }
 
 /** Folders where `source` kept its profile, most likely first. */

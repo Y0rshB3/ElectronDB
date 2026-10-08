@@ -19,6 +19,8 @@ export interface ConfirmRequest {
   /** Extra emphasised details such as SQL or object names. */
   details?: string
   confirmText?: string
+  /** Label of the dismiss button (default «Cancelar»). */
+  cancelText?: string
   color?: string
   /** When set, the user must type this text to enable the confirm button. */
   requireTyped?: string

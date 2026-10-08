@@ -1539,6 +1539,17 @@ export interface StartupNotice {
   level: 'info' | 'warning'
   title: string
   message: string
+  /**
+   * Optional button next to «Ahora no». Runs only when the user clicks it;
+   * `trashLegacyApp` calls app:trashLegacyApp.
+   */
+  action?: { kind: 'trashLegacyApp'; label: string }
+}
+
+/** Result of app:trashLegacyApp. */
+export interface TrashLegacyAppResult {
+  /** Bundles moved to the Trash. */
+  trashed: string[]
 }
 
 /** «Acerca de Vortaq»: licence texts shipped with the app. */
