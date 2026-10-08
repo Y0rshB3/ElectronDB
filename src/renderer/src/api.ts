@@ -291,8 +291,7 @@ export const api = {
       target: string,
       includeDocuments: boolean,
       writeOptions?: WriteOptions
-    ) =>
-      invoke('mongo:duplicateCollection', c, db, source, target, includeDocuments, writeOptions),
+    ) => invoke('mongo:duplicateCollection', c, db, source, target, includeDocuments, writeOptions),
     clearCollection: (c: string, db: string, coll: string, writeOptions?: WriteOptions) =>
       invoke('mongo:clearCollection', c, db, coll, writeOptions),
     countDocuments: (c: string, db: string, coll: string) =>

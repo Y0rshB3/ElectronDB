@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { restoreSourceOf } from '@shared/restoreTask'
 import {
   backupFamilyName,
@@ -235,6 +235,25 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
   if (opened && connectionId) void schemaLoader.load(connectionId)
 }
 
+const titleEl = ref<HTMLElement | null>(null)
+/** Moves keyboard focus into the panel (opened with Intro from the sequence). */
+function focus(): void {
+  titleEl.value?.focus()
+}
+defineExpose({ focus })
+
+/**
+ * Esc closes the panel, but not while a menu, the SQL editor (autocomplete,
+ * search) or another overlay is handling it.
+ */
+function onEscape(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null
+  if (event.defaultPrevented || target?.closest('.cm-editor')) return
+  if (document.querySelector('.v-overlay--active .v-list, .v-overlay--active .v-menu')) return
+  event.stopPropagation()
+  emit('close')
+}
+
 const formatValue = computed(() =>
   task.value?.format === 'sql' || task.value?.format === 'vqb' ? task.value.format : 'nb3'
 )
@@ -246,7 +265,7 @@ const formatValue = computed(() =>
     class="step-settings"
     aria-label="Ajustes del paso"
     data-test="step-settings"
-    @keydown.esc.stop="emit('close')"
+    @keydown.esc="onEscape"
   >
     <header class="step-settings__head">
       <span class="step-settings__badge nd-mono" aria-hidden="true">{{ index + 1 }}</span>
@@ -257,7 +276,7 @@ const formatValue = computed(() =>
         aria-hidden="true"
       />
       <div class="step-settings__heading">
-        <h3 class="step-settings__title">Paso {{ index + 1 }}</h3>
+        <h3 ref="titleEl" class="step-settings__title" tabindex="-1">Paso {{ index + 1 }}</h3>
         <span class="step-settings__sub">{{
           task.referenceName || defaultReferenceName(task, tasks)
         }}</span>
@@ -567,6 +586,7 @@ const formatValue = computed(() =>
 }
 .step-settings__title {
   margin: 0;
+  outline: none;
   font-size: var(--nd-fs-base);
   font-weight: var(--nd-fw-heading);
 }

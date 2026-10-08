@@ -144,20 +144,25 @@ interface ItemGroup {
 /** Job copies of the selected database found on disk (restore kind). */
 const latestFiles = ref<BackupFile[]>([])
 const latestLoading = ref(false)
+/** Only the newest backups:list answer is shown. */
+let latestToken = 0
 watch(
   () => [kind.value, selectedConnection.value, selectedDatabase.value] as const,
   async ([k, connectionId, schema]) => {
+    const token = ++latestToken
     latestFiles.value = []
+    latestLoading.value = false
     if (k !== 'restore' || !connectionId || !schema) return
     latestLoading.value = true
     try {
       const files = await backups.load(connectionId, schema)
-      if (selectedConnection.value === connectionId && selectedDatabase.value === schema)
+      if (token === latestToken)
         latestFiles.value = files.filter((f) => f.run && f.run.includeData !== false)
     } catch {
-      latestFiles.value = []
+      // Reported by invoke(); the subtitle falls back to «aún no hay copias».
+      if (token === latestToken) latestFiles.value = []
     } finally {
-      latestLoading.value = false
+      if (token === latestToken) latestLoading.value = false
     }
   }
 )
@@ -311,6 +316,7 @@ function addChecked(): void {
 }
 
 function onItemKey(event: KeyboardEvent, item: Item): void {
+  if (event.target !== event.currentTarget) return
   if (event.key === 'Enter') {
     addItems([item])
     event.preventDefault()
@@ -318,6 +324,12 @@ function onItemKey(event: KeyboardEvent, item: Item): void {
     toggleChecked(item.key)
     event.preventDefault()
   }
+}
+
+/** Double click adds the item, except on its checkbox (two quick toggles). */
+function onItemDblClick(event: MouseEvent, item: Item): void {
+  if ((event.target as HTMLElement | null)?.closest('.avail-item__check')) return
+  addItems([item])
 }
 
 function onItemDragStart(event: DragEvent, item: Item): void {
@@ -342,7 +354,7 @@ const emptyTree = computed(() =>
       </h3>
       <div
         class="step-browser__kinds"
-        role="radiogroup"
+        role="group"
         aria-label="Tipo de paso"
         data-test="step-kinds"
       >
@@ -350,10 +362,9 @@ const emptyTree = computed(() =>
           v-for="k in STEP_KINDS"
           :key="k.value"
           type="button"
-          role="radio"
           class="step-kind nd-transition"
           :class="{ 'step-kind--active': kind === k.value }"
-          :aria-checked="kind === k.value"
+          :aria-pressed="kind === k.value"
           :data-test="`step-kind-${k.value}`"
           @click="((kind = k.value), (collapsed = false))"
         >
@@ -389,14 +400,8 @@ const emptyTree = computed(() =>
           data-test="step-browser-filter"
         />
         <p v-if="!kindConnections.length" class="step-browser__muted">{{ emptyTree }}</p>
-        <ul v-else class="browse-tree" role="tree" aria-label="Conexiones">
-          <li
-            v-for="c in filteredConnections"
-            :key="c.id"
-            role="treeitem"
-            :aria-expanded="!!expanded[c.id]"
-            :aria-selected="selectedConnection === c.id && !selectedDatabase"
-          >
+        <ul v-else class="browse-tree" aria-label="Conexiones">
+          <li v-for="c in filteredConnections" :key="c.id">
             <div
               class="browse-node"
               :class="{ 'browse-node--selected': selectedConnection === c.id && !selectedDatabase }"
@@ -405,6 +410,7 @@ const emptyTree = computed(() =>
                 type="button"
                 class="browse-node__chevron"
                 :aria-label="expanded[c.id] ? `Contraer ${c.name}` : `Expandir ${c.name}`"
+                :aria-expanded="!!expanded[c.id]"
                 :data-test="`browse-expand-${c.id}`"
                 @click="toggle(c)"
               >
@@ -423,6 +429,7 @@ const emptyTree = computed(() =>
               <button
                 type="button"
                 class="browse-node__label"
+                :aria-pressed="selectedConnection === c.id && !selectedDatabase"
                 :data-test="`browse-connection-${c.id}`"
                 @click="selectConnection(c)"
                 @dblclick="toggle(c)"
@@ -443,16 +450,15 @@ const emptyTree = computed(() =>
                 >
               </button>
             </div>
-            <ul v-if="expanded[c.id]" role="group" class="browse-tree__children">
+            <ul
+              v-if="expanded[c.id]"
+              class="browse-tree__children"
+              :aria-label="`Bases de datos de ${c.name}`"
+            >
               <li v-if="schemaLoader.errorOf(c.id)" class="browse-node__error">
                 {{ schemaLoader.errorOf(c.id) }}
               </li>
-              <li
-                v-for="name in databasesOf(c)"
-                :key="name"
-                role="treeitem"
-                :aria-selected="selectedConnection === c.id && selectedDatabase === name"
-              >
+              <li v-for="name in databasesOf(c)" :key="name">
                 <button
                   type="button"
                   class="browse-node browse-node--db browse-node__label"
@@ -460,6 +466,7 @@ const emptyTree = computed(() =>
                     'browse-node--selected':
                       selectedConnection === c.id && selectedDatabase === name
                   }"
+                  :aria-pressed="selectedConnection === c.id && selectedDatabase === name"
                   :data-test="`browse-db-${name}`"
                   @click="selectDatabase(c, name)"
                 >
@@ -502,7 +509,7 @@ const emptyTree = computed(() =>
               draggable="true"
               :aria-label="`${item.title}. ${item.subtitle}. Intro para añadir, espacio para marcar.`"
               :data-test="`avail-${item.key}`"
-              @dblclick="addItems([item])"
+              @dblclick="onItemDblClick($event, item)"
               @keydown="onItemKey($event, item)"
               @dragstart="onItemDragStart($event, item)"
               @dragend="endAddDrag"

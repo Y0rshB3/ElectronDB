@@ -95,8 +95,8 @@ describe('job step browser model', () => {
     const copy = duplicateTask(t)
     expect(copy.id).not.toBe('x')
     expect(problemsByTask([t, copy], () => mysql)).toEqual({
-      x: ['Tarea 1: escribe la consulta SQL a ejecutar.'],
-      [copy.id]: ['Tarea 2: escribe la consulta SQL a ejecutar.']
+      x: ['Paso 1: escribe la consulta SQL a ejecutar.'],
+      [copy.id]: ['Paso 2: escribe la consulta SQL a ejecutar.']
     })
   })
 })
@@ -316,8 +316,8 @@ describe('job editor: sequence, browser and settings', () => {
     await settle()
     expect(calls(invoke, 'jobs:save')).toHaveLength(0)
     expect(w.get('[data-test="job-task-3"]').classes()).toContain('step-row--strict')
-    expect(w.get('[data-test="step-settings-problems"]').text()).toContain('Tarea 4')
-    expect(w.get('[data-test="job-errors"]').text()).toContain('Tarea 4')
+    expect(w.get('[data-test="step-settings-problems"]').text()).toContain('Paso 4')
+    expect(w.get('[data-test="job-errors"]').text()).toContain('Paso 4')
   })
 
   it('adds several databases at once, hiding the system ones, only after the user picks a connection', async () => {
@@ -339,8 +339,9 @@ describe('job editor: sequence, browser and settings', () => {
     await w.get('[data-test="browser-add"]').trigger('click')
     await settle()
     expect(rowNames(w)).toHaveLength(5)
-    // The last added step is selected.
-    expect(w.get('[data-test="step-settings"]').text()).toContain('Paso 5')
+    // Several steps at once do not open a settings panel; they are announced.
+    expect(w.find('[data-test="step-settings"]').exists()).toBe(false)
+    expect(w.text()).toContain('2 pasos añadidos')
   })
 
   it('adds a saved query of the selected database with a double click (no connection opened)', async () => {
@@ -438,6 +439,31 @@ describe('job editor: sequence, browser and settings', () => {
     await w.get('[data-test="job-continue-on-error"] input').setValue(false)
     const input = await saved(w)
     expect(input.continueOnError).toBe(false)
+  })
+
+  it('Intro opens the settings with the focus inside, Esc returns it to the row, Backspace removes nothing', async () => {
+    const w = await mountEditor()
+    const row = w.get('[data-test="job-task-1"]')
+    await row.trigger('keydown', { key: 'Backspace' })
+    await row.trigger('keydown', { key: 'Enter' })
+    await settle()
+    expect(rowNames(w)).toHaveLength(3)
+    expect(document.activeElement?.textContent).toBe('Paso 2')
+    await w.get('[data-test="step-settings"]').trigger('keydown', { key: 'Escape' })
+    await settle()
+    expect(w.find('[data-test="step-settings"]').exists()).toBe(false)
+    expect(document.activeElement?.getAttribute('data-test')).toBe('job-task-1')
+  })
+
+  it('keeps the browser selection when visiting another section', async () => {
+    const w = await mountEditor()
+    await w.get('[data-test="step-kind-savedQuery"]').trigger('click')
+    await w.get('[data-test="browse-connection-c1"]').trigger('click')
+    await settle()
+    await w.get('[data-test="job-section-options"]').trigger('click')
+    await w.get('[data-test="job-section-steps"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="step-browser-items"]').text()).toContain('Cerrar pedidos')
   })
 
   it('the history section explains that a new job has none yet', async () => {

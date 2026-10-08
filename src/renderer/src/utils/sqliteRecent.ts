@@ -31,10 +31,7 @@ export function recentSqliteFiles(): string[] {
 export function rememberSqliteFile(path: string): void {
   const p = path.trim()
   if (!p) return
-  const list = [p, ...recentSqliteFiles().filter((x) => x !== p)].slice(
-    0,
-    MAX_RECENT_SQLITE_FILES
-  )
+  const list = [p, ...recentSqliteFiles().filter((x) => x !== p)].slice(0, MAX_RECENT_SQLITE_FILES)
   try {
     storage()?.setItem(KEY, JSON.stringify(list))
   } catch {

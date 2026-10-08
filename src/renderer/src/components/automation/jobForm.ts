@@ -152,12 +152,12 @@ export function taskProblems(
 ): string[] {
   const errors: string[] = []
   const n = index + 1
-  if (!task.connectionId) errors.push(`Tarea ${n}: selecciona una conexión.`)
+  if (!task.connectionId) errors.push(`Paso ${n}: selecciona una conexión.`)
   // Mirrors main's validateJobInput: only backups need a schema (SQL tasks may run without one).
   if (task.type === 'backupschema' && !task.schema)
-    errors.push(`Tarea ${n}: selecciona un esquema.`)
+    errors.push(`Paso ${n}: selecciona la base de datos.`)
   if (task.type === 'runquery' && !task.sql?.trim())
-    errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
+    errors.push(`Paso ${n}: escribe la consulta SQL a ejecutar.`)
   // Same per-engine rules as main (restore steps get them through restoreTaskProblem).
   if (task.type !== 'restoreschema') {
     const problem = jobStepEngineProblem(task, tasks, lookup, `paso ${n}`)
@@ -212,7 +212,7 @@ export function validateDraft(
   const errors: string[] = []
   if (!draft.name.trim()) errors.push('El nombre de la tarea es obligatorio.')
   if (/[/\\:]/.test(draft.name)) errors.push('El nombre no puede contener "/", "\\" ni ":".')
-  if (!draft.tasks.length) errors.push('Añade al menos una tarea.')
+  if (!draft.tasks.length) errors.push('Añade al menos un paso.')
   draft.tasks.forEach((task, i) =>
     errors.push(...taskProblems(task, i, draft.tasks, lookup, typedEnvironments))
   )

@@ -19,7 +19,7 @@ const base: AppSettings = {
   aiEnabled: false,
   aiDefaultProviderId: null,
   aiEffort: 'low',
-  aiMaxTokens: 16000,
+  aiMaxTokens: 16000
 }
 
 describe('SettingsDialog › Seguridad typed-confirmation environments', () => {

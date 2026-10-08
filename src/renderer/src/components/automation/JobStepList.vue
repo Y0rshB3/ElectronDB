@@ -21,6 +21,8 @@ const props = defineProps<{
   /** A save was attempted: problems are shown as errors instead of hints. */
   strict?: boolean
 }>()
+/** Intro on a row: the parent opens the settings and moves focus into them. */
+const emit = defineEmits<{ open: [id: string] }>()
 
 const connections = useConnectionsStore()
 const listEl = ref<HTMLElement | null>(null)
@@ -106,6 +108,15 @@ function select(id: string): void {
   selected.value = selected.value === id ? selected.value : id
 }
 
+/** Scrolls a step into view (just added) and optionally focuses it. */
+async function revealRow(id: string, focus = false): Promise<void> {
+  await nextTick()
+  const index = tasks.value.findIndex((t) => t.id === id)
+  const el = listEl.value?.querySelector<HTMLElement>(`[data-row-index="${index}"]`)
+  el?.scrollIntoView?.({ block: 'nearest' })
+  if (focus) el?.focus()
+}
+
 async function focusRow(index: number): Promise<void> {
   await nextTick()
   const el = listEl.value?.querySelector<HTMLElement>(`[data-row-index="${index}"]`)
@@ -145,7 +156,8 @@ function onKeydown(event: KeyboardEvent, index: number): void {
     )
   } else if (event.key === 'Enter' || event.key === ' ') {
     select(tasks.value[index].id)
-  } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    emit('open', tasks.value[index].id)
+  } else if (event.key === 'Delete') {
     remove(index)
   } else return
   event.preventDefault()
@@ -221,7 +233,7 @@ function onDragEnd(): void {
   endAddDrag()
 }
 
-defineExpose({ focusRow })
+defineExpose({ focusRow, revealRow })
 </script>
 
 <template>
@@ -280,9 +292,8 @@ defineExpose({ focusRow })
         }"
         tabindex="0"
         draggable="true"
-        :aria-current="selected === row.task.id ? 'step' : undefined"
-        :aria-label="`Paso ${row.index + 1}: ${row.name}. ${row.connectionName}${row.database ? `, ${row.database}` : ''}${row.problem ? `. Problema: ${row.problem}` : ''}`"
-        :aria-keyshortcuts="'Alt+ArrowUp Alt+ArrowDown Delete'"
+        :aria-label="`Paso ${row.index + 1}, ${TYPE_LABELS[row.task.type]}: ${row.name}. ${row.detail}. ${row.connectionName}${row.database ? `, ${row.database}` : ''}${selected === row.task.id ? '. Seleccionado' : ''}${row.problem ? `. Problema: ${row.problem}` : ''}`"
+        :aria-keyshortcuts="'Enter Alt+ArrowUp Alt+ArrowDown Delete'"
         :data-row-index="row.index"
         :data-test="`job-task-${row.index}`"
         @click="select(row.task.id)"
@@ -580,10 +591,9 @@ defineExpose({ focusRow })
 }
 @container (max-width: 640px) {
   .step-row {
-    grid-template-columns: 14px 20px minmax(0, 1fr) minmax(0, 0.8fr) auto;
-    grid-template-areas: 'grip n main where actions' '. . problem problem problem';
+    grid-template-columns: 14px 20px 16px minmax(0, 1fr) minmax(0, 0.8fr) auto;
   }
-  .step-row__type {
+  .step-row__type span {
     display: none;
   }
 }

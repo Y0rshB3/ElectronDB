@@ -102,7 +102,8 @@ const cron = computed(() => cronFromForm(draft.value.schedule))
 const scheduleInvalid = computed(() => draft.value.scheduleEnabled && !isValidCron(cron.value))
 
 const runs = computed<JobRun[]>(() => (jobId.value ? jobs.runsOf(jobId.value) : []))
-const lastRun = computed(() => runs.value[0] ?? null)
+// Rollbacks recorded under the job are not its runs.
+const lastRun = computed(() => (jobId.value ? (jobs.lastRunOf(jobId.value) ?? null) : null))
 
 const sections = computed(() => [
   {
@@ -145,11 +146,10 @@ function onSectionKey(event: KeyboardEvent, index: number): void {
   if (next < 0) return
   event.preventDefault()
   const target = list[next].value
+  const bar = (event.currentTarget as HTMLElement | null)?.parentElement
   section.value = target
   void nextTick(() =>
-    (event.currentTarget as HTMLElement | null)?.parentElement
-      ?.querySelector<HTMLElement>(`[data-test="job-section-${target}"]`)
-      ?.focus()
+    bar?.querySelector<HTMLElement>(`[data-test="job-section-${target}"]`)?.focus()
   )
 }
 
@@ -281,7 +281,9 @@ async function runNow(): Promise<void> {
   runningNow.value = true
   try {
     const run = await jobs.run(jobId.value, { confirmProduction: true })
+    // The run's live log is in Historial.
     if (run?.id) logRunId.value = run.id
+    section.value = 'history'
     notify.info(`Ejecutando «${draft.value.name}»…`)
   } catch {
     // Reported by invoke().
@@ -292,10 +294,36 @@ async function runNow(): Promise<void> {
 
 /* ---------- steps ---------- */
 
+const stepList = ref<InstanceType<typeof JobStepList> | null>(null)
+const stepSettings = ref<InstanceType<typeof JobStepSettings> | null>(null)
+/** Polite announcement of added steps for screen readers. */
+const announcement = ref('')
+
+/** Appends steps from the browser; one step opens its settings, several do not. */
 function addSteps(added: JobTask[]): void {
   if (!added.length) return
   draft.value = { ...draft.value, tasks: [...draft.value.tasks, ...added] }
-  selectedStep.value = added[added.length - 1].id
+  const total = draft.value.tasks.length
+  announcement.value =
+    added.length === 1
+      ? `Paso ${total} añadido`
+      : `${added.length} pasos añadidos (hasta el ${total})`
+  if (added.length === 1) selectedStep.value = added[0].id
+  void stepList.value?.revealRow(added[added.length - 1].id)
+}
+
+/** Intro on a row: the settings open and take the keyboard focus. */
+async function openStep(id: string): Promise<void> {
+  selectedStep.value = id
+  await nextTick()
+  stepSettings.value?.focus()
+}
+
+/** Closing the settings returns the focus to the step's row. */
+function closeStep(): void {
+  const id = selectedStep.value
+  selectedStep.value = null
+  if (id) void stepList.value?.revealRow(id, true)
 }
 
 // A removed step closes its settings.
@@ -334,7 +362,7 @@ onMounted(load)
 
 <template>
   <div class="job-editor d-flex flex-column" data-test="job-editor">
-    <header class="je-head" role="toolbar" aria-label="Acciones de la tarea">
+    <header class="je-head" role="group" aria-label="Tarea">
       <span class="je-head__badge" aria-hidden="true"
         ><v-icon icon="mdi-robot-outline" size="17"
       /></span>
@@ -349,6 +377,7 @@ onMounted(load)
           class="je-head__name"
           :class="{ 'je-head__name--error': strict && !draft.name.trim() }"
           :disabled="loading || !!loadError"
+          :aria-invalid="strict && !draft.name.trim() ? 'true' : undefined"
           data-test="job-name"
         />
         <div class="je-head__pills">
@@ -459,7 +488,9 @@ onMounted(load)
           class="je-section nd-transition"
           :class="{ 'je-section--active': section === s.value }"
           :aria-selected="section === s.value"
-          :aria-controls="`je-panel-${tab.id}-${s.value}`"
+          :aria-controls="
+            section === s.value || s.value === 'steps' ? `je-panel-${tab.id}-${s.value}` : undefined
+          "
           :tabindex="section === s.value ? 0 : -1"
           :data-test="`job-section-${s.value}`"
           @click="section = s.value"
@@ -480,11 +511,11 @@ onMounted(load)
         data-test="job-errors"
         @click:close="errors = []"
       >
-        <div v-for="e in errors" :key="e">{{ e }}</div>
+        <div v-for="(e, i) in errors" :key="i">{{ e }}</div>
       </v-alert>
 
       <div
-        v-if="section === 'steps'"
+        v-show="section === 'steps'"
         :id="`je-panel-${tab.id}-steps`"
         class="je-steps"
         :class="{ 'je-steps--panel': !!selectedStep }"
@@ -502,11 +533,15 @@ onMounted(load)
             </header>
             <div class="je-seq__scroll">
               <JobStepList
+                v-if="!loading"
+                ref="stepList"
                 v-model="draft.tasks"
                 v-model:selected="selectedStep"
                 :problems="stepProblems"
                 :strict="strict"
+                @open="openStep"
               />
+              <span class="je-sr" aria-live="polite">{{ announcement }}</span>
             </div>
           </section>
           <div class="je-browser" :class="{ 'je-browser--collapsed': browserCollapsed }">
@@ -519,19 +554,20 @@ onMounted(load)
         </div>
         <div v-if="selectedStep" class="je-steps__panel">
           <JobStepSettings
+            ref="stepSettings"
             :key="selectedStep"
             v-model="draft.tasks"
             :task-id="selectedStep"
             :problems="stepProblems[selectedStep]"
             :password-ready="draft.hasBackupPassword || !!draft.backupPassword"
-            @close="selectedStep = null"
+            @close="closeStep"
             @open-options="openOptions"
           />
         </div>
       </div>
 
       <div
-        v-else-if="section === 'schedule'"
+        v-if="section === 'schedule'"
         :id="`je-panel-${tab.id}-schedule`"
         class="je-page"
         role="tabpanel"
@@ -687,7 +723,7 @@ onMounted(load)
       </div>
 
       <div
-        v-else
+        v-else-if="section === 'history'"
         :id="`je-panel-${tab.id}-history`"
         class="je-history"
         role="tabpanel"
@@ -936,6 +972,14 @@ onMounted(load)
   border-radius: 50%;
   background: var(--nd-error);
   box-shadow: 0 0 6px var(--nd-error);
+}
+.je-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .je-errors {
   flex: none;

@@ -93,7 +93,7 @@ describe('schedule builder helpers', () => {
     draft.tasks = [{ ...newTask('runquery', 'c1', ''), sql: 'SELECT 1' }]
     expect(validateDraft(draft)).toEqual([])
     draft.tasks = [newTask('backupschema', 'c1', '')]
-    expect(validateDraft(draft)).toContain('Tarea 1: selecciona un esquema.')
+    expect(validateDraft(draft)).toContain('Paso 1: selecciona la base de datos.')
   })
 
   it('builds a valid JobInput and reports Spanish validation errors', () => {
@@ -347,7 +347,17 @@ describe('JobEditorView', () => {
           ]
         }),
       'jobs:runs': () => [],
-      'jobs:run': () => ({ id: 'run-1' })
+      'jobs:run': () => ({
+        id: 'run-1',
+        jobId: 'job-3',
+        jobName: 'Purge',
+        status: 'running',
+        trigger: 'manual',
+        startedAt: '2026-10-08T10:00:00.000Z',
+        finishedAt: null,
+        tasks: [],
+        logPath: ''
+      })
     })
   }
 

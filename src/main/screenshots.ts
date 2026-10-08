@@ -830,8 +830,12 @@ const STEPS: Step[] = [
       await S.jobs.load()
       const job = S.jobs.jobs.find((j) => j.name === ${JSON.stringify(STAGING_TO_LOCAL_JOB)})
       if (!job) throw new Error('job ${STAGING_TO_LOCAL_JOB} not seeded')
+      // Other editors stay mounted: close them so the row clicked is this job's.
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
       S.workspace.openJobEditor(job.id, job.name)
-      await H.click('[data-test="job-task-1"]', 10000)
+      const row = await H.until(() => [...document.querySelectorAll('[data-test="job-task-1"]')]
+        .find((r) => r.getClientRects().length && /Restauración/.test(r.textContent)), 10000)
+      row.click()
       await H.waitFor('[data-test="restore-source"]', 10000)
       await H.settle(S, 1200)`,
     cleanup: `
