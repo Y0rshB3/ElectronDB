@@ -84,8 +84,12 @@ const connection = computed(() =>
 const isPg = computed(() => connection.value?.engine === 'postgresql')
 /** SQLite: whole-database .vqb backups, or a copy of the file (VACUUM INTO). */
 const isSqlite = computed(() => connection.value?.engine === 'sqlite')
+/** MongoDB: .vqb only, with an optional pick of collections and views. */
+const isMongo = computed(() => connection.value?.engine === 'mongodb')
 /** No object picker: the copy always holds the whole database. */
 const wholeDatabase = computed(() => isPg.value || isSqlite.value)
+/** Only .vqb is offered (no .nb3 / .sql). */
+const vqbOnly = computed(() => wholeDatabase.value || isMongo.value)
 const passwordProblem = computed(() => {
   if (!isVqb.value || !encrypt.value) return ''
   if (password.value.length < MIN_PASSWORD)
@@ -119,15 +123,17 @@ const formatHint = computed(() =>
       : isVqb.value
         ? isPg.value
           ? 'Las copias de PostgreSQL son siempre .vqb e incluyen la base de datos completa.'
-          : isSqlite.value
-            ? 'Copia .vqb de la base de datos completa, con el tipo de cada celda; restaurable en un archivo nuevo o sobre la conexión.'
-            : 'Formato abierto y documentado; restaurable desde Copias de seguridad y tareas.'
+          : isMongo.value
+            ? 'Las copias de MongoDB son siempre .vqb: documentos en Extended JSON canónico (tipos BSON intactos), índices, validadores y vistas.'
+            : isSqlite.value
+              ? 'Copia .vqb de la base de datos completa, con el tipo de cada celda; restaurable en un archivo nuevo o sobre la conexión.'
+              : 'Formato abierto y documentado; restaurable desde Copias de seguridad y tareas.'
         : 'Copia restaurable desde Copias de seguridad y tareas, legible por Navicat.'
 )
 
 /** Format the dialog opens with: the one asked for, else Ajustes' default (PostgreSQL: .vqb). */
 function initialFormat(): BackupFormat {
-  if (isPg.value || isSqlite.value) return 'vqb'
+  if (isPg.value || isSqlite.value || isMongo.value) return 'vqb'
   const asked = ui.backupDialog.format ?? settings.settings.defaultBackupFormat ?? 'vqb'
   return asked === 'sql' || asked === 'nb3' ? asked : 'vqb'
 }
@@ -197,6 +203,16 @@ async function loadObjects(): Promise<void> {
   }
   objectsLoading.value = true
   try {
+    if (isMongo.value) {
+      const collections = await api.invokeSilent('mongo:collections', cid, db)
+      if (request !== objectsRequest) return
+      objectItems.value = collections.map((c) => ({
+        title: c.name,
+        value: c.name,
+        subtitle: c.type === 'view' ? 'Vista' : 'Colección'
+      }))
+      return
+    }
     const [tables, views] = await Promise.all([
       api.invokeSilent('db:tables', cid, db),
       api.invokeSilent('db:views', cid, db).catch(() => [])
@@ -331,7 +347,8 @@ watch(
 
 function onConnectionChange(id: string | null): void {
   connectionId.value = id
-  if (isPg.value || (isSqlite.value && format.value !== 'file')) format.value = 'vqb'
+  if (isPg.value || isMongo.value || (isSqlite.value && format.value !== 'file'))
+    format.value = 'vqb'
   else if (format.value === 'file' && !isSqlite.value) format.value = 'vqb'
   schema.value = null
   objectItems.value = []
@@ -369,10 +386,10 @@ function onSchemaChange(value: string | null): void {
               data-test="backup-format"
             >
               <v-btn value="vqb" size="small" data-test="backup-format-vqb">.vqb</v-btn>
-              <v-btn v-if="!wholeDatabase" value="nb3" size="small" data-test="backup-format-nb3"
+              <v-btn v-if="!vqbOnly" value="nb3" size="small" data-test="backup-format-nb3"
                 >.nb3</v-btn
               >
-              <v-btn v-if="!wholeDatabase" value="sql" size="small" data-test="backup-format-sql"
+              <v-btn v-if="!vqbOnly" value="sql" size="small" data-test="backup-format-sql"
                 >.sql</v-btn
               >
               <v-btn v-if="isSqlite" value="file" size="small" data-test="backup-format-file"
@@ -401,7 +418,7 @@ function onSchemaChange(value: string | null): void {
                 :error-messages="
                   schemaLoader.errorOf(connectionId) ? [schemaLoader.errorOf(connectionId)!] : []
                 "
-                :label="wholeDatabase ? 'Base de datos' : 'Esquema'"
+                :label="wholeDatabase || isMongo ? 'Base de datos' : 'Esquema'"
                 prepend-inner-icon="mdi-database-outline"
                 :disabled="!connectionId || running"
                 no-data-text="Sin esquemas"

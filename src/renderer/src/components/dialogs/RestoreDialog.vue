@@ -106,7 +106,10 @@ const targetIsPg = computed(() => target.value?.engine === 'postgresql')
 /** A SQLite .vqb (restored into a SQLite connection or a new file). */
 const isSqliteBackup = computed(() => meta.value?.engine === 'sqlite')
 const schemaWord = computed(() =>
-  targetIsPg.value || meta.value?.engine === 'postgresql' || isSqliteBackup.value
+  targetIsPg.value ||
+  meta.value?.engine === 'postgresql' ||
+  meta.value?.engine === 'mongodb' ||
+  isSqliteBackup.value
     ? 'Base de datos'
     : 'Esquema'
 )
@@ -375,7 +378,9 @@ async function cancel(): Promise<void> {
             <div class="restore-dialog__file-meta">
               <span
                 >{{
-                  meta?.engine === 'postgresql' || meta?.engine === 'sqlite'
+                  meta?.engine === 'postgresql' ||
+                  meta?.engine === 'sqlite' ||
+                  meta?.engine === 'mongodb'
                     ? 'Base de datos'
                     : 'Esquema'
                 }}

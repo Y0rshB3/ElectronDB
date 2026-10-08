@@ -17,7 +17,7 @@ export const MANIFEST_PATH = 'manifest.json'
 export const DATA_CHUNK_BYTES = 5 * 1024 * 1024
 export const VQB_ALGORITHM = 'AES-256-GCM'
 
-export type VqbEngine = 'mysql' | 'postgresql' | 'sqlite'
+export type VqbEngine = 'mysql' | 'postgresql' | 'sqlite' | 'mongodb'
 
 export interface VqbHeader {
   format: typeof VQB_FORMAT
@@ -42,7 +42,7 @@ export interface VqbFileRef {
 /**
  * Object types. MySQL/MariaDB: table, view, function, procedure, event.
  * PostgreSQL: extension, type, sequence, table, function, procedure, view,
- * materialized_view.
+ * materialized_view. SQLite: table, view. MongoDB: collection, view.
  */
 export type VqbObjectType =
   | 'table'
@@ -54,6 +54,7 @@ export type VqbObjectType =
   | 'type'
   | 'sequence'
   | 'extension'
+  | 'collection'
 
 export const VQB_OBJECT_TYPES: readonly VqbObjectType[] = [
   'table',
@@ -64,7 +65,8 @@ export const VQB_OBJECT_TYPES: readonly VqbObjectType[] = [
   'event',
   'type',
   'sequence',
-  'extension'
+  'extension',
+  'collection'
 ]
 
 export interface VqbManifestObject {
@@ -152,7 +154,10 @@ export interface VqbObjectMeta {
   rows?: number
   /** MySQL: AUTO_INCREMENT counter of the table. SQLite: its sqlite_sequence value. */
   autoIncrement?: string | null
-  /** PostgreSQL / SQLite: index DDL to run after the data (not backing a constraint). */
+  /**
+   * PostgreSQL / SQLite: index DDL to run after the data (not backing a constraint).
+   * MongoDB: canonical Extended JSON of each index spec ({key, name, unique…}), `_id_` excluded.
+   */
   indexes?: string[]
   /** PostgreSQL: ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY, run after every table's data. */
   foreignKeys?: string[]
@@ -245,7 +250,10 @@ export function validateManifest(raw: unknown): VqbManifest {
   const engine = raw.engine
   if (
     !isObj(engine) ||
-    (engine.id !== 'mysql' && engine.id !== 'postgresql' && engine.id !== 'sqlite')
+    (engine.id !== 'mysql' &&
+      engine.id !== 'postgresql' &&
+      engine.id !== 'sqlite' &&
+      engine.id !== 'mongodb')
   )
     bad('motor de base de datos')
   const source = raw.source

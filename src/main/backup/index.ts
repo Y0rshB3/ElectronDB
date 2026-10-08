@@ -33,6 +33,8 @@ import { createSqliteBackup, type SqliteConnectionProvider } from './vqb/sqliteB
 import { replaceSqliteDatabase } from './vqb/sqliteReplace'
 import { restoreSqliteBackup, restoredConnectionName } from './vqb/sqliteRestore'
 import type { ProcessSpawner } from '../sqlite/spawner'
+import { createMongoBackup, type MongoConnectionProvider } from './vqb/mongoBackup'
+import { replaceMongoDatabase, restoreMongoBackup } from './vqb/mongoRestore'
 import { defaultSqliteOptions } from '@shared/engines'
 
 export type ProgressReporter = (event: Omit<ProgressEvent, 'operationId' | 'kind'>) => void
@@ -131,6 +133,21 @@ export function sqliteConnectionProvider(ctx: AppContext): SqliteConnectionProvi
   }
 }
 
+/** Open MongoDB connections through the connection manager (loaded on first use). */
+export function mongoConnectionProvider(ctx: AppContext): MongoConnectionProvider {
+  return {
+    async connection(connectionId) {
+      const [{ getConnectionManager }, { isMongoConnection }] = await Promise.all([
+        import('../db/manager'),
+        import('../mongo/connection')
+      ])
+      const connection = await getConnectionManager(ctx).connection(connectionId)
+      if (!isMongoConnection(connection)) throw new Error('La conexión no es MongoDB.')
+      return connection
+    }
+  }
+}
+
 export interface BackupServiceOptions {
   /** PostgreSQL sessions (tests); the connection manager otherwise. */
   pg?: PgSessionProvider
@@ -138,6 +155,8 @@ export interface BackupServiceOptions {
   sqlite?: SqliteConnectionProvider
   /** Spawner of the temporary SQLite worker of «restaurar en un archivo nuevo» (tests). */
   sqliteSpawner?: () => ProcessSpawner
+  /** MongoDB connections (tests); the connection manager otherwise. */
+  mongo?: MongoConnectionProvider
   /** scrypt cost of new encrypted .vqb backups (tests use a cheap one). */
   scrypt?: ScryptParams
 }
@@ -152,6 +171,13 @@ export function createBackupService(
     !!connectionId && ctx.connections.get(connectionId)?.engine === 'postgresql'
   const isSqlite = (connectionId: string | undefined): boolean =>
     !!connectionId && ctx.connections.get(connectionId)?.engine === 'sqlite'
+  const isMongo = (connectionId: string | undefined): boolean =>
+    !!connectionId && ctx.connections.get(connectionId)?.engine === 'mongodb'
+  const mongoDeps = {
+    connections: ctx.connections,
+    mongo: serviceOptions.mongo ?? mongoConnectionProvider(ctx),
+    scrypt: serviceOptions.scrypt
+  }
   const sqliteDeps = {
     connections: ctx.connections,
     sqlite: serviceOptions.sqlite ?? sqliteConnectionProvider(ctx),
@@ -200,51 +226,57 @@ export function createBackupService(
     },
     readMeta: (path, password) => readBackupMeta(ctx.userDataPath, path, password),
     create: (options, progress, signal) =>
-      isSqlite(options?.connectionId)
-        ? createSqliteBackup(sqliteDeps, options, progress, signal)
-        : isPg(options?.connectionId)
-          ? createPgBackup(
-              { connections: ctx.connections, pg, scrypt: serviceOptions.scrypt },
-              options,
-              progress,
-              signal
-            )
-          : createBackup(
-              { connections: ctx.connections, sessions, scrypt: serviceOptions.scrypt },
-              options,
-              progress,
-              signal
-            ),
+      isMongo(options?.connectionId)
+        ? createMongoBackup(mongoDeps, options, progress, signal)
+        : isSqlite(options?.connectionId)
+          ? createSqliteBackup(sqliteDeps, options, progress, signal)
+          : isPg(options?.connectionId)
+            ? createPgBackup(
+                { connections: ctx.connections, pg, scrypt: serviceOptions.scrypt },
+                options,
+                progress,
+                signal
+              )
+            : createBackup(
+                { connections: ctx.connections, sessions, scrypt: serviceOptions.scrypt },
+                options,
+                progress,
+                signal
+              ),
     exportSql: (options, progress, signal) =>
       exportSchemaToSql({ connections: ctx.connections, sessions }, options, progress, signal),
     restore: (options, progress, signal) =>
-      options?.newFilePath || isSqlite(options?.connectionId)
-        ? restoreSqliteBackup(sqliteDeps, options, progress, signal)
-        : isPg(options?.connectionId)
-          ? restorePgBackup(
-              { connections: ctx.connections, pg, guarded },
-              options,
-              progress,
-              signal
-            )
-          : restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+      isMongo(options?.connectionId)
+        ? restoreMongoBackup(mongoDeps, options, progress, signal)
+        : options?.newFilePath || isSqlite(options?.connectionId)
+          ? restoreSqliteBackup(sqliteDeps, options, progress, signal)
+          : isPg(options?.connectionId)
+            ? restorePgBackup(
+                { connections: ctx.connections, pg, guarded },
+                options,
+                progress,
+                signal
+              )
+            : restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
     verify: (path, signal, password) => verifyArchive(path, signal, password),
     replace: (request, hooks, signal) =>
-      isSqlite(request?.connectionId)
-        ? replaceSqliteDatabase({ ...sqliteDeps, backups: service }, request, hooks, signal)
-        : isPg(request?.connectionId)
-          ? replacePgDatabase(
-              { connections: ctx.connections, pg, guarded, backups: service },
-              request,
-              hooks,
-              signal
-            )
-          : replaceSchemaFromBackup(
-              { connections: ctx.connections, sessions, backups: service },
-              request,
-              hooks,
-              signal
-            )
+      isMongo(request?.connectionId)
+        ? replaceMongoDatabase({ ...mongoDeps, backups: service }, request, hooks, signal)
+        : isSqlite(request?.connectionId)
+          ? replaceSqliteDatabase({ ...sqliteDeps, backups: service }, request, hooks, signal)
+          : isPg(request?.connectionId)
+            ? replacePgDatabase(
+                { connections: ctx.connections, pg, guarded, backups: service },
+                request,
+                hooks,
+                signal
+              )
+            : replaceSchemaFromBackup(
+                { connections: ctx.connections, sessions, backups: service },
+                request,
+                hooks,
+                signal
+              )
   }
   return service
 }

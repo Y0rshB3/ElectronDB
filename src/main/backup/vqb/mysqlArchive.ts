@@ -21,7 +21,8 @@ export const NB3_TYPE_OF: Record<VqbObjectType, string> = {
   event: 'Event',
   type: 'Type',
   sequence: 'Sequence',
-  extension: 'Extension'
+  extension: 'Extension',
+  collection: 'Collection'
 }
 
 export class VqbMysqlArchive implements RestoreArchive {

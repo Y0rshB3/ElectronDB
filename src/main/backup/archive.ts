@@ -91,7 +91,9 @@ export function vqbManifestMeta(manifest: VqbManifest): BackupMeta {
         ? 'POSTGRESQL'
         : manifest.engine.id === 'sqlite'
           ? 'SQLITE'
-          : 'MYSQL',
+          : manifest.engine.id === 'mongodb'
+            ? 'MONGODB'
+            : 'MYSQL',
     schema: manifest.source.database,
     startTime: manifest.createdAt,
     endTime: manifest.finishedAt,

@@ -73,7 +73,9 @@ export function restoreTargets(
 
 /** .vqb engine of a connection: MySQL and MariaDB servers both write 'mysql'. */
 export function vqbEngineOfConnection(c: { engine?: ConnectionConfig['engine'] }): string {
-  return c.engine === 'postgresql' || c.engine === 'sqlite' ? c.engine : 'mysql'
+  return c.engine === 'postgresql' || c.engine === 'sqlite' || c.engine === 'mongodb'
+    ? c.engine
+    : 'mysql'
 }
 
 /** «.vqb» / «.nb3 (Navicat)». */

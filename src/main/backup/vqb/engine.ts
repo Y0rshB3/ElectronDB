@@ -3,7 +3,8 @@ import type { VqbEngine } from './format'
 const LABEL: Record<VqbEngine, string> = {
   mysql: 'MySQL/MariaDB',
   postgresql: 'PostgreSQL',
-  sqlite: 'SQLite'
+  sqlite: 'SQLite',
+  mongodb: 'MongoDB'
 }
 
 /** Restores only go to the engine the backup came from. */
@@ -16,5 +17,6 @@ export function vqbEngineOf(engine: string | undefined): VqbEngine | null {
   if (!engine || engine === 'mysql' || engine === 'mariadb') return 'mysql'
   if (engine === 'postgresql') return 'postgresql'
   if (engine === 'sqlite') return 'sqlite'
+  if (engine === 'mongodb') return 'mongodb'
   return null
 }
