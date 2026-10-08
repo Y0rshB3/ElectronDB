@@ -163,7 +163,12 @@ describe('job steps per engine', () => {
   const engines: ConnectionConfig[] = [
     { id: 'my', name: 'MySQL local', environment: 'local', engine: 'mysql' } as ConnectionConfig,
     { id: 'lite', name: 'Notas', environment: 'local', engine: 'sqlite' } as ConnectionConfig,
-    { id: 'lite2', name: 'Notas copia', environment: 'local', engine: 'sqlite' } as ConnectionConfig,
+    {
+      id: 'lite2',
+      name: 'Notas copia',
+      environment: 'local',
+      engine: 'sqlite'
+    } as ConnectionConfig,
     { id: 'mongo', name: 'Mongo', environment: 'staging', engine: 'mongodb' } as ConnectionConfig
   ]
   const find = (id: string) => engines.find((c) => c.id === id)
