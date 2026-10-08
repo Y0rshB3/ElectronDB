@@ -1507,6 +1507,9 @@ const MONGO_STEPS: Step[] = [
       await H.waitFor('[data-test="index-row-email_unico"]', 15000)
       await H.click('[data-test="index-new"]', 5000)
       await H.waitFor('[data-test="index-form"]', 5000)
+      const field = await H.waitFor('[data-test="index-field-0"] input', 5000)
+      field.value = 'creado'
+      field.dispatchEvent(new Event('input', { bubbles: true }))
       await H.sleep(800)`
   },
   {

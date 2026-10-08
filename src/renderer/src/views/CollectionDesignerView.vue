@@ -760,7 +760,8 @@ onMounted(load)
   text-transform: none;
 }
 .collection-designer__editor {
-  height: 320px;
+  height: min(62vh, 640px);
+  min-height: 240px;
   border: 1px solid var(--nd-border);
   border-radius: var(--nd-radius-control);
   overflow: hidden;

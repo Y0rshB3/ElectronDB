@@ -433,7 +433,11 @@ function onSchemaChange(value: string | null): void {
                 :loading="objectsLoading"
                 :disabled="!schema || running"
                 label="Objetos"
-                hint="Vacío = todos los objetos del esquema"
+                :hint="
+                  isMongo
+                    ? 'Vacío = todas las colecciones y vistas'
+                    : 'Vacío = todos los objetos del esquema'
+                "
                 persistent-hint
                 multiple
                 chips
@@ -599,7 +603,7 @@ function onSchemaChange(value: string | null): void {
                 label="Carpeta de destino (opcional)"
                 :hint="
                   connection?.backupDir
-                    ? `Por defecto: ${connection.backupDir}/<esquema>`
+                    ? `Por defecto: ${connection.backupDir}/<${isMongo || wholeDatabase ? 'base de datos' : 'esquema'}>`
                     : 'Por defecto: carpeta de copias de la conexión'
                 "
                 :disabled="running"
