@@ -119,7 +119,8 @@ export function buildSchemaContext(
 ): SchemaContext {
   const cap = options.cap ?? DEFAULT_CONTEXT_CAP
   const header = [
-    `Base de datos: ${snap.schema}${snap.serverVersion ? ` (MySQL ${snap.serverVersion})` : ''}`,
+    // MySQL snapshots carry a bare version ("8.4.3"); other engines name themselves.
+    `Base de datos: ${snap.schema}${snap.serverVersion ? ` (${/^\d/.test(snap.serverVersion) ? 'MySQL ' : ''}${snap.serverVersion})` : ''}`,
     `Tablas y vistas: ${snap.tables.length}. Leyenda: PK clave primaria, UQ única, AI auto_increment, GEN generada, ? admite NULL, ~N filas estimadas, «comentario».`
   ]
   const lines = snap.tables.map((t) => ({ name: t.name, line: formatTable(t, snap.schema) }))

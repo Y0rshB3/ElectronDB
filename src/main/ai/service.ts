@@ -39,6 +39,7 @@ import {
   type Queryable,
   type SchemaSnapshot
 } from './metadata'
+import { MONGO_ENGINE_NOTE, readMongoSnapshot, type MongoStructureSource } from './mongoMetadata'
 import { OpenAiCompatAdapter } from './openaiCompat'
 import { buildUserMessage, SYSTEM_INSTRUCTIONS, trimHistory } from './prompts'
 import { AiProvidersRepo, normalizeProviderInput } from './providers'
@@ -70,6 +71,10 @@ export interface AiServiceDeps {
   isSqlite?(connectionId: string): boolean
   /** A session on the SQLite connection's shared handle. */
   acquireSqlite?(connectionId: string): Promise<BorrowedSession>
+  /** True for MongoDB connections (structure from mongoMetadata.ts, never documents). */
+  isMongo?(connectionId: string): boolean
+  /** The structure-only source of a MongoDB connection. */
+  mongoSource?(connectionId: string): Promise<MongoStructureSource>
   emit<E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]): void
   log: AiLogger
   fetch?: FetchFn
@@ -207,6 +212,10 @@ export class AiService {
     return this.deps.isPostgres?.(connectionId) === true && !!this.deps.acquirePg
   }
 
+  private isMongo(connectionId: string): boolean {
+    return this.deps.isMongo?.(connectionId) === true && !!this.deps.mongoSource
+  }
+
   private isLite(connectionId: string): boolean {
     return this.deps.isSqlite?.(connectionId) === true && !!this.deps.acquireSqlite
   }
@@ -261,11 +270,13 @@ export class AiService {
     const ttl = this.deps.snapshotTtlMs ?? 5 * 60_000
     const hit = this.snapshots.get(key)
     if (!fresh && hit && Date.now() - hit.at < ttl) return hit.snap
-    const snap = this.isPg(connectionId)
-      ? await this.withPgMetadata(connectionId, database, (q) => readPgSchemaSnapshot(q, schema))
-      : this.isLite(connectionId)
-        ? await this.withSqliteMetadata(connectionId, (q) => readSqliteSchemaSnapshot(q, schema))
-        : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
+    const snap = this.isMongo(connectionId)
+      ? await readMongoSnapshot(await this.deps.mongoSource!(connectionId), schema)
+      : this.isPg(connectionId)
+        ? await this.withPgMetadata(connectionId, database, (q) => readPgSchemaSnapshot(q, schema))
+        : this.isLite(connectionId)
+          ? await this.withSqliteMetadata(connectionId, (q) => readSqliteSchemaSnapshot(q, schema))
+          : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
     this.snapshots.set(key, { at: Date.now(), snap })
     return snap
   }
@@ -282,6 +293,7 @@ export class AiService {
     const env = this.deps.environmentOf(connectionId)
     const parts: string[] = []
     if (env) parts.push(`Entorno de la conexión: ${ENV_LABEL[env]}.`)
+    if (this.isMongo(connectionId)) parts.push(MONGO_ENGINE_NOTE)
     const memory = buildMemoryBlock(
       this.memory.get(connectionId, null),
       schema ? this.memory.get(connectionId, schema) : '',
@@ -300,7 +312,12 @@ export class AiService {
       tableCount = built.tableCount
       parts.push(built.text)
     } else {
-      if (this.isLite(connectionId)) {
+      if (this.isMongo(connectionId)) {
+        const names = await (await this.deps.mongoSource!(connectionId)).databases()
+        parts.push(
+          `No hay ninguna base de datos seleccionada (MongoDB). Bases de datos: ${names.join(', ') || '(ninguna)'}.`
+        )
+      } else if (this.isLite(connectionId)) {
         const names = await this.withSqliteMetadata(connectionId, (q) => readSqliteDatabaseNames(q))
         parts.push(
           `No hay ninguna base de datos seleccionada (SQLite). Bases de datos adjuntas: ${names.join(', ') || '(ninguna)'}.`
@@ -336,17 +353,23 @@ export class AiService {
   /** get_table_structure: structure of the requested tables, read on demand (never rows). */
   private toolFor(connectionId: string, database: string | null = null): ToolExecutor {
     return async (input: TableStructureInput) => {
-      const snap = this.isPg(connectionId)
-        ? await this.withPgMetadata(connectionId, database, (q) =>
-            readPgSchemaSnapshot(q, input.schema, input.tables)
+      const snap = this.isMongo(connectionId)
+        ? await readMongoSnapshot(
+            await this.deps.mongoSource!(connectionId),
+            input.schema,
+            input.tables
           )
-        : this.isLite(connectionId)
-          ? await this.withSqliteMetadata(connectionId, (q) =>
-              readSqliteSchemaSnapshot(q, input.schema, input.tables)
+        : this.isPg(connectionId)
+          ? await this.withPgMetadata(connectionId, database, (q) =>
+              readPgSchemaSnapshot(q, input.schema, input.tables)
             )
-          : await this.withMetadata(connectionId, (q) =>
-              readSchemaSnapshot(q, input.schema, input.tables)
-            )
+          : this.isLite(connectionId)
+            ? await this.withSqliteMetadata(connectionId, (q) =>
+                readSqliteSchemaSnapshot(q, input.schema, input.tables)
+              )
+            : await this.withMetadata(connectionId, (q) =>
+                readSchemaSnapshot(q, input.schema, input.tables)
+              )
       const found = new Set(snap.tables.map((t) => t.name))
       const lines = snap.tables.map((t) => formatTable(t, input.schema))
       const missing = input.tables.filter((t) => !found.has(t))
@@ -448,7 +471,10 @@ export class AiService {
         openTable: request.openTable
       })
       let plan: string | null = null
-      if (this.isPg(request.connectionId)) {
+      const mongo = this.isMongo(request.connectionId)
+      if (mongo) {
+        // MongoDB: no plan is fetched (explain would run the user's pipeline stages).
+      } else if (this.isPg(request.connectionId)) {
         if (request.mode === 'explain' && isSinglePgSelect(request.sql)) {
           // EXPLAIN (plan only, never ANALYZE) of one read-only SELECT; nothing else is executed.
           this.deps.emit('event:aiStatus', { requestId, status: 'Obteniendo el plan (EXPLAIN)…' })
@@ -500,7 +526,7 @@ export class AiService {
           instructions: preview.instructions,
           context: preview.context,
           history: trimHistory(request.history),
-          userMessage: buildUserMessage(request, plan),
+          userMessage: buildUserMessage(request, plan, mongo ? 'mongodb' : undefined),
           effort: settings.aiEffort,
           maxTokens: settings.aiMaxTokens,
           signal: controller.signal,

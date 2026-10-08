@@ -53,6 +53,14 @@ export function getAiService(ctx: AppContext): AiService {
       session.usage.userSql = true
       return session
     },
+    isMongo: (id) => ctx.connections.get(id)?.engine === 'mongodb',
+    mongoSource: async (connectionId) => {
+      const { isMongoConnection } = await import('../mongo/connection')
+      const { mongoStructureSource } = await import('./mongoMetadata')
+      const connection = await manager.connection(connectionId)
+      if (!isMongoConnection(connection)) throw new Error('La conexión no es MongoDB.')
+      return mongoStructureSource(connection)
+    },
     isSqlite: (id) => ctx.connections.get(id)?.engine === 'sqlite',
     acquireSqlite: async (connectionId) => {
       const { isSqliteConnection } = await import('../sqlite/connection')

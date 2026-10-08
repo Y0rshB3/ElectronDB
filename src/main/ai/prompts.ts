@@ -18,8 +18,20 @@ How to answer:
 - Prefer safe, read-only queries. If the user asks for something that modifies data or structure (UPDATE, DELETE, DROP, ALTER…), warn about the effect, include a WHERE clause where it applies, and suggest checking it first with a SELECT. You never run SQL yourself: the user reviews and runs it.
 - Use the user's notes (business rules, meaning of status values, conventions) when they are relevant.`
 
-/** Instruction prepended to the user message for each mode. */
-export function modeInstruction(request: AiChatRequest): string {
+/** Instruction prepended to the user message for each mode (MongoDB: shell commands, not SQL). */
+export function modeInstruction(request: AiChatRequest, engine?: string): string {
+  if (engine === 'mongodb') {
+    switch (request.mode) {
+      case 'generateSql':
+        return 'Task: write ONE MongoDB shell command (db.<collection>.<method>(...), or a few of them) that does what the user asks. Reply with it in a single ```javascript code block followed by at most two short sentences. It will be inserted into the editor without running it.'
+      case 'explain':
+        return 'Task: explain what these MongoDB shell commands do, step by step, and suggest concrete optimisations (indexes that exist or are missing, pipeline order, pitfalls). Show improved commands in ```javascript blocks when you propose changes.'
+      case 'explainError':
+        return 'Task: the command below failed on the server. Explain the cause in plain words and give a corrected command in a ```javascript block when possible.'
+      default:
+        return ''
+    }
+  }
   switch (request.mode) {
     case 'generateSql':
       return 'Task: write ONE MySQL statement (or a short script if it is really needed) that does what the user asks. Reply with the SQL in a single ```sql code block followed by at most two short sentences. The SQL will be inserted into the editor without running it.'
@@ -32,16 +44,20 @@ export function modeInstruction(request: AiChatRequest): string {
   }
 }
 
-const fence = (sql: string): string => '```sql\n' + sql.trim() + '\n```'
-
 /**
  * Text of the new user turn: mode instruction, the SQL / error / EXPLAIN plan
  * involved and the user's question. This is volatile content (it goes after
  * the cached system blocks).
  */
-export function buildUserMessage(request: AiChatRequest, explainPlan: string | null): string {
+export function buildUserMessage(
+  request: AiChatRequest,
+  explainPlan: string | null,
+  engine?: string
+): string {
   const parts: string[] = []
-  const instruction = modeInstruction(request)
+  const instruction = modeInstruction(request, engine)
+  const fence = (sql: string): string =>
+    (engine === 'mongodb' ? '```javascript\n' : '```sql\n') + sql.trim() + '\n```'
   if (instruction) parts.push(instruction)
   if (request.mode === 'generateSql' && request.editorSql?.trim())
     parts.push(`SQL that is currently in the editor (for reference):\n${fence(request.editorSql)}`)
