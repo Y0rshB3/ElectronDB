@@ -71,7 +71,7 @@ export function interruptedMessage(ctx: Pick<AppContext, 'connections'>, task: J
   const state = `«${schema}» puede haber quedado incompleta en «${connectionName}».`
   const how = task.outputPath
     ? undoHint({ schema, connectionName, path: task.outputPath })
-    : 'Vuelve a restaurar el backup para completarla.'
+    : 'Vuelve a restaurar la copia para completarla.'
   return `${INTERRUPTED_MESSAGE} ${state} ${how}`
 }
 

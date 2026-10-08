@@ -38,7 +38,7 @@ const parseNumeric = (field: Buffer): number => {
   if (text === '') return 0
   const n = parseInt(text, 8)
   if (!Number.isFinite(n))
-    throw new Nb3FormatError('El archivo no es un backup .nb3 válido: cabecera tar corrupta')
+    throw new Nb3FormatError('El archivo no es una copia .nb3 válida: cabecera tar corrupta')
   return n
 }
 
@@ -60,7 +60,7 @@ interface RawHeader {
 function parseHeader(block: Buffer): RawHeader | null {
   if (isZeroBlock(block)) return null
   if (!checksumValid(block))
-    throw new Nb3FormatError('El archivo no es un backup .nb3 válido: cabecera tar corrupta')
+    throw new Nb3FormatError('El archivo no es una copia .nb3 válida: cabecera tar corrupta')
   const magic = block.toString('latin1', 257, 262)
   const name = cstr(block, 0, 100)
   const prefix = magic.startsWith('ustar') ? cstr(block, 345, 155) : ''

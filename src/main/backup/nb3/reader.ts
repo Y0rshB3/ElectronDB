@@ -25,7 +25,7 @@ const VERIFY_FIRST_LIMIT = 32 * 1024 * 1024
 /** Upper bound for entries we are willing to hold in memory (manifest, object metadata). */
 const MAX_BUFFERED_ENTRY = 256 * 1024 * 1024
 
-export const ENCRYPTED_MESSAGE = 'Backups cifrados no soportados'
+export const ENCRYPTED_MESSAGE = 'Copias cifradas no soportadas'
 export const CANCELLED_MESSAGE = 'Operación cancelada'
 
 export class OperationCancelledError extends Error {
@@ -38,13 +38,13 @@ export class OperationCancelledError extends Error {
 export const isCancelled = (err: unknown): boolean => err instanceof OperationCancelledError
 
 const checksumError = (name: string): Nb3FormatError =>
-  new Nb3FormatError(`El backup está dañado: la suma de verificación de ${name} no coincide`)
+  new Nb3FormatError(`La copia de seguridad está dañada: la suma de verificación de ${name} no coincide`)
 
 const describeFsError = (path: string, err: unknown): Error => {
   const code = (err as { code?: string })?.code
-  if (code === 'ENOENT') return new Error(`No se encontró el archivo de backup: ${path}`)
+  if (code === 'ENOENT') return new Error(`No se encontró el archivo de la copia: ${path}`)
   if (code === 'EACCES' || code === 'EPERM')
-    return new Error(`Sin permisos para leer el archivo de backup: ${path}`)
+    return new Error(`Sin permisos para leer el archivo de la copia: ${path}`)
   return err instanceof Error ? err : new Error(String(err))
 }
 
@@ -69,7 +69,7 @@ export class Nb3Reader {
       throw describeFsError(path, err)
     }
     if (!list.some((e) => e.name === NB3_MANIFEST_NAME)) {
-      throw new Nb3FormatError(`El archivo no es un backup .nb3 válido (falta meta.json): ${path}`)
+      throw new Nb3FormatError(`El archivo no es una copia .nb3 válida (falta meta.json): ${path}`)
     }
     return new Nb3Reader(path, new Map(list.map((e) => [e.name, e])))
   }
@@ -80,7 +80,7 @@ export class Nb3Reader {
 
   private entry(name: string): TarEntry {
     const entry = this.entries.get(name)
-    if (!entry) throw new Nb3FormatError(`El backup está incompleto: falta la entrada ${name}`)
+    if (!entry) throw new Nb3FormatError(`La copia de seguridad está incompleta: falta la entrada ${name}`)
     return entry
   }
 
@@ -119,7 +119,7 @@ export class Nb3Reader {
     try {
       json = gunzipSync(gz).toString('utf8')
     } catch {
-      throw new Nb3FormatError(`El backup está dañado: no se pudo descomprimir ${name}`)
+      throw new Nb3FormatError(`La copia de seguridad está dañada: no se pudo descomprimir ${name}`)
     }
     return parseObjectMeta(json, uuid)
   }
@@ -262,7 +262,7 @@ async function consumeChunk(
   } catch (err) {
     if (err instanceof VisitorError) throw err.inner
     if (isCancelled(err)) throw err
-    throw new Nb3FormatError(`El backup está dañado: no se pudo descomprimir ${name}`)
+    throw new Nb3FormatError(`La copia de seguridad está dañada: no se pudo descomprimir ${name}`)
   } finally {
     if (!gunzip.destroyed) gunzip.destroy()
   }

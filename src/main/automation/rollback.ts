@@ -199,7 +199,7 @@ async function planItem(
       problem = describeError(err)
       schema = schema || c.fallbackSchema || ''
     }
-  if (!schema && !problem) problem = 'No se sabe qué base de datos contiene el backup.'
+  if (!schema && !problem) problem = 'No se sabe qué base de datos contiene la copia.'
   const targetFamily = target ? backupFamilyOf(engineOf(target).id) : null
   if (!problem && (targetFamily ?? 'mysql') === 'mysql' && isSystemSchema(schema))
     problem = systemSchemaRefusal(schema)
@@ -520,7 +520,7 @@ export function prepareRollback(
   const now = nowIso()
   const job: Job = {
     id: plan.jobId,
-    name: `Rollback a ${target.name} · ${plan.jobName}`,
+    name: `Restaurar todo en ${target.name} · ${plan.jobName}`,
     // One database failing never stops the others: each is independent.
     continueOnError: true,
     tasks: items.map((item, i) => ({

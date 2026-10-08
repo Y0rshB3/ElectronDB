@@ -138,7 +138,7 @@ describe('replaceSchemaFromBackup', () => {
     })
     const log = lines.join('\n')
     expect(log).toContain('Contenido: solo estructura')
-    expect(log).toMatch(/Comprobar integridad del backup \.+ .*OK/)
+    expect(log).toMatch(/Comprobar integridad de la copia \.+ .*OK/)
   })
 
   it('«Solo estructura» keeps the production and system-schema rules', async () => {
@@ -167,7 +167,7 @@ describe('replaceSchemaFromBackup', () => {
   it('verifies the source before touching anything: missing file or another schema aborts', async () => {
     sessions.schemas.set(local.id, new Set(['auth']))
     await expect(run({ backupPath: '/nope/missing.nb3' })).rejects.toThrow(
-      /No se encontró el archivo de backup.*«auth» no se ha modificado/
+      /No se encontró el archivo de la copia.*«auth» no se ha modificado/
     )
     await expect(run({ expectedSchema: 'billing' })).rejects.toThrow(
       /contiene la base de datos «auth», no «billing»/
@@ -206,17 +206,17 @@ describe('replaceSchemaFromBackup', () => {
     sessions.schemas.set(local.id, new Set(['auth']))
     backups.corrupt.set(
       BACKUP,
-      'El backup está dañado: la suma de verificación de AAAA.data.00000.sql.gz no coincide'
+      'La copia de seguridad está dañada: la suma de verificación de AAAA.data.00000.sql.gz no coincide'
     )
     await expect(run()).rejects.toThrow(
-      /No se puede usar el backup .*suma de verificación .* no coincide\. «auth» no se ha modificado en «Local»\./
+      /No se puede usar la copia .*suma de verificación .* no coincide\. «auth» no se ha modificado en «Local»\./
     )
     expect(backups.verified).toEqual([BACKUP])
     expect(backups.calls).toEqual([])
     expect(timeline).toEqual([])
     expect(sessions.executed).toEqual([])
     expect(lines.join('\n')).toMatch(
-      /Comprobar integridad del backup \.+ +ERROR: El backup está dañado/
+      /Comprobar integridad de la copia \.+ +ERROR: La copia de seguridad está dañada/
     )
   })
 
@@ -224,7 +224,7 @@ describe('replaceSchemaFromBackup', () => {
     sessions.schemas.set(local.id, new Set(['auth']))
     await run()
     const integrity = lines.findIndex((l) =>
-      /Comprobar integridad del backup \.+ +3 filas {2}OK/.test(l)
+      /Comprobar integridad de la copia \.+ +3 filas {2}OK/.test(l)
     )
     const safety = lines.findIndex((l) => /Copia previa de auth/.test(l))
     expect(integrity).toBeGreaterThanOrEqual(0)
@@ -351,7 +351,7 @@ describe('integrity of a real .nb3 before replacing (regression: damaged data ch
     writeSync(fd, Buffer.alloc(16, 0x5a), 0, 16, chunk.offset + Math.floor(chunk.size / 2))
     closeSync(fd)
     expect((await readManifest(path)).schema).toBe('auth')
-    await expect(verifyBackupFile(path)).rejects.toThrow(/El backup está dañado/)
+    await expect(verifyBackupFile(path)).rejects.toThrow(/La copia de seguridad está dañada/)
 
     const timeline: string[] = []
     const connections = new ConnectionsRepo(dir)
@@ -373,7 +373,7 @@ describe('integrity of a real .nb3 before replacing (regression: damaged data ch
           continueOnError: false
         }
       )
-    ).rejects.toThrow(/El backup está dañado.*«auth» no se ha modificado en «Local»/)
+    ).rejects.toThrow(/La copia de seguridad está dañada.*«auth» no se ha modificado en «Local»/)
     expect(timeline).toEqual([])
     expect(sessions.executed).toEqual([])
   })

@@ -180,7 +180,7 @@ export function pgDdlTemplate(type: PgDdlObjectType | DdlObjectType): string {
       ].join('\n')
     case 'trigger':
       return [
-        '-- La función del trigger debe existir (RETURNS trigger).',
+        '-- La función del disparador debe existir (RETURNS trigger).',
         'CREATE TRIGGER nuevo_trigger',
         'BEFORE INSERT ON tabla',
         'FOR EACH ROW',

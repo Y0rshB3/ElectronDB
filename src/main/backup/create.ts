@@ -40,7 +40,7 @@ import { VqbWriter } from './vqb/writer'
  * snapshot and the progress; only the archive sink differs.
  */
 
-export const BACKUP_CANCELLED = 'Backup cancelado'
+export const BACKUP_CANCELLED = 'Copia de seguridad cancelada'
 
 export interface CreateDeps {
   connections: { get(id: string): ConnectionConfig | null }
@@ -422,11 +422,11 @@ export async function uniqueTarget(
     )
     if (!exists && !partialExists) return candidate
   }
-  throw new Error(`No se pudo elegir un nombre libre para el backup en ${dir}`)
+  throw new Error(`No se pudo elegir un nombre libre para la copia en ${dir}`)
 }
 
 function validate(options: BackupCreateOptions): void {
-  if (!options || typeof options !== 'object') throw new Error('Opciones de backup no válidas.')
+  if (!options || typeof options !== 'object') throw new Error('Opciones de copia no válidas.')
   if (!options.connectionId) throw new Error('Selecciona una conexión para el backup.')
   if (!options.schema || !options.schema.trim())
     throw new Error('Selecciona la base de datos a respaldar.')
@@ -446,13 +446,13 @@ export async function createBackup(
   validate(options)
   const started = performance.now()
   const connection = deps.connections.get(options.connectionId)
-  if (!connection) throw new Error('La conexión del backup ya no existe.')
+  if (!connection) throw new Error('La conexión de la copia ya no existe.')
   requireConnectionCapability(connection, 'supportsBackupsNb3', CAPABILITY_MESSAGES.backups)
   const schema = options.schema
   const targetDir =
     options.targetDir?.trim() || (connection.backupDir ? join(connection.backupDir, schema) : '')
   if (!targetDir) {
-    throw new Error(`La conexión ${connection.name} no tiene carpeta de backups configurada.`)
+    throw new Error(`La conexión ${connection.name} no tiene carpeta de copias configurada.`)
   }
   const cancelled = (): boolean => signal?.aborted === true
   if (cancelled()) throw new Error(BACKUP_CANCELLED)
@@ -661,7 +661,7 @@ export async function createBackup(
       phase: 'finish',
       current: total,
       total,
-      message: 'Cerrando archivo de backup',
+      message: 'Cerrando el archivo de la copia',
       done: false
     })
     const result = await writer.finish()

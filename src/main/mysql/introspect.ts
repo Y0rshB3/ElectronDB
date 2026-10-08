@@ -455,7 +455,7 @@ const OBJECT_LABEL: Record<ObjectType, string> = {
   function: 'La función',
   procedure: 'El procedimiento',
   event: 'El evento',
-  trigger: 'El trigger'
+  trigger: 'El disparador'
 }
 
 function assertObjectType(type: ObjectType): void {

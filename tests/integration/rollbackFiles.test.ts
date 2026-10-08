@@ -225,8 +225,8 @@ describe.skipIf(!url84 || !url57)(
         expect(await rows(s84, sql)).toEqual(await rows(s57, sql))
 
       const log = readFileSync(restoreRun.logPath, 'utf8')
-      expect(log).toContain('Inicio de «Rollback a Local 8.4 · Paquete staging»')
-      expect(log).toMatch(new RegExp(`Comprobar integridad del backup \\.+ .*OK`))
+      expect(log).toContain('Inicio de «Restaurar todo en Local 8.4 · Paquete staging»')
+      expect(log).toMatch(new RegExp(`Comprobar integridad de la copia \\.+ .*OK`))
       expect(log).not.toContain('ñandú')
     }, 180_000)
 

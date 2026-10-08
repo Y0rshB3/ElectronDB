@@ -338,7 +338,7 @@ const TYPE_KIND_LABELS: Record<string, string> = {
 const ROUTINE_KIND_LABELS: Record<string, string> = {
   function: 'Función',
   procedure: 'Procedimiento',
-  'trigger function': 'Función de trigger'
+  'trigger function': 'Función de disparador'
 }
 
 /**

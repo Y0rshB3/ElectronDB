@@ -108,7 +108,7 @@ const DROP_KEYWORD: Record<string, string> = {
 function validate(options: RestoreOptions): void {
   if (!options || typeof options !== 'object')
     throw new Error('Opciones de restauración no válidas.')
-  if (!options.backupPath) throw new Error('Selecciona el archivo de backup a restaurar.')
+  if (!options.backupPath) throw new Error('Selecciona el archivo de la copia a restaurar.')
   if (!options.connectionId) throw new Error('Selecciona la conexión de destino.')
   if (!options.targetSchema || !options.targetSchema.trim())
     throw new Error('Indica la base de datos de destino.')
@@ -354,7 +354,7 @@ async function restoreFrom(
   const wanted = new Set((options.objects ?? []).filter(Boolean))
   const selected = manifest.Objects.filter((o) => wanted.size === 0 || wanted.has(o.Name))
   if (wanted.size > 0 && selected.length === 0) {
-    throw new Error('Ninguno de los objetos seleccionados está en el backup.')
+    throw new Error('Ninguno de los objetos seleccionados está en la copia.')
   }
   const plan: PlannedObject[] = []
   for (const summary of selected)
@@ -556,7 +556,7 @@ async function restoreDdlObject(
   const keyword = DROP_KEYWORD[type.toLowerCase()]
   if (dropFirst && keyword)
     await session.execute(`DROP ${keyword} IF EXISTS ${session.escapeId(name)}`)
-  if (!meta.DDL.trim()) throw new Error(`El backup no contiene la definición de ${name}`)
+  if (!meta.DDL.trim()) throw new Error(`La copia no contiene la definición de ${name}`)
   await executeDdl(session, meta.DDL, definers)
   for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)
 }
@@ -587,7 +587,7 @@ async function restoreTable(
   const table = session.escapeId(name)
   if (options.includeStructure) {
     if (options.dropObjectsFirst) await session.execute(`DROP TABLE IF EXISTS ${table}`)
-    if (!meta.DDL.trim()) throw new Error(`El backup no contiene la definición de la tabla ${name}`)
+    if (!meta.DDL.trim()) throw new Error(`La copia no contiene la definición de la tabla ${name}`)
     const ddl = options.skipAutoIncrement ? stripAutoIncrementOption(meta.DDL) : meta.DDL
     await executeDdl(session, ddl, definers)
     for (const sub of meta.SubDDL) if (sub.trim()) await executeDdl(session, sub, definers)

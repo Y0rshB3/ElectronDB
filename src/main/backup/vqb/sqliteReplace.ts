@@ -57,7 +57,7 @@ export async function replaceSqliteDatabase(
   hooks: ReplaceHooks = {},
   signal?: AbortSignal
 ): Promise<ReplaceResult> {
-  if (!request?.backupPath) throw new Error('Falta el archivo de backup a restaurar.')
+  if (!request?.backupPath) throw new Error('Falta el archivo de la copia a restaurar.')
   if (!request.connectionId) throw new Error('Falta la conexión de destino.')
   const target = request.targetSchema?.trim() || 'main'
   const say = (body: string): void => hooks.line?.(body)
@@ -98,7 +98,7 @@ export async function replaceSqliteDatabase(
     const checked = await deps.backups.verify(request.backupPath, signal, request.password)
     say(
       labelLine({
-        label: 'Comprobar integridad del backup',
+        label: 'Comprobar integridad de la copia',
         value: plural(checked.rows, 'fila', 'filas'),
         status: 'ok'
       })
@@ -106,7 +106,7 @@ export async function replaceSqliteDatabase(
   } catch (err) {
     if (cancelled()) throw new Error(REPLACE_CANCELLED)
     throw new Error(
-      `${sentence(`No se puede usar el backup ${request.backupPath}: ${describeError(err)}`)} ${keep}`
+      `${sentence(`No se puede usar la copia ${request.backupPath}: ${describeError(err)}`)} ${keep}`
     )
   }
   if (cancelled()) throw new Error(REPLACE_CANCELLED)

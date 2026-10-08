@@ -95,11 +95,11 @@ export function parseManifest(json: string): Nb3Manifest {
   try {
     raw = JSON.parse(json)
   } catch {
-    throw new Nb3FormatError('El archivo no es un backup .nb3 válido: meta.json ilegible')
+    throw new Nb3FormatError('El archivo no es una copia .nb3 válida: meta.json ilegible')
   }
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as Record<string, unknown>).Objects)) {
     throw new Nb3FormatError(
-      'El archivo no es un backup .nb3 válido: meta.json sin lista de objetos'
+      'El archivo no es una copia .nb3 válida: meta.json sin lista de objetos'
     )
   }
   const r = raw as Record<string, unknown>
@@ -110,7 +110,7 @@ export function parseManifest(json: string): Nb3Manifest {
     const metadata = asFileRef(o.Metadata)
     if (typeof o.UUID !== 'string' || !metadata) {
       throw new Nb3FormatError(
-        'El archivo no es un backup .nb3 válido: objeto sin UUID o metadatos'
+        'El archivo no es una copia .nb3 válida: objeto sin UUID o metadatos'
       )
     }
     objects.push({

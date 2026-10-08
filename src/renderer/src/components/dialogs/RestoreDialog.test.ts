@@ -229,7 +229,7 @@ describe('RestoreDialog', () => {
     await w.get('[data-test="replace-content-structure"]').trigger('click')
     await settle()
     expect(w.get('[data-test="replace-content-hint"]').text()).toBe(
-      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, sin filas'
+      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y disparadores, sin filas'
     )
     expect(w.get('[data-test="restore-replace-warning"]').text()).toContain(
       'se crearán las tablas vacías'

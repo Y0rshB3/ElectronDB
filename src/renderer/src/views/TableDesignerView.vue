@@ -542,7 +542,7 @@ defineExpose({ draft, previewSql, save })
         <v-icon icon="mdi-alert-outline" size="16" />
         <span class="designer__rebuild-text"
           >La tabla se reconstruirá ({{ rebuildReason }}): se crea de nuevo y se copian sus datos,
-          índices, triggers y vistas en una sola transacción.</span
+          índices, disparadores y vistas en una sola transacción.</span
         >
         <v-checkbox
           v-model="copyBefore"

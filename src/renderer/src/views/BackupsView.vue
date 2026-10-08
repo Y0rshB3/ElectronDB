@@ -492,7 +492,7 @@ watch(connectionId, () => {
       class="backups-view__notice"
       closable
     >
-      <strong>Rollback a Local:</strong> 1) «Nueva copia» crea una copia de «{{ connection.name }}»;
+      <strong>Restaurar todo en Local:</strong> 1) «Nueva copia» crea una copia de «{{ connection.name }}»;
       2) selecciónala y pulsa «Restaurar en Local» para cargarla en
       {{ localConnection?.name ?? 'tu conexión Local' }}. Para un lote entero (todas las copias de
       una automatización), pulsa la cabecera del paquete y «Restaurar paquete en Local».

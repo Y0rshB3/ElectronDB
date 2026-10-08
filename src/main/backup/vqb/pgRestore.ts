@@ -82,7 +82,7 @@ function dropStatement(item: Item): string | null {
 function validate(options: RestoreOptions): void {
   if (!options || typeof options !== 'object')
     throw new Error('Opciones de restauración no válidas.')
-  if (!options.backupPath) throw new Error('Selecciona el archivo de backup a restaurar.')
+  if (!options.backupPath) throw new Error('Selecciona el archivo de la copia a restaurar.')
   if (!options.connectionId) throw new Error('Selecciona la conexión de destino.')
   if (!options.targetSchema?.trim()) throw new Error('Indica la base de datos de destino.')
   if (!options.includeStructure && !options.includeData)
@@ -148,7 +148,7 @@ export async function restorePgBackup(
       (o) => wanted.size === 0 || wanted.has(labelOf(o)) || wanted.has(o.name)
     )
     if (wanted.size > 0 && selected.length === 0)
-      throw new Error('Ninguno de los objetos seleccionados está en el backup.')
+      throw new Error('Ninguno de los objetos seleccionados está en la copia.')
     const items: Item[] = []
     for (const object of selected) {
       const meta = await reader.objectMeta(object.id)
@@ -263,7 +263,7 @@ async function runRestore(
       const drop = dropStatement(item)
       if (drop) await session.query(drop)
     }
-    if (!item.ddl.trim()) throw new Error(`El backup no contiene la definición de ${item.label}`)
+    if (!item.ddl.trim()) throw new Error(`La copia no contiene la definición de ${item.label}`)
     await session.query(item.ddl)
     if (item.object.type !== 'sequence')
       for (const sql of item.meta.postDdl ?? []) await session.query(sql)

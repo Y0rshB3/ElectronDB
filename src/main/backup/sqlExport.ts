@@ -496,7 +496,7 @@ export async function exportSchemaToSql(
     const dir =
       options.targetDir?.trim() || (connection.backupDir ? join(connection.backupDir, schema) : '')
     if (!dir)
-      throw new Error(`La conexión ${connection.name} no tiene carpeta de backups configurada.`)
+      throw new Error(`La conexión ${connection.name} no tiene carpeta de copias configurada.`)
     target = await uniqueTarget(dir, now, options.label, gzip)
   }
 

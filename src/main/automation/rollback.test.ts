@@ -158,7 +158,7 @@ describe('rollback of a run («Restaurar todo en Local»)', () => {
       target,
       false
     )
-    expect(prepared.job.name).toBe('Rollback a Local · Backup staging')
+    expect(prepared.job.name).toBe('Restaurar todo en Local · Backup staging')
     expect(prepared.options).toMatchObject({ kind: 'rollback', rollbackOf: run.id })
     const started = startJobWith(t.ctx, deps, prepared.job, 'manual', prepared.options)
     expect(started.run).toMatchObject({ kind: 'rollback', rollbackOf: run.id, jobId: run.jobId })
@@ -185,7 +185,7 @@ describe('rollback of a run («Restaurar todo en Local»)', () => {
       .filter(Boolean)
       .map((l) => l.slice(11))
     expect(bodies[0]).toMatch(
-      /^Inicio de «Rollback a Local · Backup staging» · .* · manual · 2 pasos$/
+      /^Inicio de «Restaurar todo en Local · Backup staging» · .* · manual · 2 pasos$/
     )
     expect(bodies).toContain('Paso 1/2 · Base de datos auth: Staging -> Local')
     expect(bodies).toContain('Paso 2/2 · Base de datos crm: Staging -> Local')
@@ -961,7 +961,7 @@ describe('file-based rollback (packages of the backups list)', () => {
     )
     expect(prepared.job).toMatchObject({
       id: MANUAL_ROLLBACKS_JOB_ID,
-      name: 'Rollback a Local · backup-staging · 2026-10-05 23:16'
+      name: 'Restaurar todo en Local · backup-staging · 2026-10-05 23:16'
     })
     expect(prepared.job.tasks.map((task) => task.id)).toEqual([
       'rollback-file-1',

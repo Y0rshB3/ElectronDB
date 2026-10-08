@@ -134,8 +134,8 @@ export function incompleteNotice(
     return `${state} ${undoHint(copy)}`
   }
   return existed
-    ? `${state} No había copia previa: vuelve a restaurar el backup para completarla.`
-    : `${state} Vuelve a restaurar el backup para completarla.`
+    ? `${state} No había copia previa: vuelve a restaurar la copia para completarla.`
+    : `${state} Vuelve a restaurar la copia para completarla.`
 }
 
 /** "No se ha modificado X." appended to every failure that happens before the DROP. */
@@ -161,15 +161,15 @@ export async function verifyBackupSource(
   try {
     meta = await backups.readMeta(path, password)
   } catch (err) {
-    throw new Error(`No se puede usar el backup ${path}: ${describeError(err)}`)
+    throw new Error(`No se puede usar la copia ${path}: ${describeError(err)}`)
   }
   if (metaNeedsPassword(meta))
     throw new Error(
-      `No se puede usar el backup ${path}: ${meta.format === 'vqb' ? PASSWORD_REQUIRED_MESSAGE : ENCRYPTED_MESSAGE}`
+      `No se puede usar la copia ${path}: ${meta.format === 'vqb' ? PASSWORD_REQUIRED_MESSAGE : ENCRYPTED_MESSAGE}`
     )
   if (meta.schema !== expectedSchema) {
     throw new Error(
-      `El backup ${path} contiene la base de datos «${meta.schema || '?'}», no «${expectedSchema}».`
+      `La copia ${path} contiene la base de datos «${meta.schema || '?'}», no «${expectedSchema}».`
     )
   }
   return meta
@@ -258,8 +258,8 @@ function createDatabaseSql(
 
 function validate(request: ReplaceRequest): void {
   if (!request || typeof request !== 'object') throw new Error('Restauración no válida.')
-  if (!request.backupPath) throw new Error('Falta el archivo de backup a restaurar.')
-  if (!request.expectedSchema?.trim()) throw new Error('Falta la base de datos del backup.')
+  if (!request.backupPath) throw new Error('Falta el archivo de la copia a restaurar.')
+  if (!request.expectedSchema?.trim()) throw new Error('Falta la base de datos de la copia.')
   if (!request.connectionId) throw new Error('Falta la conexión de destino.')
   if (!request.targetSchema?.trim()) throw new Error('Falta la base de datos de destino.')
   // Never DROP DATABASE mysql/sys/...: same rule as dropDatabase in the tree.
@@ -307,7 +307,7 @@ export async function replaceSchemaFromBackup(
   )
   // The manifest alone does not prove the data is readable: read every entry now,
   // while dropping is still avoidable (a damaged chunk would fail after the DROP).
-  const integrityLabel = 'Comprobar integridad del backup'
+  const integrityLabel = 'Comprobar integridad de la copia'
   try {
     const checked = await deps.backups.verify(request.backupPath, signal, request.password)
     say(
@@ -322,7 +322,7 @@ export async function replaceSchemaFromBackup(
     const message = describeError(err)
     say(labelLine({ label: integrityLabel, status: 'error', error: message }))
     throw new Error(
-      `${sentence(`No se puede usar el backup ${request.backupPath}: ${message}`)} ${keep}`
+      `${sentence(`No se puede usar la copia ${request.backupPath}: ${message}`)} ${keep}`
     )
   }
   if (cancelled()) throw new Error(REPLACE_CANCELLED)

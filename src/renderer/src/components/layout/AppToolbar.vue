@@ -120,7 +120,7 @@ const objectsMenu = computed<ToolbarMenuItem[]>(() => {
       action: () => ws.showGroup('indexes')
     },
     groups.value.includes('triggers') && {
-      label: 'Triggers',
+      label: 'Disparadores',
       icon: 'mdi-flash-outline',
       action: () => ws.showGroup('triggers')
     },

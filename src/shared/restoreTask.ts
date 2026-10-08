@@ -141,7 +141,7 @@ export function restoreTaskProblem(
   } else if (source.kind === 'file') {
     if (!options.rollback)
       return `El ${label} usa un archivo concreto como origen; elige un paso de copia o «Última copia en disco».`
-    if (!source.path) return `El ${label} no indica el archivo de backup.`
+    if (!source.path) return `El ${label} no indica el archivo de la copia.`
   } else {
     return `El ${label} tiene un origen de copia desconocido.`
   }

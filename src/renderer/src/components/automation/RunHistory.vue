@@ -125,7 +125,7 @@ async function undoRestore(task: JobTaskRun): Promise<void> {
     const files = await api.backups.list(task.connectionId, task.schema ?? null)
     const file = files.find((f) => f.path === task.outputPath)
     if (!file) {
-      notify.error(`La copia previa ya no está en la carpeta de backups: ${task.outputPath}`)
+      notify.error(`La copia previa ya no está en la carpeta de copias: ${task.outputPath}`)
       return
     }
     ui.openRestoreDialog(file, task.connectionId, { replace: true })

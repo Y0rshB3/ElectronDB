@@ -96,7 +96,7 @@ describe('AutomationView', () => {
       ...started,
       id: 'rb-manual',
       jobId: 'manual-rollbacks',
-      jobName: 'Rollback a Local · backup-staging · 2026-10-05 23:16',
+      jobName: 'Restaurar todo en Local · backup-staging · 2026-10-05 23:16',
       status: 'success',
       kind: 'rollback',
       finishedAt: '2026-10-05T15:40:00.000Z'

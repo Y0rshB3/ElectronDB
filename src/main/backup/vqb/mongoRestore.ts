@@ -64,7 +64,7 @@ const errorText = (err: unknown): string => describeError(toServerError(err))
 function validate(options: RestoreOptions): void {
   if (!options || typeof options !== 'object')
     throw new Error('Opciones de restauración no válidas.')
-  if (!options.backupPath) throw new Error('Selecciona el archivo de backup a restaurar.')
+  if (!options.backupPath) throw new Error('Selecciona el archivo de la copia a restaurar.')
   if (!options.connectionId) throw new Error('Selecciona la conexión de destino.')
   const db = options.targetSchema?.trim()
   if (!db) throw new Error('Indica la base de datos de destino.')
@@ -255,8 +255,8 @@ export async function replaceMongoDatabase(
   hooks: ReplaceHooks = {},
   signal?: AbortSignal
 ): Promise<ReplaceResult> {
-  if (!request?.backupPath) throw new Error('Falta el archivo de backup a restaurar.')
-  if (!request.expectedSchema?.trim()) throw new Error('Falta la base de datos del backup.')
+  if (!request?.backupPath) throw new Error('Falta el archivo de la copia a restaurar.')
+  if (!request.expectedSchema?.trim()) throw new Error('Falta la base de datos de la copia.')
   if (!request.connectionId) throw new Error('Falta la conexión de destino.')
   const target = request.targetSchema?.trim()
   if (!target) throw new Error('Falta la base de datos de destino.')
@@ -296,7 +296,7 @@ export async function replaceMongoDatabase(
       ? '  Contenido: estructura y datos'
       : `  Contenido: ${STRUCTURE_ONLY_LABEL.toLowerCase()}`
   )
-  const integrityLabel = 'Comprobar integridad del backup'
+  const integrityLabel = 'Comprobar integridad de la copia'
   try {
     const checked = await deps.backups.verify(request.backupPath, signal, request.password)
     say(
@@ -311,7 +311,7 @@ export async function replaceMongoDatabase(
     const message = err instanceof Error ? err.message : String(err)
     say(labelLine({ label: integrityLabel, status: 'error', error: message }))
     throw new Error(
-      `${sentence(`No se puede usar el backup ${request.backupPath}: ${message}`)} ${keep}`
+      `${sentence(`No se puede usar la copia ${request.backupPath}: ${message}`)} ${keep}`
     )
   }
   if (cancelled()) throw new Error(REPLACE_CANCELLED)

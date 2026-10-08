@@ -517,7 +517,7 @@ export function sqliteBuildAlter(original: TableStructure, draft: TableDraft): S
       'No se pudo leer la definición original de la tabla (CREATE TABLE): no se puede reconstruir.'
     )
   risks.unshift(
-    `La tabla se reconstruirá: ${reason}. Se copian los datos, los índices, los triggers y las vistas que dependen de ella`
+    `La tabla se reconstruirá: ${reason}. Se copian los datos, los índices, los disparadores y las vistas que dependen de ella`
   )
   const definition = rebuildDefinition(original, draft, dd, finalName, problems)
   const inPlace = tableRenamed

@@ -316,7 +316,7 @@ async function start(): Promise<void> {
           de nuevo con todos los objetos
           {{
             includeData
-              ? 'y datos de la copia, para que quede igual que en el momento del backup.'
+              ? 'y datos de la copia, para que quede igual que en el momento de la copia.'
               : 'de la copia, con las tablas vacías (solo estructura).'
           }}
         </p>
@@ -484,7 +484,7 @@ async function start(): Promise<void> {
           :label="`Copia de seguridad previa de ${target?.name ?? 'Local'}`"
           :hint="
             target
-              ? `Antes de reemplazar cada base de datos existente se guarda una copia en ${target.backupDir || 'la carpeta de backups de la conexión'} (etiqueta «previo-rollback»). Si la copia falla, esa base de datos no se toca. Para deshacer: ${UNDO_REPLACE_HOW}.`
+              ? `Antes de reemplazar cada base de datos existente se guarda una copia en ${target.backupDir || 'la carpeta de copias de la conexión'} (etiqueta «previo-rollback»). Si la copia falla, esa base de datos no se toca. Para deshacer: ${UNDO_REPLACE_HOW}.`
               : undefined
           "
           persistent-hint

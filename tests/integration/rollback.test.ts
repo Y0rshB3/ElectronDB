@@ -372,7 +372,7 @@ describe.skipIf(!url84 || !url57)('rollback of a run: MySQL 5.7 -> 8.4 (integrat
 
     // Live log format: one heading per database, safety backup, drop/create, objects, result.
     const log = readFileSync(rollbackRun.logPath, 'utf8')
-    expect(log).toContain(`Inicio de «Rollback a Local 8.4 · Backup staging»`)
+    expect(log).toContain(`Inicio de «Restaurar todo en Local 8.4 · Backup staging»`)
     expect(log).toContain(`Paso 1/2 · Base de datos ${A}: Staging 5.7 -> Local 8.4`)
     expect(log).toContain(`Paso 2/2 · Base de datos ${B}: Staging 5.7 -> Local 8.4`)
     expect(log).toMatch(new RegExp(`Copia previa de ${A} \\.+ .*OK`))
@@ -476,7 +476,7 @@ describe.skipIf(!url84 || !url57)('rollback of a run: MySQL 5.7 -> 8.4 (integrat
         },
         { line: (l) => lines.push(l) }
       )
-    ).rejects.toThrow(/El backup está dañado.*«rb_b» no se ha modificado en «Local 8.4»/)
+    ).rejects.toThrow(/La copia de seguridad está dañada.*«rb_b» no se ha modificado en «Local 8.4»/)
     expect(lines.join('\n')).not.toMatch(/Reemplazar base de datos/)
     expect(await tableChecksum(s84, B, 'items')).toEqual(before)
   }, 120_000)

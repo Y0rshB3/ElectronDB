@@ -273,7 +273,7 @@ describe('main toolbar per engine', () => {
         'Tablas',
         'Vistas',
         'Índices',
-        'Triggers',
+        'Disparadores',
         'Consultas guardadas',
         'Nueva tabla',
         'Nueva vista'

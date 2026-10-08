@@ -83,11 +83,11 @@ export async function readBackupMeta(
   let identity: { size: number; mtimeMs: number }
   try {
     const s = await stat(path)
-    if (!s.isFile()) throw new Error(`La ruta no es un archivo de backup: ${path}`)
+    if (!s.isFile()) throw new Error(`La ruta no es un archivo de copia de seguridad: ${path}`)
     identity = { size: s.size, mtimeMs: s.mtimeMs }
   } catch (err) {
     if ((err as { code?: string }).code === 'ENOENT')
-      throw new Error(`No se encontró el archivo de backup: ${path}`)
+      throw new Error(`No se encontró el archivo de la copia: ${path}`)
     throw err
   }
   const cache = getIndexCache(userDataPath)

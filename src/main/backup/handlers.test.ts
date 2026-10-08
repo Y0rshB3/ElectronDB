@@ -380,7 +380,7 @@ describe('backup handlers', () => {
       ) =>
         new Promise((_resolve, reject) => {
           progress({ phase: 'object', current: 0, total: 1, message: 'x', done: false })
-          signal.addEventListener('abort', () => reject(new Error('Backup cancelado')))
+          signal.addEventListener('abort', () => reject(new Error('Copia de seguridad cancelada')))
         })
     } as unknown as BackupService
     const h = handlersWith(service)
@@ -391,7 +391,7 @@ describe('backup handlers', () => {
     ).rejects.toThrow(/en curso/)
     expect(h.running()).toEqual(['op-3'])
     await h.cancel('op-3')
-    await expect(pending).rejects.toThrow('Backup cancelado')
+    await expect(pending).rejects.toThrow('Copia de seguridad cancelada')
     expect(events[events.length - 1]).toMatchObject({
       operationId: 'op-3',
       done: true,

@@ -97,7 +97,7 @@ export function qualifyDdl(ddl: string, schema: string): string {
 function validate(options: SqliteRestoreOptions): void {
   if (!options || typeof options !== 'object')
     throw new Error('Opciones de restauración no válidas.')
-  if (!options.backupPath) throw new Error('Selecciona el archivo de backup a restaurar.')
+  if (!options.backupPath) throw new Error('Selecciona el archivo de la copia a restaurar.')
   if (!options.newFilePath && !options.connectionId)
     throw new Error('Selecciona la conexión de destino o un archivo nuevo.')
   if (options.newFilePath && !isAbsolute(options.newFilePath))
@@ -239,7 +239,7 @@ async function runRestore(
   const wanted = new Set((options.objects ?? []).filter(Boolean))
   const selected = items.filter((i) => wanted.size === 0 || wanted.has(i.object.name))
   if (wanted.size > 0 && selected.length === 0)
-    throw new Error('Ninguno de los objetos seleccionados está en el backup.')
+    throw new Error('Ninguno de los objetos seleccionados está en la copia.')
   const tables = selected.filter((i) => i.object.type === 'table')
   const views = selected.filter((i) => i.object.type === 'view')
   const total = selected.length

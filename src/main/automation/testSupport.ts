@@ -200,7 +200,7 @@ export function fakeBackupService(dir: string, timeline: string[] = []): FakeBac
     async verify(path) {
       service.verified.push(path)
       const schema = service.files.get(path)
-      if (schema === undefined) throw new Error(`No se encontró el archivo de backup: ${path}`)
+      if (schema === undefined) throw new Error(`No se encontró el archivo de la copia: ${path}`)
       const damage = service.corrupt.get(path)
       if (damage) throw new Error(damage)
       const objects = service.objects.get(schema) ?? []
@@ -215,7 +215,7 @@ export function fakeBackupService(dir: string, timeline: string[] = []): FakeBac
     },
     async readMeta(path): Promise<BackupMeta> {
       const schema = service.files.get(path)
-      if (schema === undefined) throw new Error(`No se encontró el archivo de backup: ${path}`)
+      if (schema === undefined) throw new Error(`No se encontró el archivo de la copia: ${path}`)
       return {
         metaVersion: '30101',
         databaseType: 'MYSQL',

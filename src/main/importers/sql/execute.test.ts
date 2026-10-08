@@ -92,7 +92,7 @@ describe('importSqlDump', () => {
     expect(
       events.find((e) => e.phase === 'object' && e.detail?.objectType === 'Trigger')
     ).toMatchObject({
-      message: 'Trigger pedidos_bi creado',
+      message: 'Disparador pedidos_bi creado',
       detail: { objectName: 'pedidos_bi' }
     })
     const currents = events.map((e) => e.current)

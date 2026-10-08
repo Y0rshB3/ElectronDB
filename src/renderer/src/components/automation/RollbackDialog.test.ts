@@ -217,7 +217,7 @@ describe('RollbackDialog', () => {
     await content.get('[data-test="replace-content-structure"]').trigger('click')
     await settle()
     expect(w.get('[data-test="replace-content-hint"]').text()).toBe(
-      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y triggers, sin filas'
+      'Tablas con sus relaciones (claves foráneas, índices), vistas, rutinas, eventos y disparadores, sin filas'
     )
     expect(w.text()).toContain('con las tablas vacías (solo estructura)')
     await w.get('[data-test="rollback-submit"]').trigger('click')
@@ -334,7 +334,7 @@ describe('RollbackDialog', () => {
     invoke.mockImplementation(async (channel: string) => {
       if (channel !== 'jobs:rollbackPlan') return undefined
       const plan = planFor('local')
-      plan.items[1].problem = 'No se encontró el archivo de backup: /b/x.nb3'
+      plan.items[1].problem = 'No se encontró el archivo de la copia: /b/x.nb3'
       return plan
     })
     const w = await mountDialog()

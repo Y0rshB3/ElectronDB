@@ -940,7 +940,7 @@ export async function dropObject(s: PgQueryable, schema: string, ref: ObjectRef)
       return void (await s.query(`DROP ${keyword} ${target}(${signature})`))
     }
     case 'trigger': {
-      if (!ref.table) throw new PgUserError('Falta la tabla del trigger')
+      if (!ref.table) throw new PgUserError('Falta la tabla del disparador')
       return void (await s.query(`DROP TRIGGER ${q(ref.name)} ON ${qualified(schema, ref.table)}`))
     }
     default:

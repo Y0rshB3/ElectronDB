@@ -117,7 +117,7 @@ describe('nb3 reader on the Navicat fixture', () => {
       ])
     )
     expect((await readManifest(path)).encryption).toBe('AES256')
-    await expect(readObjectMeta(path, 'U1')).rejects.toThrow('Backups cifrados no soportados')
+    await expect(readObjectMeta(path, 'U1')).rejects.toThrow('Copias cifradas no soportadas')
   })
 
   it('reports missing files and non-nb3 archives in Spanish', async () => {

@@ -312,7 +312,7 @@ describe('createBackup', () => {
     ).rejects.toThrow(/conexión/)
     await expect(
       createBackup(deps(factory, ''), { connectionId: 'conn-1', schema: 's', includeData: true })
-    ).rejects.toThrow(/carpeta de backups/)
+    ).rejects.toThrow(/carpeta de copias/)
     expect(existsSync(join(dir, 's'))).toBe(false)
   })
 

@@ -94,7 +94,7 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
   Function: 'Función',
   Procedure: 'Procedimiento',
   Event: 'Evento',
-  Trigger: 'Trigger',
+  Trigger: 'Disparador',
   Statement: 'Sentencia',
   Sequence: 'Secuencia',
   Collection: 'Colección'

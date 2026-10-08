@@ -42,7 +42,7 @@ export const GROUP_LABELS: Record<GroupKind, string> = {
   sequences: 'Secuencias',
   types: 'Tipos',
   indexes: 'Índices',
-  triggers: 'Triggers',
+  triggers: 'Disparadores',
   collections: 'Colecciones'
 }
 
@@ -67,7 +67,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   function: 'función',
   procedure: 'procedimiento',
   event: 'evento',
-  trigger: 'trigger'
+  trigger: 'disparador'
 }
 
 /** Label with its article, for questions such as "¿Eliminar la tabla «x»?". */
@@ -77,7 +77,7 @@ export const OBJECT_TYPE_WITH_ARTICLE: Record<ObjectType, string> = {
   function: 'la función',
   procedure: 'el procedimiento',
   event: 'el evento',
-  trigger: 'el trigger'
+  trigger: 'el disparador'
 }
 
 export const OBJECT_ICONS: Record<ObjectType, string> = {

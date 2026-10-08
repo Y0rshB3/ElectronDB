@@ -17,9 +17,9 @@ import { NOT_A_BACKUP_MESSAGE, archiveObjectDdl } from './archive'
  */
 
 export const NAVICAT_DELETE_MESSAGE =
-  'Este backup está en una carpeta de Navicat (solo lectura) y Vortaq no lo borra. Elimínalo desde Navicat o desde Finder.'
+  'Esta copia está en una carpeta de Navicat (solo lectura) y Vortaq no lo borra. Elimínalo desde Navicat o desde Finder.'
 export const OUTSIDE_DELETE_MESSAGE =
-  'Solo se pueden borrar backups que estén dentro de la carpeta de backups de una conexión.'
+  'Solo se pueden borrar copias que estén dentro de la carpeta de copias de una conexión.'
 
 async function canonical(path: string): Promise<string> {
   try {
@@ -35,8 +35,8 @@ const isInside = (child: string, parent: string): boolean => {
 }
 
 function requireBackupPath(path: unknown): string {
-  if (typeof path !== 'string' || !path.trim()) throw new Error('Ruta de backup no válida.')
-  if (!isAbsolute(path)) throw new Error('La ruta del backup debe ser absoluta.')
+  if (typeof path !== 'string' || !path.trim()) throw new Error('Ruta de copia no válida.')
+  if (!isAbsolute(path)) throw new Error('La ruta de la copia debe ser absoluta.')
   if (!isBackupFileName(path)) throw new Error(NOT_A_BACKUP_MESSAGE)
   return path
 }
@@ -74,12 +74,12 @@ export async function deleteBackupFile(
     await unlink(target)
   } catch (err) {
     if ((err as { code?: string }).code === 'ENOENT')
-      throw new Error(`El backup ya no existe: ${path}`)
+      throw new Error(`La copia ya no existe: ${path}`)
     if (
       (err as { code?: string }).code === 'EACCES' ||
       (err as { code?: string }).code === 'EPERM'
     ) {
-      throw new Error(`Sin permisos para borrar el backup: ${path}`)
+      throw new Error(`Sin permisos para borrar la copia: ${path}`)
     }
     throw err
   }
@@ -94,7 +94,7 @@ export async function objectDdl(
   password?: string | null
 ): Promise<string> {
   requireBackupPath(path)
-  if (typeof uuid !== 'string' || !uuid) throw new Error('Objeto de backup no válido.')
+  if (typeof uuid !== 'string' || !uuid) throw new Error('Objeto de copia no válido.')
   return archiveObjectDdl(path, uuid, optionalPassword(password))
 }
 
@@ -117,8 +117,8 @@ export async function replaceRestore(
   if (!options.targetSchema?.trim()) throw new Error('Indica la base de datos de destino.')
   const password = optionalPassword(options.password)
   const meta = await service.readMeta(path, password)
-  if (meta.locked) throw new Error(`No se puede usar el backup ${path}: escribe su contraseña.`)
-  if (!meta.schema) throw new Error(`El backup ${path} no indica qué base de datos contiene.`)
+  if (meta.locked) throw new Error(`No se puede usar la copia ${path}: escribe su contraseña.`)
+  if (!meta.schema) throw new Error(`La copia ${path} no indica qué base de datos contiene.`)
   const result = await service.replace(
     {
       backupPath: path,
@@ -227,7 +227,7 @@ export function createBackupHandlers(
       track(
         operationId,
         'backup',
-        (r) => `Backup completado: ${r.objects} objetos, ${r.rows} filas`,
+        (r) => `Copia de seguridad completada: ${r.objects} objetos, ${r.rows} filas`,
         () => null,
         (service, progress, signal) => service.create(options, progress, signal)
       ),
@@ -253,7 +253,7 @@ export function createBackupHandlers(
               ctx,
               options.connectionId,
               options,
-              'Restaurar un backup'
+              'Restaurar una copia'
             )
           return options?.replaceSchema
             ? replaceRestore(service, options, progress, signal)

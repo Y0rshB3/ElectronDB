@@ -79,7 +79,7 @@ describe('automation service', () => {
     })
     const rollbackJob = {
       ...job,
-      name: 'Rollback a Local · Backup',
+      name: 'Restaurar todo en Local · Backup',
       tasks: [
         {
           id: 'rollback-t1',
@@ -102,7 +102,7 @@ describe('automation service', () => {
       rollbackOf: 'x'
     })
     expect(service.activeRestores!()).toEqual([
-      { runId: rb.id, jobName: 'Rollback a Local · Backup' }
+      { runId: rb.id, jobName: 'Restaurar todo en Local · Backup' }
     ])
     await expect(
       service.runPrepared!(rollbackJob, 'manual', { kind: 'rollback', rollbackOf: 'x' })

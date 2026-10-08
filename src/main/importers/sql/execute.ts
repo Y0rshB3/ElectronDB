@@ -67,7 +67,7 @@ const CREATED_MESSAGE: Record<DumpObjectKind, (name: string) => string> = {
   View: (n) => `Vista ${n} creada`,
   Procedure: (n) => `Procedimiento ${n} creado`,
   Function: (n) => `Función ${n} creada`,
-  Trigger: (n) => `Trigger ${n} creado`,
+  Trigger: (n) => `Disparador ${n} creado`,
   Event: (n) => `Evento ${n} creado`,
   Database: (n) => `Base de datos ${n} creada`
 }

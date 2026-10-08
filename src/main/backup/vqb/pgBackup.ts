@@ -122,11 +122,11 @@ export async function createPgBackup(
   if ((options.objects ?? []).filter(Boolean).length > 0) throw new Error(PG_WHOLE_DATABASE_MESSAGE)
   const password = checkBackupPassword(options.password)
   const connection = deps.connections.get(options.connectionId)
-  if (!connection) throw new Error('La conexión del backup ya no existe.')
+  if (!connection) throw new Error('La conexión de la copia ya no existe.')
   const targetDir =
     options.targetDir?.trim() || (connection.backupDir ? join(connection.backupDir, database) : '')
   if (!targetDir)
-    throw new Error(`La conexión ${connection.name} no tiene carpeta de backups configurada.`)
+    throw new Error(`La conexión ${connection.name} no tiene carpeta de copias configurada.`)
   const started = performance.now()
   const cancelled = (): boolean => signal?.aborted === true
   if (cancelled()) throw new Error(BACKUP_CANCELLED)
@@ -268,7 +268,7 @@ export async function createPgBackup(
       phase: 'finish',
       current: total,
       total,
-      message: 'Cerrando archivo de backup',
+      message: 'Cerrando el archivo de la copia',
       done: false
     })
     const result = await writer.finish()

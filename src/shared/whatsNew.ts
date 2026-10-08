@@ -194,8 +194,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     version: '0.1.1',
     date: '2026-10-06',
     highlights: [
-      'Rollback a Local de las ejecuciones de automatización y de los paquetes de copias',
-      'Copia de seguridad automática de Local antes de cada rollback'
+      '«Restaurar todo en Local» desde las ejecuciones de automatización y los paquetes de copias',
+      'Copia de seguridad automática de Local antes de cada restauración'
     ]
   }
 ]
