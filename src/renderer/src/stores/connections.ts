@@ -74,6 +74,13 @@ export const useConnectionsStore = defineStore('connections', () => {
     try {
       const info = await api.connections.open(id)
       serverInfo.value = { ...serverInfo.value, [id]: info }
+      // A MySQL connection whose server is MariaDB is stored as MariaDB when it opens (P5):
+      // reload the list so the tree, the guard and the menus use the MariaDB engine.
+      const stored = get(id)
+      if (stored && info.engine && info.engine !== (stored.engine ?? 'mysql')) {
+        items.value = await api.connections.list()
+        useNotify().info(`«${stored.name}» es un servidor MariaDB: ahora es una conexión MariaDB.`)
+      }
       return info
     } finally {
       const next = { ...opening.value }

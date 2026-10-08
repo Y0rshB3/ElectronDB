@@ -63,6 +63,25 @@ describe('connections store', () => {
     expect(store.openIds).toEqual(['a'])
   })
 
+  it('reloads a connection stored as MariaDB when it opened (MySQL connection to MariaDB)', async () => {
+    let promoted = false
+    installBridge({
+      'connections:list': () => [
+        makeConnection({ id: 'm', name: 'Maria', engine: promoted ? 'mariadb' : 'mysql' })
+      ],
+      'connections:open': () => {
+        promoted = true
+        return makeServerInfo({ engine: 'mariadb' })
+      }
+    })
+    const store = useConnectionsStore()
+    await store.load()
+    expect(store.get('m')?.engine).toBe('mysql')
+    await store.open('m')
+    expect(store.get('m')?.engine).toBe('mariadb')
+    expect(useNotify().queue.at(-1)?.message).toContain('ahora es una conexión MariaDB')
+  })
+
   it('clears the opening flag when opening fails', async () => {
     bridge = installBridge({
       'connections:open': () => {
