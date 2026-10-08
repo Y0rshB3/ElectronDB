@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { parseMongoUri } from '@shared/mongo/uri'
 import type { Environment, SshConfig, SslConfig } from '@shared/types'
 import { inferEnvironment } from '../../navicat/connPlist'
 import {
@@ -17,6 +18,8 @@ import {
   normalizeColor,
   positiveInt,
   postgresFamily,
+  MONGO_CHOICE,
+  MONGO_URL_PASSWORD_WARNING,
   SQLITE_CHOICE,
   sqliteBlock,
   stripBom,
@@ -127,6 +130,7 @@ function engineFor(provider: string, driver: string): { choice: EngineChoice; la
     return { choice: mysqlFamily(maria), label: maria ? 'MariaDB' : 'MySQL' }
   if (isPostgres(p, d)) return { choice: postgresFamily(`${p} ${d}`), label: 'PostgreSQL' }
   if (p === 'sqlite' || d.includes('sqlite')) return { choice: SQLITE_CHOICE, label: 'SQLite' }
+  if (p.includes('mongo') || d.includes('mongo')) return { choice: MONGO_CHOICE, label: 'MongoDB' }
   const known = Object.keys(LABELS).find((k) => p.includes(k) || d.includes(k))
   const label = known ? LABELS[known] : driver || provider || 'Desconocido'
   return { choice: unsupported(label), label }
@@ -256,6 +260,11 @@ export function parseDbeaverDataSources(
       continue
     }
 
+    if (label === 'MongoDB') {
+      connections.push(dbeaverMongo(id, name, cfg, handlers, colors, platform, warnings, used))
+      continue
+    }
+
     const postgres = label === 'PostgreSQL'
     let host: string
     let port: number
@@ -304,4 +313,69 @@ export function parseDbeaverDataSources(
     })
   }
   return { connections, notes: [DBEAVER_PASSWORDS_NOTE] }
+}
+
+/**
+ * MongoDB (DBeaver editions that have it): host, port and database, or a
+ * mongodb:// / mongodb+srv:// URL whose options are read and whose password,
+ * if any, is not imported. Credentials stay in DBeaver's own store (never read).
+ */
+function dbeaverMongo(
+  id: string,
+  name: string,
+  cfg: Json,
+  handlers: Json,
+  colors: Map<string, string>,
+  platform: NodeJS.Platform,
+  warnings: string[],
+  used: Set<string>
+): ParsedConnection {
+  const url = str(cfg.url)
+  let host = str(cfg.host)
+  let port = positiveInt(cfg.port, 27017)
+  let database = str(cfg.database)
+  let username = str(cfg.user)
+  let mongo: ParsedConnection['mongo'] = { defaultDatabase: database }
+  let ssl: SslConfig = parseSsl(handlers, false, warnings)
+  if (/^mongodb(\+srv)?:\/\//i.test(url)) {
+    try {
+      const parsed = parseMongoUri(url)
+      host = host || parsed.host
+      port = parsed.port || port
+      username = username || parsed.username
+      database = database || parsed.mongo.defaultDatabase
+      mongo = { ...parsed.mongo, defaultDatabase: database }
+      if (parsed.ssl.enabled) ssl = { ...ssl, enabled: true, verifyServer: parsed.ssl.verifyServer }
+      if (parsed.password !== null) warnings.push(MONGO_URL_PASSWORD_WARNING)
+    } catch (err) {
+      warnings.push(`URL de MongoDB no válida: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  if (!mongo.authMechanism) mongo.authMechanism = username ? 'default' : 'none'
+  const ssh = parseSsh(handlers, warnings)
+  if (ssh.enabled) mongo.directConnection = true
+  checkForeignPaths(
+    [ssh.privateKeyPath, ssl.caCertPath, ssl.clientCertPath, ssl.clientKeyPath],
+    platform,
+    warnings
+  )
+  const type = str(cfg.type)
+  return {
+    key: uniqueKey(id, used),
+    name,
+    engine: 'mongodb',
+    engineLabel: 'MongoDB',
+    unsupportedReason: null,
+    host,
+    port,
+    username,
+    database: database || null,
+    color: normalizeColor(cfg.color) ?? colors.get(type) ?? null,
+    environment: environmentFor(type, name, host, ssh.enabled),
+    ssh,
+    ssl,
+    secrets: {},
+    warnings,
+    mongo
+  }
 }

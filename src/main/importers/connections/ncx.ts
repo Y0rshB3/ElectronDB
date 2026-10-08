@@ -20,12 +20,19 @@ import {
   normalizeColor,
   positiveInt,
   postgresFamily,
+  MONGO_CHOICE,
+  MONGO_RETRY_WRITES_WARNING,
   SQLITE_CHOICE,
+  mongoMechanismOf,
+  mongoProviderNeedsNoRetry,
+  mongoReadPreferenceOf,
+  mongoTopologyOf,
   sqliteBlock,
   uniqueKey,
   unsupported,
   type EngineChoice
 } from './util'
+import type { Element } from '@xmldom/xmldom'
 import { attributeMap, childElements, parseXml } from './xml'
 
 /**
@@ -96,6 +103,7 @@ function engineFor(connType: string, serviceProvider: string): EngineChoice {
   if (key === 'MARIADB') return mysqlFamily(true)
   if (key === 'POSTGRESQL') return postgresFamily(serviceProvider)
   if (key === 'SQLITE') return SQLITE_CHOICE
+  if (key === 'MONGODB') return MONGO_CHOICE
   return unsupported(navicatTypeLabel(connType))
 }
 
@@ -149,6 +157,10 @@ export function parseNcx(
         navicatType,
         sqlite: sqliteBlock(name, filePath, platform, fileExists, warnings)
       })
+      continue
+    }
+    if (choice.engine === 'mongodb') {
+      connections.push(parseNcxMongo(el, get, name, navicatType, ver, platform, warnings, used))
       continue
     }
     // PostgreSQL may list several hosts (failover): only the first one is used.
@@ -233,5 +245,141 @@ export function parseNcx(
   return {
     connections,
     notes: connections.length ? [withPassword ? NCX_PASSWORDS_NOTE : NCX_NO_PASSWORDS_NOTE] : []
+  }
+}
+
+/**
+ * MongoDB in an .ncx (docs/navicat-storage.md; attribute names from public
+ * parsers, read case-insensitively and never required). A replica set's seeds
+ * come from `<Member Host Port>` children (its `Host="localhost"` is a
+ * placeholder) and the database from `<Advance Database>`.
+ */
+function parseNcxMongo(
+  el: Element,
+  get: (name: string) => string | undefined,
+  name: string,
+  navicatType: string,
+  ver: string | undefined,
+  platform: NodeJS.Platform,
+  warnings: string[],
+  used: Set<string>
+): ParsedConnection {
+  const first = (...names: string[]): string | undefined => {
+    for (const n of names) {
+      const v = get(n)
+      if (v !== undefined && v.trim() !== '') return v.trim()
+    }
+    return undefined
+  }
+  const members = childElements(el, 'Member')
+    .map((m) => {
+      const a = attributeMap(m)
+      const host = (a.get('host') ?? '').trim()
+      return host ? { host, port: positiveInt(a.get('port'), 27017) } : null
+    })
+    .filter((m): m is { host: string; port: number } => !!m)
+  const advance = childElements(el, 'Advance')[0]
+  const advanceDb = advance ? (attributeMap(advance).get('database') ?? '').trim() : ''
+  const method = mongoTopologyOf(
+    first('ConnMethod', 'ConnectionMethod', 'MongoDBConnMethod'),
+    warnings
+  )
+  const srv = bool(first('UseSRVRecord', 'SRV', 'UseSRV')) || method?.srv === true
+  const topology = method?.topology ?? (members.length > 1 ? 'replicaSet' : 'standalone')
+  const auth = mongoMechanismOf(
+    first('AuthMechanism', 'AuthenticationMechanism', 'MongoDBAuthMechanism'),
+    warnings
+  )
+  const readPreference = mongoReadPreferenceOf(first('ReadPreference'), warnings)
+  const provider = (first('ServiceProvider') ?? '').trim()
+  const noRetry = mongoProviderNeedsNoRetry(provider)
+  if (noRetry) warnings.push(MONGO_RETRY_WRITES_WARNING(noRetry))
+  const tls = bool(get('SSL')) || srv || /atlas/i.test(provider)
+  const seedList = topology !== 'standalone' && !srv && members.length > 0
+  const host = seedList ? members[0].host : (first('Host') ?? '').trim()
+  const port = srv ? 0 : seedList ? members[0].port : positiveInt(get('Port'), 27017)
+
+  const sshAuthKey = (get('SSH_AuthenMethod') ?? '').trim().toUpperCase() === 'PUBLICKEY'
+  const ssh: SshConfig = bool(get('SSH'))
+    ? {
+        enabled: true,
+        host: (get('SSH_Host') ?? '').trim(),
+        port: positiveInt(get('SSH_Port'), 22),
+        username: (get('SSH_UserName') ?? '').trim(),
+        authType: sshAuthKey ? 'key' : 'password',
+        savePassword: false
+      }
+    : { ...NO_SSH }
+  const keyPath = path(get('SSH_PrivateKey'))
+  if (ssh.enabled && sshAuthKey && keyPath) ssh.privateKeyPath = keyPath
+  const ssl: SslConfig = { enabled: tls, verifyServer: tls }
+  const ca = path(get('SSL_CACert'))
+  const cert = path(get('SSL_ClientCert')) ?? path(get('SSL_PEMClientCert'))
+  const key = path(get('SSL_ClientKey'))
+  if (tls) {
+    if (ca) ssl.caCertPath = ca
+    if (cert) ssl.clientCertPath = cert
+    if (key) ssl.clientKeyPath = key
+    if (bool(get('SSL_AllowInvalidHostnames')) || bool(get('SSL_AllowInvalidCertificates')))
+      ssl.verifyServer = false
+  }
+  checkForeignPaths(
+    [
+      ssh.enabled ? ssh.privateKeyPath : undefined,
+      ssl.caCertPath,
+      ssl.clientCertPath,
+      ssl.clientKeyPath
+    ],
+    platform,
+    warnings
+  )
+  if (bool(get('HTTP'))) warnings.push(HTTP_TUNNEL_WARNING)
+
+  const username = (get('UserName') ?? '').trim()
+  const secrets: ConnectionSecrets = {}
+  const db = decodeNcxSecret(get('Password'), ver)
+  if (db !== null) secrets.mysql = db
+  const sshSecret = decodeNcxSecret(sshAuthKey ? get('SSH_Passphrase') : get('SSH_Password'), ver)
+  if (ssh.enabled && sshSecret !== null) {
+    secrets.ssh = sshSecret
+    ssh.savePassword = true
+  }
+  const sslKey = decodeNcxSecret(get('SSL_PEMClientKeyPassword'), ver)
+  if (ssl.enabled && sslKey !== null) secrets.sslKey = sslKey
+
+  const mechanism = auth.mechanism ?? (username ? 'default' : 'none')
+  const database = advanceDb || first('Database', 'DefaultDatabase') || ''
+  const retry = (v: string | undefined, fallback: boolean): boolean =>
+    v === undefined || v.trim() === '' ? fallback : bool(v)
+  return {
+    key: uniqueKey(`${navicatType}:${name}`, used),
+    name,
+    engine: 'mongodb',
+    engineLabel: navicatType,
+    unsupportedReason: auth.unsupported,
+    host,
+    port,
+    username,
+    database: database || null,
+    color: normalizeColor(get('Color') ?? get('ConnectionColor')),
+    environment: inferEnvironment(name, host, ssh.enabled),
+    ssh,
+    ssl,
+    secrets,
+    warnings,
+    navicatType,
+    mongo: {
+      topology,
+      srv,
+      members: seedList ? members : [],
+      replicaSet: (first('ReplicaSetName', 'ReplicaSet') ?? '').trim(),
+      authMechanism: mechanism,
+      authSource: first('AuthSource', 'AuthenticationDatabase', 'AuthDatabase') ?? 'admin',
+      defaultDatabase: database,
+      ...(readPreference ? { readPreference } : {}),
+      directConnection: ssh.enabled,
+      retryWrites: noRetry ? false : retry(get('RetryWrites'), true),
+      retryReads: retry(get('RetryReads'), true)
+    }
   }
 }

@@ -26,6 +26,9 @@ import {
   sqliteFileReviewWarning
 } from './types'
 import {
+  MONGO_KERBEROS_REASON,
+  MONGO_RETRY_WRITES_WARNING,
+  MONGO_URL_PASSWORD_WARNING,
   isForeignPath,
   multiHostWarning,
   normalizeColor,
@@ -121,6 +124,38 @@ describe('parseNcx', () => {
       unsupportedReason: 'Motor no soportado en esta versión: SQL Server',
       port: 1433
     })
+  })
+
+  it('maps MongoDB connections: seeds, SRV, mechanisms and providers', () => {
+    const file = parseNcx(fixture('ncx', 'connections-v1.5-mongo.ncx'), 'darwin')
+    const byName = new Map(file.connections.map((c) => [c.name, c]))
+    expect(byName.get('Mongo Local')).toMatchObject({
+      engine: 'mongodb',
+      navicatType: 'MongoDB',
+      host: '127.0.0.1',
+      port: 27017,
+      mongo: { topology: 'standalone', srv: false, authMechanism: 'none' }
+    })
+    const rs = byName.get('Mongo RS Staging')!
+    expect(rs).toMatchObject({ host: 'mongo1.example.test', port: 27017, database: 'shop' })
+    expect(rs.mongo).toMatchObject({
+      topology: 'replicaSet',
+      replicaSet: 'rs0',
+      members: [
+        { host: 'mongo1.example.test', port: 27017 },
+        { host: 'mongo2.example.test', port: 27018 }
+      ],
+      authMechanism: 'scram-sha-256',
+      readPreference: 'secondaryPreferred',
+      defaultDatabase: 'shop'
+    })
+    const atlas = byName.get('Atlas Prod')!
+    expect(atlas).toMatchObject({ port: 0, ssl: { enabled: true }, environment: 'production' })
+    expect(atlas.mongo).toMatchObject({ srv: true, authMechanism: 'default' })
+    const doc = byName.get('DocDB')!
+    expect(doc.mongo?.retryWrites).toBe(false)
+    expect(doc.warnings).toContain(MONGO_RETRY_WRITES_WARNING('Amazon DocumentDB'))
+    expect(byName.get('Kerberos Mongo')).toMatchObject({ unsupportedReason: MONGO_KERBEROS_REASON })
   })
 
   it('decodes AES passwords (Ver 1.5) into the right slots and says the file holds secrets', () => {
@@ -587,5 +622,46 @@ describe('SQLite entries', () => {
     expect(byName.get('Old')!.unsupportedReason).toBe(SQLITE_ENCRYPTED_REASON)
     expect(JSON.stringify(file)).not.toContain('enc-secret')
     expect(file.notes).toEqual([NCX_NO_PASSWORDS_NOTE])
+  })
+})
+
+describe('parseDbeaverDataSources: MongoDB', () => {
+  it('reads host, port and database, or the URL options without its password', () => {
+    const text = JSON.stringify({
+      connections: {
+        m1: {
+          provider: 'mongodb',
+          driver: 'mongodb',
+          name: 'Mongo dev',
+          configuration: { host: 'localhost', port: '27018', database: 'app', user: 'dev' }
+        },
+        m2: {
+          provider: 'mongodb',
+          driver: 'mongo',
+          name: 'Mongo URL',
+          configuration: {
+            url: 'mongodb://ana:p4ss-zz9@a.example.test:27017,b.example.test:27017/shop?replicaSet=rs1&readPreference=nearest'
+          }
+        }
+      }
+    })
+    const file = parseDbeaverDataSources(text, 'darwin')
+    const [dev, url] = file.connections
+    expect(dev).toMatchObject({
+      engine: 'mongodb',
+      host: 'localhost',
+      port: 27018,
+      username: 'dev',
+      mongo: { defaultDatabase: 'app', authMechanism: 'default' }
+    })
+    expect(url).toMatchObject({ engine: 'mongodb', host: 'a.example.test', username: 'ana' })
+    expect(url.mongo).toMatchObject({
+      topology: 'replicaSet',
+      replicaSet: 'rs1',
+      readPreference: 'nearest'
+    })
+    expect(url.secrets).toEqual({})
+    expect(url.warnings).toContain(MONGO_URL_PASSWORD_WARNING)
+    expect(JSON.stringify(url)).not.toContain('p4ss-zz9')
   })
 })

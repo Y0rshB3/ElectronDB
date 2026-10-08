@@ -534,4 +534,42 @@ describe('PostgreSQL connection import', () => {
       expect(result.created[0].sqlite!.pathNeedsReview).toBeUndefined()
     })
   })
+
+  it('imports .ncx MongoDB connections with previews on: options and password kept', async () => {
+    settings.update({ previewEngines: true })
+    const path = writeNcx(
+      `<Connection ConnectionName="Mongo RS" ConnType="MONGODB" Host="localhost" ConnMethod="ReplicaSet" ReplicaSetName="rs0" UserName="app" Password="${encryptNcxAes('mongo-pass')}"><Member Host="m1.example.test" Port="27017"/><Advance Database="shop"/></Connection>` +
+        '<Connection ConnectionName="Mongo Open" ConnType="MONGODB" Host="127.0.0.1"/>'
+    )
+    const result = await importConnectionFile(
+      ctx,
+      {
+        source: 'navicat-ncx',
+        path,
+        keys: ['MongoDB:Mongo RS', 'MongoDB:Mongo Open'],
+        existingMode: 'replace'
+      },
+      'darwin'
+    )
+    expect(result.warnings).toEqual([])
+    const byName = new Map(result.created.map((c) => [c.name, c]))
+    const rs = byName.get('Mongo RS')!
+    expect(rs).toMatchObject({
+      engine: 'mongodb',
+      authMode: 'password',
+      host: 'm1.example.test',
+      mongo: {
+        topology: 'replicaSet',
+        replicaSet: 'rs0',
+        defaultDatabase: 'shop',
+        retryWrites: true
+      }
+    })
+    expect(rs.network).toMatchObject({ connectTimeoutMs: 10000 })
+    expect(credentials.get('mysql', rs.id)).toBe('mongo-pass')
+    expect(byName.get('Mongo Open')).toMatchObject({
+      authMode: 'none',
+      mongo: { authMechanism: 'none' }
+    })
+  })
 })

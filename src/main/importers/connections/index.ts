@@ -10,7 +10,12 @@ import type {
   ImportSourceId
 } from '@shared/importers'
 import { engineAvailabilityError } from '@shared/connectionValidation'
-import { defaultSqliteOptions, engineOf } from '@shared/engines'
+import {
+  DEFAULT_NETWORK,
+  defaultMongoOptions,
+  defaultSqliteOptions,
+  engineOf
+} from '@shared/engines'
 import type { ConnectionConfig, ConnectionInput, EngineId, Environment } from '@shared/types'
 import type { AppContext } from '../../context'
 import type { ConnectionSecretKind } from '../../credentials/store'
@@ -211,6 +216,17 @@ function sqliteBlock(
   return { sqlite }
 }
 
+/** MongoDB block: the file's options over the defaults (and an earlier import's options). */
+function mongoBlock(
+  parsed: ParsedConnection,
+  existing: ConnectionConfig | null
+): Pick<ConnectionInput, 'mongo' | 'network'> {
+  return {
+    mongo: { ...defaultMongoOptions(), ...existing?.mongo, ...parsed.mongo },
+    network: { ...DEFAULT_NETWORK, ...existing?.network }
+  }
+}
+
 function toInput(
   parsed: ParsedConnection,
   source: ConnectionFileSource,
@@ -225,6 +241,7 @@ function toInput(
     engine,
     ...(engine === 'postgresql' ? postgresBlock(parsed, existing) : {}),
     ...(engine === 'sqlite' ? sqliteBlock(parsed, existing, environment) : {}),
+    ...(engine === 'mongodb' ? mongoBlock(parsed, existing) : {}),
     name: existing?.name ?? parsed.name,
     color: parsed.color ?? existing?.color ?? null,
     environment,
@@ -232,7 +249,12 @@ function toInput(
     port: parsed.port,
     username: parsed.username,
     // SQLite has no password: never ask for one.
-    authMode: engine === 'sqlite' ? 'none' : (existing?.authMode ?? 'password'),
+    authMode:
+      engine === 'sqlite' ||
+      (engine === 'mongodb' &&
+        (parsed.mongo?.authMechanism === 'none' || parsed.mongo?.authMechanism === 'x509'))
+        ? 'none'
+        : (existing?.authMode ?? 'password'),
     savePassword: parsed.secrets.mysql !== undefined || (existing?.savePassword ?? false),
     customDatabases: existing?.customDatabases ?? [],
     initialQueries: existing?.initialQueries ?? '',

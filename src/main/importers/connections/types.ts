@@ -1,6 +1,7 @@
 import type {
   EngineId,
   Environment,
+  MongoOptions,
   SqliteAttachedDatabase,
   SshConfig,
   SslConfig
@@ -42,6 +43,8 @@ export interface ParsedConnection {
    * cannot open until the user picks the file. The file is never opened or created.
    */
   sqlite?: { filePath: string; pathNeedsReview: boolean; attached: SqliteAttachedDatabase[] }
+  /** MongoDB: the options the source names (merged over the defaults on import). */
+  mongo?: Partial<MongoOptions>
 }
 
 /** Existence check for SQLite files named by an import (injected in tests). */

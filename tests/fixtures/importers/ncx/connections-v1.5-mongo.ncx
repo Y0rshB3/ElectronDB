@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Connections Ver="1.5">
+	<Connection ConnectionName="Mongo Local" ConnType="MONGODB" Host="127.0.0.1" Port="27017" />
+	<Connection ConnectionName="Mongo RS Staging" ConnType="MONGODB" Host="localhost" ConnMethod="Replica Set" ReplicaSetName="rs0" UserName="app" AuthSource="admin" AuthMechanism="SCRAM-SHA-256" ReadPreference="secondaryPreferred">
+		<Member Host="mongo1.example.test" Port="27017" />
+		<Member Host="mongo2.example.test" Port="27018" />
+		<Advance Database="shop" />
+	</Connection>
+	<Connection ConnectionName="Atlas Prod" ConnType="MONGODB" Host="cluster0.example.test" UseSRVRecord="true" ServiceProvider="MongoDBAtlas" UserName="ops" />
+	<Connection ConnectionName="DocDB" ConnType="MONGODB" Host="docdb.example.test" ServiceProvider="DocumentDB" UserName="ro" SSL="true" />
+	<Connection ConnectionName="Kerberos Mongo" ConnType="MONGODB" Host="krb.example.test" AuthMechanism="GSSAPI" UserName="svc" />
+</Connections>

@@ -1,6 +1,13 @@
 import { isAbsolutePathFor } from '@shared/connectionValidation'
 import { engineOf } from '@shared/engines'
-import type { EngineId, SslConfig, SslMode } from '@shared/types'
+import type {
+  EngineId,
+  MongoAuthMechanism,
+  MongoReadPreference,
+  MongoTopology,
+  SslConfig,
+  SslMode
+} from '@shared/types'
 import {
   FOREIGN_PATH_WARNING,
   MARIADB_AS_MYSQL_WARNING,
@@ -209,4 +216,93 @@ export function sqliteBlock(
   const pathNeedsReview = !path || !isAbsolutePathFor(path, platform) || !exists(path)
   if (pathNeedsReview) warnings.push(sqliteFileReviewWarning(name))
   return { filePath: path, pathNeedsReview, attached: [] }
+}
+
+/* ---------- MongoDB ---------- */
+
+export const MONGO_CHOICE: EngineChoice = {
+  engine: 'mongodb',
+  unsupportedReason: null,
+  warning: null
+}
+
+export const MONGO_RETRY_WRITES_WARNING = (provider: string): string =>
+  `${provider}: se desactivan las escrituras reintentables (retryWrites=false), que no admite`
+export const MONGO_KERBEROS_REASON =
+  'Autenticación Kerberos/GSSAPI, AWS u OIDC: no soportada en esta versión'
+export const MONGO_URL_PASSWORD_WARNING =
+  'La URL incluía una contraseña: no se importa; escríbela al editar la conexión'
+export const unknownMongoValueWarning = (what: string, raw: string): string =>
+  `${what} desconocido «${raw}»: se usa el predeterminado`
+
+const norm = (v: string | undefined): string =>
+  (v ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '')
+
+/** Topology from Navicat/DBeaver spellings («Replica Set», `REPLICASET`, `shardcluster`…). */
+export function mongoTopologyOf(
+  raw: string | undefined,
+  warnings: string[]
+): { topology: MongoTopology; srv: boolean } | null {
+  const v = norm(raw)
+  if (!v) return null
+  if (v === 'standalone' || v === 'direct' || v === 'single')
+    return { topology: 'standalone', srv: false }
+  if (v === 'replicaset' || v === 'replset') return { topology: 'replicaSet', srv: false }
+  if (v === 'shardcluster' || v === 'sharded' || v === 'shardedcluster' || v === 'mongos')
+    return { topology: 'shardCluster', srv: false }
+  if (v === 'srv' || v === 'srvrecord' || v === 'dnsseedlist')
+    return { topology: 'replicaSet', srv: true }
+  warnings.push(unknownMongoValueWarning('Método de conexión', raw ?? ''))
+  return null
+}
+
+/** Mechanism from `SCRAM-SHA-256`, `X509`, `LDAP`… ; GSSAPI/AWS/OIDC give the unsupported reason. */
+export function mongoMechanismOf(
+  raw: string | undefined,
+  warnings: string[]
+): { mechanism: MongoAuthMechanism | null; unsupported: string | null } {
+  const v = norm(raw)
+  if (!v) return { mechanism: null, unsupported: null }
+  if (v === 'scramsha256') return { mechanism: 'scram-sha-256', unsupported: null }
+  if (v === 'scramsha1') return { mechanism: 'scram-sha-1', unsupported: null }
+  if (v === 'scram' || v === 'default' || v === 'password')
+    return { mechanism: 'default', unsupported: null }
+  if (v === 'x509' || v === 'mongodbx509') return { mechanism: 'x509', unsupported: null }
+  if (v === 'plain' || v === 'ldap') return { mechanism: 'plain', unsupported: null }
+  if (v === 'none' || v === 'noauth') return { mechanism: 'none', unsupported: null }
+  if (/gssapi|kerberos|aws|oidc/.test(v))
+    return { mechanism: null, unsupported: MONGO_KERBEROS_REASON }
+  warnings.push(unknownMongoValueWarning('Mecanismo de autenticación', raw ?? ''))
+  return { mechanism: null, unsupported: null }
+}
+
+const READ_PREFS: MongoReadPreference[] = [
+  'primary',
+  'primaryPreferred',
+  'secondary',
+  'secondaryPreferred',
+  'nearest'
+]
+
+export function mongoReadPreferenceOf(
+  raw: string | undefined,
+  warnings: string[]
+): MongoReadPreference | null {
+  const v = norm(raw)
+  if (!v) return null
+  const hit = READ_PREFS.find((p) => p.toLowerCase() === v)
+  if (hit) return hit
+  warnings.push(unknownMongoValueWarning('Preferencia de lectura', raw ?? ''))
+  return null
+}
+
+/** Service providers that cannot use retryable writes. */
+export function mongoProviderNeedsNoRetry(provider: string): string | null {
+  const v = norm(provider)
+  if (v.includes('documentdb')) return 'Amazon DocumentDB'
+  if (v.includes('cosmos')) return 'Azure Cosmos DB'
+  return null
 }
