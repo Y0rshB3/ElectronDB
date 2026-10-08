@@ -361,7 +361,9 @@ además:
   base de datos con secuencias o tablas versionadas, la copia previa se guarda en `.vqb` aunque restaures un
   `.nb3`, para no perder nada. Solo el historial de las tablas versionadas **por transacción** (columnas de
   periodo con ids de transacción) no se puede llevar a otro servidor: la copia guarda sus filas actuales con un
-  aviso, y reemplazar una base de datos que las tenga con copia previa se rechaza.
+  aviso, y reemplazar una base de datos que las tenga con copia previa se rechaza. Una copia `.vqb` de MariaDB
+  con secuencias o tablas versionadas no se restaura en un servidor MySQL (se avisa antes de tocar nada), y el
+  historial de un `.sql` solo se importa en MariaDB 10.11 o posterior.
 
 **Tus conexiones MySQL a MariaDB** siguen funcionando: las importadas de una entrada MariaDB (Navicat `.ncx`
 o la sección MariaDB de su carpeta) pasan a ser MariaDB al arrancar, y una conexión MySQL cuyo servidor

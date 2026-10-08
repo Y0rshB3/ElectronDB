@@ -190,6 +190,43 @@ describeServer(MARIADB_TARGET, 'MariaDB sequences and versioned tables in backup
     expect(await count(`SELECT COUNT(*) AS n FROM \`${COPY}\`.pedidos`)).toBe(2)
   }, 60_000)
 
+  it('refuses to replace a MySQL database with a MariaDB copy it cannot hold', async (t) => {
+    const mysqlUrl = process.env.VORTAQ_TEST_MYSQL_URL
+    if (!mysqlUrl) return t.skip()
+    const m = new URL(mysqlUrl)
+    const mysqlId = ctx.connections.save({
+      ...connectionInput(m, dir),
+      name: 'MySQL destino',
+      engine: 'mysql'
+    }).id
+    ctx.credentials.set('mysql', mysqlId, decodeURIComponent(m.password))
+    const backup = await service.create({
+      connectionId: id,
+      schema: SCHEMA,
+      includeData: true,
+      format: 'vqb'
+    })
+    const target = `${SCHEMA}_en_mysql`
+    await expect(
+      service.replace({
+        backupPath: backup.path,
+        expectedSchema: SCHEMA,
+        connectionId: mysqlId,
+        targetSchema: target,
+        safetyBackup: true,
+        continueOnError: false
+      })
+    ).rejects.toThrow(/solo existen en MariaDB \(secuencias o tablas versionadas: seq_pedidos/)
+    const s = await manager.acquire(mysqlId)
+    try {
+      expect(
+        await s.query('SELECT 1 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [target])
+      ).toEqual([])
+    } finally {
+      await s.release()
+    }
+  }, 60_000)
+
   it('keeps an .nb3 to current rows and tells what it leaves out', async () => {
     const backup = await service.create({ connectionId: id, schema: SCHEMA, includeData: true })
     const meta = await readArchiveMeta(backup.path)

@@ -2279,6 +2279,11 @@ a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and need
   backup being restored (or Ajustes › Copias) is `.nb3`, so nothing is lost; the replace is refused only
   when a transaction-precise versioned table's history would be dropped. A MySQL server is never queried
   for it.
+- A MariaDB `.vqb` that holds sequences or versioned tables is refused (before any safety copy or DROP)
+  when the REPLACE target is a MySQL server (`mariaDbOnlyObjects`), since MySQL cannot create them;
+  a `.sql` export with history warns that importing it needs MariaDB 10.11+ (older servers refuse
+  INSERTs naming the period columns). Unverified: a history `.vqb` from MariaDB 11.5+ (current rows end
+  in 2106) restored into 10.11–11.4 (whose maximum is 2038) under the restore's non-strict sql_mode.
 - Completion lists sequence names on MariaDB connections; job steps on MariaDB (engine or server) split
   with the MariaDB splitter (`/*M!` as code), MySQL steps keep the line splitting.
 

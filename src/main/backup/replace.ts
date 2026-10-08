@@ -11,10 +11,10 @@ import { SAFETY_BACKUP_LABEL, isSystemSchema, systemSchemaRefusal } from '@share
 import type { BackupCreateResult, BackupMeta, ConnectionConfig, RestoreResult } from '@shared/types'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
-import { replaceSafetyPlan } from '../mysql/mariadb'
+import { isMariaDbSession, replaceSafetyPlan } from '../mysql/mariadb'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { BackupService, ProgressReporter } from './index'
-import { metaNeedsPassword, vqbCharset } from './archive'
+import { mariaDbOnlyObjects, metaNeedsPassword, vqbCharset } from './archive'
 import { backupFormatOfPath } from './naming'
 import { ENCRYPTED_MESSAGE, Nb3Reader } from './nb3/reader'
 import { PASSWORD_REQUIRED_MESSAGE } from './vqb/errors'
@@ -351,6 +351,15 @@ export async function replaceSchemaFromBackup(
       throw new Error(
         `${sentence(`No se pudo comprobar si «${target}» existe en «${connection.name}»: ${describeError(err)}`)} ${keep}`
       )
+    }
+    // A MariaDB copy with sequences or versioned tables cannot be created on MySQL: refuse
+    // before anything is copied or dropped (the server version is already known: no query).
+    if (!isMariaDbSession(session) && meta.format === 'vqb') {
+      const mariaOnly = await mariaDbOnlyObjects(request.backupPath, request.password)
+      if (mariaOnly.length)
+        throw new Error(
+          `${sentence(`La copia tiene objetos que solo existen en MariaDB (secuencias o tablas versionadas: ${mariaOnly.slice(0, 5).join(', ')}${mariaOnly.length > 5 ? '…' : ''}) y «${connection.name}» es un servidor MySQL; restáurala en una conexión MariaDB`)} ${keep}`
+        )
     }
     if (!existed) {
       say(`  «${target}» no existe en ${connection.name}: se creará`)

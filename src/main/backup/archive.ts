@@ -4,12 +4,7 @@ import { isEncrypted, type Nb3Manifest, type Nb3ObjectMeta } from './nb3/format'
 import { ENCRYPTED_MESSAGE, Nb3Reader, readManifest, verifyBackupFile } from './nb3/reader'
 import { NB3_TYPE_OF, VqbMysqlArchive } from './vqb/mysqlArchive'
 import { VqbReader, withVqbReader } from './vqb/reader'
-import type {
-  VqbHeader,
-  VqbManifest,
-  VqbSequenceState,
-  VqbSystemVersioning
-} from './vqb/format'
+import type { VqbHeader, VqbManifest, VqbSequenceState, VqbSystemVersioning } from './vqb/format'
 
 /**
  * Format-neutral access to restorable backups (.nb3 and .vqb): metadata for
@@ -78,6 +73,33 @@ export async function openMysqlRestoreArchive(
   const reader = await Nb3Reader.open(path)
   if (isEncrypted(await reader.manifest())) throw new Error(ENCRYPTED_MESSAGE)
   return new Nb3Archive(reader)
+}
+
+/**
+ * Objects of a MySQL-family .vqb that only MariaDB can create: sequences and
+ * system-versioned tables (names only). Empty for an .nb3 or a MySQL copy.
+ */
+export async function mariaDbOnlyObjects(
+  path: string,
+  password?: string | null
+): Promise<string[]> {
+  if (formatOrThrow(path) !== 'vqb') return []
+  const archive = await VqbMysqlArchive.open(path, password)
+  try {
+    const out: string[] = []
+    for (const o of (await archive.manifest()).Objects) {
+      const type = o.Type.toLowerCase()
+      if (type === 'sequence') out.push(o.Name)
+      else if (type === 'table') {
+        const meta = await archive.objectMeta(o.UUID)
+        if (archive.versioning(meta) || /\bWITH\s+SYSTEM\s+VERSIONING\b/i.test(meta.DDL))
+          out.push(o.Name)
+      }
+    }
+    return out
+  } finally {
+    await archive.close()
+  }
 }
 
 /* ---------- metadata ---------- */

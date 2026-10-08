@@ -389,12 +389,16 @@ export async function duplicateCollection(
   }
   const result: DuplicateCollectionResult = { documents: 0, indexes: 0, warnings: [] }
   if (original.type === 'view') return result
+  const partial = (err: unknown): MongoUserError =>
+    new MongoUserError(
+      `La copia «${name}» quedó a medias (${result.documents} documentos copiados): ${conn.errorOf(err).message} Elimínala o vuelve a duplicar con otro nombre.`
+    )
 
   let specs: Document[] = []
   try {
     specs = await conn.rawColl(database, source).listIndexes().toArray()
   } catch (err) {
-    throw conn.errorOf(err)
+    throw partial(err)
   }
   for (const spec of specs) {
     // _id_ and clustered indexes come with the collection itself.
@@ -435,9 +439,7 @@ export async function duplicateCollection(
     }
     await flush()
   } catch (err) {
-    throw new MongoUserError(
-      `La copia «${name}» quedó a medias (${result.documents} documentos copiados): ${conn.errorOf(err).message} Elimínala o vuelve a duplicar con otro nombre.`
-    )
+    throw partial(err)
   }
   return result
 }

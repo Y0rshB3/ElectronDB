@@ -559,6 +559,15 @@ export async function exportSchemaToSql(
       )
     }
 
+    const versioned = ordered.filter((o) => o.versioned).map((o) => o.name)
+    if (versioned.length && options.includeData)
+      progress({
+        phase: 'warning',
+        current: 0,
+        total: ordered.length,
+        message: `La copia .sql incluye el historial de ${versioned.join(', ')} (tablas versionadas de MariaDB): para importarlo hace falta MariaDB 10.11 o posterior.`,
+        done: false
+      })
     const total = ordered.length
     const weights = ordered.map((o) =>
       objectWeight(o.rowsEstimate, options.includeData && o.type === 'Table')
@@ -747,9 +756,10 @@ async function exportTable(
       (c) => !GENERATED_RE.test(c.extra)
     )
     // MariaDB system-versioned table: every row version with its period columns,
-    // inserted with system_versioning_insert_history (MariaDB 10.11+, `/*!101100` so MySQL
-    // and older MariaDB skip it; like
-    // mariadb-dump --dump-history). Transaction-precise versioning: current rows only.
+    // inserted with system_versioning_insert_history (MariaDB 10.11+, like
+    // mariadb-dump --dump-history). Older MariaDB skips the `/*!101100` SET but then refuses
+    // the INSERTs naming the period columns, so the export warns. Transaction-precise
+    // versioning: current rows only.
     const period = versioned && !isTrxIdVersionedDdl(ddl) ? systemVersioningColumns(ddl) : null
     if (period && columns.length > 0)
       columns.push(
@@ -763,7 +773,8 @@ async function exportTable(
       await writer.write(
         heading(`Datos de la tabla ${id(table)}`) +
           (period
-            ? '/*!101100 SET @OLD_INSERT_HISTORY=@@SESSION.system_versioning_insert_history, @@SESSION.system_versioning_insert_history=1 */;\n'
+            ? '-- Historial de la tabla versionada: importarlo requiere MariaDB 10.11 o posterior.\n' +
+              '/*!101100 SET @OLD_INSERT_HISTORY=@@SESSION.system_versioning_insert_history, @@SESSION.system_versioning_insert_history=1 */;\n'
             : '') +
           `/*!40000 ALTER TABLE ${id(table)} DISABLE KEYS */;\n`
       )

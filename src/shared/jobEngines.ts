@@ -90,7 +90,9 @@ export function jobStepEngineProblem(
     return `El ${label} es una consulta sobre «${connection.name}» (${FAMILY_NAME[family]}): los pasos de consulta solo están disponibles en conexiones MySQL y MariaDB.`
   if (task.type === 'backupschema' && !jobBackupFormats(connection).includes(task.format ?? 'nb3'))
     return `El ${label} copia «${connection.name}» (${FAMILY_NAME[family]}): sus copias solo pueden ser .vqb.`
-  if (task.type === 'restoreschema') {
+  // A file of «Restaurar todo» was checked against its own manifest by the plan: the
+  // connection owning its folder may be of another engine.
+  if (task.type === 'restoreschema' && task.restoreSource?.kind !== 'file') {
     const sourceId = restoreSourceConnection(task, tasks)
     const source = sourceId ? lookup(sourceId) : null
     if (source) {
