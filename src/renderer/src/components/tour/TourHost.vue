@@ -279,10 +279,10 @@ const cardStyle = computed(() => ({
           </div>
           <div class="tour__actions">
             <v-btn
+              v-if="!tour.isFirst"
               variant="text"
               size="small"
               prepend-icon="mdi-arrow-left"
-              v-if="!tour.isFirst"
               data-test="tour-prev"
               @click="tour.prev()"
               >Atrás</v-btn
@@ -301,10 +301,10 @@ const cardStyle = computed(() => ({
         </template>
         <div v-else class="tour__actions">
           <v-btn
+            v-if="!tour.isFirst"
             variant="text"
             size="small"
             prepend-icon="mdi-arrow-left"
-            v-if="!tour.isFirst"
             data-test="tour-prev"
             @click="tour.prev()"
             >Atrás</v-btn
