@@ -26,8 +26,8 @@ export interface SchemaProvider {
   /** Database selected in the query tab (unqualified names resolve against it). */
   defaultSchema(): string | null
   databases(): Promise<string[]>
-  /** Tables and views of one database. */
-  tables(schema: string): Promise<{ name: string; kind: 'table' | 'view' }[]>
+  /** Tables and views of one database (and MariaDB sequences). */
+  tables(schema: string): Promise<{ name: string; kind: 'table' | 'view' | 'sequence' }[]>
   columns(schema: string, table: string): Promise<{ name: string; type: string }[]>
 }
 
@@ -282,8 +282,10 @@ function columnOptions(
   }))
 }
 
+const TABLE_KIND_LABEL = { table: 'tabla', view: 'vista', sequence: 'secuencia' } as const
+
 function tableOptions(
-  tables: { name: string; kind: 'table' | 'view' }[],
+  tables: { name: string; kind: 'table' | 'view' | 'sequence' }[],
   schema: string,
   boost: number,
   quoted: boolean
@@ -291,8 +293,8 @@ function tableOptions(
   return tables.map((t) => ({
     label: quoteIfNeeded(t.name, quoted),
     displayLabel: t.name,
-    type: t.kind === 'view' ? 'type' : 'class',
-    detail: `${t.kind === 'view' ? 'vista' : 'tabla'} · ${schema}`,
+    type: t.kind === 'view' ? 'type' : t.kind === 'sequence' ? 'constant' : 'class',
+    detail: `${TABLE_KIND_LABEL[t.kind]} · ${schema}`,
     boost,
     apply: applyWhole(quoted)
   }))

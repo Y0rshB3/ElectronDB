@@ -104,13 +104,19 @@ function makeProvider(): SchemaProvider & { clear(): void } {
         : [],
     tables: async (s) => {
       if (!connectionId.value) return []
-      const [tables, views] = await Promise.all([
+      // MariaDB connections also offer their sequences (NEXTVAL(seq), SELECT … FROM seq).
+      const sequences = connections.get(connectionId.value)?.engine === 'mariadb'
+      const [tables, views, seqs] = await Promise.all([
         invokeSilent('db:tables', connectionId.value, s),
-        invokeSilent('db:views', connectionId.value, s).catch(() => [])
+        invokeSilent('db:views', connectionId.value, s).catch(() => []),
+        sequences
+          ? invokeSilent('db:objects', connectionId.value, s, 'sequence').catch(() => [])
+          : Promise.resolve([])
       ])
       return [
         ...tables.map((t) => ({ name: t.name, kind: 'table' as const })),
-        ...views.map((v) => ({ name: v.name, kind: 'view' as const }))
+        ...views.map((v) => ({ name: v.name, kind: 'view' as const })),
+        ...seqs.map((q) => ({ name: q.name, kind: 'sequence' as const }))
       ]
     },
     columns: async (s, t) =>

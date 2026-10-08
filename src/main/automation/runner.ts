@@ -51,6 +51,8 @@ import { findLatestJobBackup } from './latestBackup'
 import { RunLog } from './runLog'
 import { MISSING_JOB_PASSWORD, jobBackupPassword } from './backupKeys'
 import { pickBackupPassword } from '../backup/passwords'
+import { mariadbDialect } from '@shared/dialects/mariadb'
+import { isMariaDbSession } from '../mysql/mariadb'
 
 /** Collaborators the runner needs; resolved lazily by the automation service. */
 export interface RunnerDeps {
@@ -116,6 +118,17 @@ export function splitStatements(sql: string): string[] {
   return sql
     .split(/;[ \t]*(?:\r?\n|$)/)
     .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !isOnlyComments(s))
+}
+
+/**
+ * Statements of a MariaDB step: split like the query tab of a MariaDB
+ * connection (MariaDB executable comments are code; quotes, comments and DELIMITER are respected).
+ */
+export function splitMariaDbStatements(sql: string): string[] {
+  return mariadbDialect
+    .splitStatements(sql)
+    .map((s) => s.sql.trim())
     .filter((s) => s.length > 0 && !isOnlyComments(s))
 }
 
@@ -650,12 +663,19 @@ class RunExecution {
 
   private async runQuery(task: JobTask, index: number): Promise<number> {
     requireConnectionName(this.ctx, task)
-    const statements = splitStatements(task.sql ?? '')
+    let statements = splitStatements(task.sql ?? '')
     if (statements.length === 0) {
       throw new Error(`El paso "${task.referenceName}" no contiene ninguna sentencia SQL.`)
     }
     const session = await this.deps.sessions.acquire(task.connectionId, task.schema || null)
     try {
+      // MariaDB (engine or server): the same splitting as its query tab. MySQL keeps
+      // the line-based splitting jobs always had.
+      if (
+        this.ctx.connections.get(task.connectionId)?.engine === 'mariadb' ||
+        isMariaDbSession(session)
+      )
+        statements = splitMariaDbStatements(task.sql ?? '')
       let executed = 0
       for (const statement of statements) {
         if (this.aborted) throw new Error(CANCELLED_MESSAGE)

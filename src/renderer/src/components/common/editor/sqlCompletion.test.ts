@@ -62,6 +62,17 @@ describe('schemaCompletionSource', () => {
     expect(r?.from).toBe('SELECT * FROM '.length)
   })
 
+  it('offers MariaDB sequences next to tables, marked as such', async () => {
+    const p = provider()
+    p.tables = vi.fn(async () => [
+      { name: 'users', kind: 'table' as const },
+      { name: 'seq_users', kind: 'sequence' as const }
+    ])
+    const r = await complete('SELECT NEXTVAL(seq|', p)
+    const option = r?.options.find((o) => o.displayLabel === 'seq_users')
+    expect(option?.detail).toBe('secuencia · accounts')
+  })
+
   it('lists the tables of a database after "db."', async () => {
     const r = await complete('SELECT * FROM billing.|')
     expect(labels(r)).toEqual(['account', 'order items'])

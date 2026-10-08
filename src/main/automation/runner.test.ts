@@ -3,7 +3,14 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { JobLogEvent, JobRun, ProgressEvent } from '@shared/types'
 import { RunsRepo } from '../storage/repos'
-import { jobNameSlug, runJob, splitStatements, startJob, type RunnerDeps } from './runner'
+import {
+  jobNameSlug,
+  runJob,
+  splitMariaDbStatements,
+  splitStatements,
+  startJob,
+  type RunnerDeps
+} from './runner'
 import {
   backupTask,
   connectionInput,
@@ -388,6 +395,18 @@ describe('helpers', () => {
       "update t set s = 'x;y' where id = 1"
     ])
     expect(splitStatements('   ')).toEqual([])
+  })
+
+  it('splitMariaDbStatements keeps /*M! comments whole, like the MariaDB query tab', () => {
+    const script =
+      "/*M!100100 SELECT 'a;\nb' */;\n/*M!100500 CREATE SEQUENCE s;\n */;\nINSERT INTO t VALUES ('x;\ny');\n-- fin;"
+    expect(splitMariaDbStatements(script)).toEqual([
+      "/*M!100100 SELECT 'a;\nb' */",
+      '/*M!100500 CREATE SEQUENCE s;\n */',
+      "INSERT INTO t VALUES ('x;\ny')"
+    ])
+    // The line-based MySQL splitting would have cut inside the comment and the string.
+    expect(splitStatements(script).length).toBeGreaterThan(3)
   })
 
   it('jobNameSlug produces a file-safe label', () => {
