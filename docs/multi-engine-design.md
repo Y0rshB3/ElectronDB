@@ -2069,10 +2069,15 @@ What shipped, and where it differs from the text above (each point is deliberate
   alias (stored SQL never names its database).
 - **Read-only.** «Reabrir en modo escritura» is `sqlite:reopenWritable` (session only, typed confirmation
   on guarded connections).
-- **Not done in P3:** the preview flag stays on (the user decides when to switch it off); the packaged
-  smoke ran on macOS only (Windows and Linux builds were produced and checked for the worker and for
-  having no native SQLite module, but not run); SQLite recent files and drag-and-drop remain named for
-  later; automation jobs for SQLite backups are off.
+- **Packaged smoke (15.4).** The smoke run (`VORTAQ_SMOKE=1`) includes the SQLite check (create a
+  file, open it in the utility process, run a script, cancel a runaway CTE, read again). It passed on
+  the packaged macOS arm64 app (cancel 62 ms) and on the packaged Linux x64 app under xvfb in a
+  Debian 12 container (amd64 emulated, cancel 592 ms): `utilityProcess.fork` starts the worker from
+  inside `app.asar`, so no `asarUnpack` is needed. The Windows build was produced and checked
+  (worker in app.asar, no native modules) but not run.
+- **Not done in P3:** the preview flag stays on (the user decides when to switch it off); the Windows
+  packaged smoke; SQLite recent files and drag-and-drop remain named for later; automation jobs for
+  SQLite backups are off.
 - `package.json` `engines.node` is `>=24` (tests use `columns()` and `setReturnArrays`).
 
 ### P4a. MongoDB: connect, browse, edit, read queries

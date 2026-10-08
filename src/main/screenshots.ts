@@ -1368,7 +1368,7 @@ const SQLITE_STEPS: Step[] = [
       const sql = [
         "BEGIN;",
         "UPDATE pedidos SET estado = 'pagado' WHERE id = 2;",
-        "SELECT rowid, id, cliente_id, estado, total FROM pedidos ORDER BY id;"
+        "SELECT id, cliente_id, estado, total FROM pedidos ORDER BY id;"
       ].join('\\n')
       S.workspace.openQuery('${LITE_ID}', 'main', { sql, name: 'Cobrar pedido' })
       await H.sleep(1200)
