@@ -11,6 +11,7 @@ import { tabKeymap } from './editor/tabKeymap'
 import type { EngineId } from '@shared/types'
 import { engineUi } from '@renderer/engines'
 import { schemaCompletionSource, type SchemaProvider } from './editor/sqlCompletion'
+import { vortaqSQLite } from './editor/sqliteCompletion'
 
 const props = defineProps<{
   /** Table names (optionally with column names) used for autocompletion. */
@@ -42,8 +43,10 @@ let view: EditorView | null = null
 const langCompartment = new Compartment()
 const readonlyCompartment = new Compartment()
 
-/** The engine's CodeMirror dialect (MySQL: vortaqMySQL); plain SQL for an engine without a UI. */
+/** The engine's CodeMirror dialect (MySQL: vortaqMySQL, SQLite: vortaqSQLite); plain SQL for an engine without a UI. */
 function editorDialect(): SQLDialect {
+  // SQLite: `"x"`, `[x]` and backticks are identifiers (same module as its completion source).
+  if (props.engine === 'sqlite') return vortaqSQLite
   try {
     return engineUi(props.engine).editorLanguage
   } catch {

@@ -12,6 +12,7 @@ import type {
   RollbackRequest,
   RowChange,
   SchemaRef,
+  SqliteMaintenanceAction,
   TableDataRequest,
   TableFilter,
   WriteOptions
@@ -99,6 +100,11 @@ export const api = {
     pickDirectory: (title: string) => invoke('app:pickDirectory', title),
     pickFile: (title: string, filters?: { name: string; extensions: string[] }[]) =>
       invoke('app:pickFile', title, filters),
+    pickSaveFile: (
+      title: string,
+      defaultName: string,
+      filters?: { name: string; extensions: string[] }[]
+    ) => invoke('app:pickSaveFile', title, defaultName, filters),
     startupNotices: () => invokeSilent('app:startupNotices'),
     dismissStartupNotice: (id: string) => invokeSilent('app:dismissStartupNotice', id),
     /** Only GitHub release pages/downloads of Vortaq (main rejects anything else). */
@@ -216,6 +222,16 @@ export const api = {
     dropDatabase: (c: string, name: string, options?: WriteOptions) =>
       invoke('db:dropDatabase', c, name, options),
     charsets: (c: string) => invoke('db:charsets', c)
+  },
+  /** SQLite files (P3): new file, reopen read-write, VACUUM INTO copy, maintenance. */
+  sqlite: {
+    createFile: (filePath: string) => invoke('sqlite:createFile', filePath),
+    reopenWritable: (connectionId: string, options?: WriteOptions) =>
+      invoke('sqlite:reopenWritable', connectionId, options),
+    copyFile: (connectionId: string, targetPath: string) =>
+      invoke('sqlite:copyFile', connectionId, targetPath),
+    maintenance: (connectionId: string, action: SqliteMaintenanceAction, options?: WriteOptions) =>
+      invoke('sqlite:maintenance', connectionId, action, options)
   },
   backups: {
     list: (c: string, schema?: string | null) => invokeSilent('backups:list', c, schema),

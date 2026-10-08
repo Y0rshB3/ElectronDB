@@ -16,7 +16,7 @@ import { userActionSql } from '@renderer/components/data/userSql'
 import { buildCreateTable, draftFromStructure, emptyTable } from '@renderer/utils/tableDesigner'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { installBridge, makeConnection, makeServerInfo } from '@renderer/__tests__/shellTestUtils'
-import { engineUi, mysqlUi, postgresqlUi, useEngine, useEngineUi } from './index'
+import { engineUi, mysqlUi, postgresqlUi, sqliteUi, useEngine, useEngineUi } from './index'
 
 describe('engine UI registry', () => {
   it('the MySQL module wraps today’s functions themselves (no copies)', () => {
@@ -50,8 +50,15 @@ describe('engine UI registry', () => {
     expect(ui.userSql).toBeNull()
   })
 
+  it('registers the SQLite module (preview) with its own dialect and no users view', () => {
+    const ui = engineUi('sqlite')
+    expect(ui).toBe(sqliteUi)
+    expect(ui.dialect?.id).toBe('sqlite')
+    expect(ui.userSql).toBeNull()
+  })
+
   it('refuses engines without a renderer module in this build', () => {
-    for (const id of ['mariadb', 'sqlite', 'mongodb'] as const)
+    for (const id of ['mariadb', 'mongodb'] as const)
       expect(() => engineUi(id)).toThrow(
         `${ENGINES[id].label} todavía no está disponible en esta versión de Vortaq.`
       )
@@ -65,7 +72,8 @@ describe('useEngine', () => {
       'connections:list': [
         makeConnection({ id: 'my' }),
         makeConnection({ id: 'pg', engine: 'postgresql' }),
-        makeConnection({ id: 'lite', engine: 'sqlite' })
+        makeConnection({ id: 'lite', engine: 'sqlite' }),
+        makeConnection({ id: 'mongo', engine: 'mongodb' })
       ],
       'connections:open': () =>
         makeServerInfo({
@@ -90,6 +98,9 @@ describe('useEngine', () => {
     expect(engine.value.ui).toBe(postgresqlUi)
 
     id.value = 'lite'
+    expect(engine.value.ui).toBe(sqliteUi)
+
+    id.value = 'mongo'
     expect(engine.value.ui).toBeNull()
 
     id.value = null
@@ -99,8 +110,9 @@ describe('useEngine', () => {
   it('useEngineUi throws the "not available" message for an engine without a module', () => {
     expect(useEngineUi('my').value).toBe(mysqlUi)
     expect(useEngineUi('pg').value).toBe(postgresqlUi)
-    expect(() => useEngineUi('lite').value).toThrow(
-      'SQLite todavía no está disponible en esta versión de Vortaq.'
+    expect(useEngineUi('lite').value).toBe(sqliteUi)
+    expect(() => useEngineUi('mongo').value).toThrow(
+      'MongoDB todavía no está disponible en esta versión de Vortaq.'
     )
   })
 })
