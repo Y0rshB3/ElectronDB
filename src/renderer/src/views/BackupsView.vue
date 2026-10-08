@@ -453,36 +453,37 @@ watch(connectionId, () => {
       >
         Eliminar
       </v-btn>
-      <v-spacer />
-      <v-select
-        v-model="schemaFilter"
-        :items="schemaOptions"
-        label="Esquema"
-        clearable
-        hide-details
-        density="compact"
-        class="backups-view__filter"
-        placeholder="Todos"
-      />
-      <v-text-field
-        v-model="search"
-        prepend-inner-icon="mdi-magnify"
-        placeholder="Buscar"
-        hide-details
-        density="compact"
-        class="backups-view__filter"
-        aria-label="Buscar copias"
-      />
-      <v-btn
-        icon="mdi-refresh"
-        size="small"
-        variant="text"
-        :loading="loading"
-        aria-label="Actualizar"
-        title="Actualizar"
-        data-test="backups-refresh"
-        @click="reload"
-      />
+      <div class="backups-view__filters">
+        <v-select
+          v-model="schemaFilter"
+          :items="schemaOptions"
+          label="Esquema"
+          clearable
+          hide-details
+          density="compact"
+          class="backups-view__filter"
+          placeholder="Todos"
+        />
+        <v-text-field
+          v-model="search"
+          prepend-inner-icon="mdi-magnify"
+          placeholder="Buscar"
+          hide-details
+          density="compact"
+          class="backups-view__filter"
+          aria-label="Buscar copias"
+        />
+        <v-btn
+          icon="mdi-refresh"
+          size="small"
+          variant="text"
+          :loading="loading"
+          aria-label="Actualizar"
+          title="Actualizar"
+          data-test="backups-refresh"
+          @click="reload"
+        />
+      </div>
     </v-toolbar>
 
     <v-alert
@@ -492,8 +493,9 @@ watch(connectionId, () => {
       class="backups-view__notice"
       closable
     >
-      <strong>Restaurar todo en Local:</strong> 1) «Nueva copia» crea una copia de «{{ connection.name }}»;
-      2) selecciónala y pulsa «Restaurar en Local» para cargarla en
+      <strong>Restaurar todo en Local:</strong> 1) «Nueva copia» crea una copia de «{{
+        connection.name
+      }}»; 2) selecciónala y pulsa «Restaurar en Local» para cargarla en
       {{ localConnection?.name ?? 'tu conexión Local' }}. Para un lote entero (todas las copias de
       una automatización), pulsa la cabecera del paquete y «Restaurar paquete en Local».
     </v-alert>
@@ -827,11 +829,23 @@ watch(connectionId, () => {
   flex: 0 0 auto;
   padding: 0 12px;
   border-bottom: 1px solid var(--nd-border);
-  overflow-x: auto;
 }
+/* When the actions do not fit (narrow window, side panels open) the filters
+   wrap onto a second row instead of being clipped at the right edge. */
 .nd-viewbar :deep(.v-toolbar__content) {
   gap: 2px;
-  height: 46px !important;
+  flex-wrap: wrap;
+  height: auto !important;
+  min-height: 46px;
+  padding: 4px 0;
+  row-gap: 4px;
+}
+.backups-view__filters {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
 }
 .nd-viewbar :deep(.v-toolbar__content > .v-btn) {
   flex: none;
@@ -851,7 +865,7 @@ watch(connectionId, () => {
 }
 .backups-view__filter {
   flex: 0 1 160px;
-  min-width: 96px;
+  min-width: 120px;
   margin-left: 4px;
 }
 .backups-view__filter :deep(.v-field__input) {
