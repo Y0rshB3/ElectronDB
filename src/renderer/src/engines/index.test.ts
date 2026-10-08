@@ -58,10 +58,17 @@ describe('engine UI registry', () => {
   })
 
   it('refuses engines without a renderer module in this build', () => {
-    for (const id of ['mariadb', 'mongodb'] as const)
-      expect(() => engineUi(id)).toThrow(
-        `${ENGINES[id].label} todavía no está disponible en esta versión de Vortaq.`
-      )
+    expect(() => engineUi('mongodb')).toThrow(
+      `${ENGINES.mongodb.label} todavía no está disponible en esta versión de Vortaq.`
+    )
+  })
+
+  it('serves MariaDB with its own dialect, editor language and designer (P5)', () => {
+    const ui = engineUi('mariadb')
+    expect(ui.dialect?.id).toBe('mariadb')
+    expect(ui.typeCatalog?.columnTypes).toEqual(expect.arrayContaining(['uuid', 'inet4', 'inet6']))
+    expect(ui.userSql?.actionSql).toBe(engineUi('mysql').userSql?.actionSql)
+    expect(ui.ddl?.template).toBe(engineUi('mysql').ddl?.template)
   })
 })
 

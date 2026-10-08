@@ -1,5 +1,7 @@
 import type { SchemaRef } from '@shared/types'
 import { engineOf } from '@shared/engines'
+import { mariadbDialect } from '@shared/dialects/mariadb'
+import { mysqlDialect } from '@shared/dialects/mysql'
 import type { AppContext } from '../context'
 import { CAPABILITY_MESSAGES, DbUserError, requireConnectionCapability } from '../db/errors'
 import { getConnectionManager } from '../db/manager'
@@ -31,7 +33,7 @@ function mysqlSchema(ref: SchemaRef): string {
   throw new DbUserError('Las conexiones MySQL usan el nombre de la base de datos como esquema')
 }
 
-const CHANNEL_NOT_FOR_MYSQL = 'Esta operación no existe en las conexiones MySQL.'
+const CHANNEL_NOT_FOR_MYSQL = 'Esta operación no existe en las conexiones MySQL ni MariaDB.'
 
 /** Registers every mongo:* handler of the map (each keeps its channel's types). */
 function registerChannels(channels: MongoChannelHandlers): void {
@@ -53,12 +55,22 @@ export function registerDbHandlers(ctx: AppContext): void {
   const isLite = (id: string): boolean => ctx.connections.get(id)?.engine === 'sqlite'
   /** True for MongoDB connections: their shared db:* calls go to mongo.ts, the rest are refused. */
   const isMongo = (id: string): boolean => ctx.connections.get(id)?.engine === 'mongodb'
+  /** Splitter of a MySQL-family connection: MariaDB's also runs `/*M!` statements. */
+  const mysqlFamilyDialect = (id: string) =>
+    ctx.connections.get(id)?.engine === 'mariadb' ? mariadbDialect : mysqlDialect
   const refuseOnLite = (id: string): void => {
     if (isLite(id)) throw new DbUserError(SQLITE_REFUSED.notAvailable, 'E_CAPABILITY')
     refuseOnMongo(id)
   }
   const refuseOnMongo = (id: string): void => {
     if (isMongo(id)) throw new DbUserError(MONGO_REFUSED.notAvailable, 'E_CAPABILITY')
+  }
+
+  /** MySQL-family sequences: MariaDB connections only (main mirrors the tree). */
+  const requireSequences = (id: string): void => {
+    const connection = ctx.connections.get(id)
+    if (connection)
+      requireConnectionCapability(connection, 'sequences', CAPABILITY_MESSAGES.sequences)
   }
 
   /** Runs `fn` on a short-lived dedicated session, always releasing it. */
@@ -154,6 +166,13 @@ export function registerDbHandlers(ctx: AppContext): void {
   dbHandle('db:showCreate', (id, schema, type, name) => {
     if (isPg(id)) return pg.showCreate(id, schema, type, name)
     if (isLite(id)) return lite.showCreate(id, schema, type, name)
+    if (type === 'sequence') {
+      requireSequences(id)
+      const sequence = typeof name === 'string' ? name : name.name
+      return withSession(id, null, (s) =>
+        introspect.showCreateSequence(s, mysqlSchema(schema), sequence)
+      )
+    }
     return withSession(id, null, (s) =>
       introspect.showCreate(
         s,
@@ -171,8 +190,11 @@ export function registerDbHandlers(ctx: AppContext): void {
   dbHandle('db:objects', (id, schema, type) => {
     if (isMongo(id)) return mongo.objects(id, schema, type)
     if (isLite(id)) return lite.objects(id, schema, type)
-    if (!isPg(id)) throw new DbUserError(CHANNEL_NOT_FOR_MYSQL)
-    return pg.objects(id, schema, type)
+    if (isPg(id)) return pg.objects(id, schema, type)
+    // MariaDB: sequences (the only group without its own channel).
+    if (type !== 'sequence') throw new DbUserError(CHANNEL_NOT_FOR_MYSQL)
+    requireSequences(id)
+    return withSession(id, null, (s) => introspect.listSequences(s, mysqlSchema(schema)))
   })
   dbHandle('db:extensions', (id, database) => {
     refuseOnLite(id)
@@ -223,7 +245,13 @@ export function registerDbHandlers(ctx: AppContext): void {
         ? (options ?? {})
         : { ...options, schema: mysqlSchema(schema) }
     return withSession(id, null, (s) =>
-      executeScript(s, sql, mysqlOptions, ctx.settings.get().defaultRowLimit)
+      executeScript(
+        s,
+        sql,
+        mysqlOptions,
+        ctx.settings.get().defaultRowLimit,
+        mysqlFamilyDialect(id)
+      )
     )
   })
   dbHandle('db:cancel', (id, executionId) =>
@@ -283,6 +311,12 @@ export function registerDbHandlers(ctx: AppContext): void {
     if (isLite(id)) return lite.dropObject(id, schema, type, name, options)
     const objectName = typeof name === 'string' ? name : name.name
     assertProductionWriteConfirmed(ctx, id, options, `Eliminar ${objectName}`)
+    if (type === 'sequence') {
+      requireSequences(id)
+      return withSession(id, null, (s) =>
+        introspect.dropSequence(s, mysqlSchema(schema), objectName)
+      )
+    }
     return withSession(id, null, (s) =>
       introspect.dropObject(
         s,

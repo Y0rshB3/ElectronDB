@@ -4,6 +4,7 @@ import type {
   AppSettings,
   ConnectionConfig,
   ConnectionInput,
+  EngineId,
   Job,
   JobInput,
   JobRun
@@ -56,20 +57,21 @@ export class ConnectionsRepo {
   /**
    * Creates or replaces a connection. The engine is fixed once saved (the
    * Navicat importer writes through here too): an input without `engine`
-   * keeps the stored one, a different one is refused.
+   * keeps the stored one, a different one is refused. The one exception is
+   * the MySQL family (P5): `mysql` may become `mariadb` (same driver, backups,
+   * jobs and saved queries), and a `mariadb` record saved as `mysql` (an
+   * importer or a form that predates the change) stays `mariadb`.
    */
   save(input: ConnectionInput): ConnectionConfig {
     const existing = input.id ? this.get(input.id) : null
     if (input.engine !== undefined && !isEngineId(input.engine)) {
       throw new Error(`Motor de base de datos desconocido: "${String(input.engine)}".`)
     }
-    if (existing && input.engine !== undefined && input.engine !== existing.engine) {
-      throw new Error(ENGINE_CHANGE_MESSAGE)
-    }
+    const engine = existing ? keptEngine(existing.engine, input.engine) : input.engine
     const now = nowIso()
     const record: ConnectionConfig = withEngineDefaults({
       ...input,
-      engine: input.engine ?? existing?.engine,
+      engine,
       id: existing?.id ?? input.id ?? newId(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
@@ -81,11 +83,39 @@ export class ConnectionsRepo {
     })
     return record
   }
+  /**
+   * Turns a `mysql` connection into a `mariadb` one (P5 migration: imported
+   * MariaDB entries and connections whose server reports MariaDB). Idempotent:
+   * returns the updated record, or null when it is not a `mysql` record.
+   * Only `engine` and `updatedAt` change; credentials stay under the same id.
+   */
+  promoteToMariaDb(id: string): ConnectionConfig | null {
+    const existing = this.get(id)
+    if (!existing || existing.engine !== 'mysql') return null
+    let promoted: ConnectionConfig | null = null
+    this.store.update((d) => {
+      const idx = d.items.findIndex((c) => c.id === id)
+      if (idx < 0) return
+      const stored = d.items[idx]
+      if ((stored.engine ?? 'mysql') !== 'mysql') return
+      promoted = withEngineDefaults({ ...stored, engine: 'mariadb', updatedAt: nowIso() })
+      d.items[idx] = promoted
+    })
+    return promoted
+  }
   delete(id: string): void {
     this.store.update((d) => {
       d.items = d.items.filter((c) => c.id !== id)
     })
   }
+}
+
+/** Engine a save keeps for an existing record (see ConnectionsRepo.save). */
+function keptEngine(stored: EngineId, requested: EngineId | undefined): EngineId {
+  if (requested === undefined || requested === stored) return stored
+  if (stored === 'mysql' && requested === 'mariadb') return 'mariadb'
+  if (stored === 'mariadb' && requested === 'mysql') return 'mariadb'
+  throw new Error(ENGINE_CHANGE_MESSAGE)
 }
 
 export class JobsRepo {

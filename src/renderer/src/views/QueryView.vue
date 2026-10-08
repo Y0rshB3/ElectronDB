@@ -10,6 +10,7 @@ import {
   watch
 } from 'vue'
 import type { QueryStatementResult, TransactionStatus } from '@shared/types'
+import { mariadbDialect } from '@shared/dialects/mariadb'
 import { postgresqlDialect } from '@shared/dialects/postgresql'
 import { isAttachOrDetach, sqliteDialect } from '@shared/dialects/sqlite'
 import {
@@ -439,11 +440,15 @@ async function run(selectionOnly = false): Promise<void> {
   // read-only (SELECT/SHOW/DESCRIBE/EXPLAIN/USE...) asks for the typed name first.
   const pg = isPg.value
   const lite = isLite.value
+  // MariaDB: its dialect also reads `/*M!` comments and the sequence functions.
+  const maria = connections.get(connectionId.value)?.engine === 'mariadb'
   const check = pg
     ? postgresqlDialect.analyzeWrites(script)
     : lite
       ? sqliteDialect.analyzeWrites(script)
-      : analyzeWrites(script)
+      : maria
+        ? mariadbDialect.analyzeWrites(script)
+        : analyzeWrites(script)
   const confirmProduction = connections.needsTypedConfirm(connectionId.value) && check.writes
   // DROP / TRUNCATE / DELETE / ALTER … DROP / UPDATE without WHERE ask on any connection (setting).
   const drops = settings.settings.confirmDestructiveEverywhere
@@ -451,7 +456,7 @@ async function run(selectionOnly = false): Promise<void> {
       ? (postgresqlDialect.analyzeDestructive?.(script) ?? [])
       : lite
         ? (sqliteDialect.analyzeDestructive?.(script) ?? [])
-        : analyzeDestructiveScript(script)
+        : analyzeDestructiveScript(maria ? script.split('/*M!').join('/*!') : script)
     : []
   if (confirmProduction || drops.length) {
     const allRows = drops.filter((d) => d.allRows).length

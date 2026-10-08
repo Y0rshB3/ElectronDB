@@ -30,6 +30,7 @@ import { CAPABILITY_MESSAGES, DbUserError, requireCapability } from './errors'
 import { getDriver } from './registry'
 import { openSshTunnel, type SshTunnel } from './tunnel'
 import { needsTypedConfirm } from '../ipc/productionGuard'
+import { servesMariaDb } from '../migration/mariadbEngine'
 
 // Log scope kept from v0.1.0 so existing log lines read the same.
 const log = getLogger('mysql.manager')
@@ -223,8 +224,9 @@ export class ConnectionManager implements SessionFactory {
   }
 
   private async doOpen(id: string): Promise<OpenEntry> {
-    const config = this.ctx.connections.get(id)
-    if (!config) throw new DbUserError(`La conexión ${id} no existe`)
+    const stored = this.ctx.connections.get(id)
+    if (!stored) throw new DbUserError(`La conexión ${id} no existe`)
+    let config: ConnectionConfig = stored
     const engine = engineOf(config)
     const driver = await this.drivers(engine.id)
     const plan = planPassword(
@@ -241,11 +243,23 @@ export class ConnectionManager implements SessionFactory {
         sshPassword,
         sslKeyPassword: this.ctx.credentials.get('sslKey', id)
       }
-      const connection = await driver.open(config, secrets, resolved.endpoint, {
-        onFatal: (reason) => this.handleFatal(id, reason),
+      const hooks = {
+        onFatal: (reason: string) => this.handleFatal(id, reason),
         // Read the stored config each time: the environment can change while it is open.
         isGuarded: () => needsTypedConfirm(this.ctx, this.ctx.connections.get(id) ?? config)
-      })
+      }
+      let connection = await driver.open(config, secrets, resolved.endpoint, hooks)
+      // P5: a `mysql` connection whose server is MariaDB becomes a `mariadb` one
+      // (interactive runs only: a headless job never rewrites connections.json).
+      if (!this.ctx.headless && servesMariaDb(config, connection.serverVersion)) {
+        const promoted = this.ctx.connections.promoteToMariaDb(id)
+        if (promoted) {
+          log.info(`connection ${config.name} reports MariaDB: stored as a MariaDB connection`)
+          await connection.close().catch(() => undefined)
+          config = promoted
+          connection = await driver.open(config, secrets, resolved.endpoint, hooks)
+        }
+      }
       const entry: OpenEntry = { config, driver, connection, tunnel: resolved.tunnel }
       resolved.tunnel?.onClose((reason) => this.handleFatal(id, reason))
       this.entries.set(id, entry)

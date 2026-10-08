@@ -16,6 +16,7 @@ import {
   type PoolOptions,
   type SslOptions
 } from 'mysql2/promise'
+import { mariadbDialect } from '@shared/dialects/mariadb'
 import { mysqlDialect } from '@shared/dialects/mysql'
 import type {
   ConnectionConfig,
@@ -23,6 +24,7 @@ import type {
   ConnectionTestResult,
   ServerInfo
 } from '@shared/types'
+import type { SqlDialect } from '@shared/dialects/types'
 import type { Driver, DriverSecrets, Endpoint, MysqlFamilyConnection, Scope } from '../db/driver'
 import { getLogger } from '../log'
 import {
@@ -35,7 +37,6 @@ import {
 import { mariaDbAuthPlugins } from './authPlugins'
 import { fetchServerInfo, type Queryable } from './introspect'
 import { PooledSession } from './session'
-import { splitStatements } from './sqlSplit'
 
 const log = getLogger('mysql.manager')
 
@@ -117,6 +118,22 @@ function queryableOf(conn: { query(sql: string): Promise<[unknown, unknown]> }):
   }
 }
 
+/**
+ * «Probar conexión» note when the configured engine and the server differ
+ * (P5): a MySQL connection to MariaDB is stored as MariaDB when it opens; a
+ * MariaDB connection to MySQL works, but MariaDB-only features fail.
+ */
+export function flavorHint(
+  engine: ConnectionInput['engine'],
+  flavor: string | undefined
+): string | null {
+  if ((engine ?? 'mysql') === 'mysql' && flavor === 'mariadb')
+    return 'El servidor es MariaDB: al abrirla, la conexión se guardará como MariaDB.'
+  if (engine === 'mariadb' && flavor === 'mysql')
+    return 'El servidor es MySQL: crea la conexión como MySQL (las secuencias y otras funciones de MariaDB no existen en él).'
+  return null
+}
+
 /** MySQL always connects to a host; the manager resolves the tunnel first. */
 function requireEndpoint(endpoint: Endpoint | null): Endpoint {
   if (!endpoint) throw new MysqlUserError('La conexión MySQL necesita un servidor y un puerto')
@@ -128,7 +145,8 @@ function requireEndpoint(endpoint: Endpoint | null): Endpoint {
  */
 export class MysqlDriverConnection implements MysqlFamilyConnection {
   readonly family = 'sql' as const
-  readonly dialect = mysqlDialect
+  /** MariaDB connections split `/*M!` comments as code and guard sequence functions. */
+  readonly dialect: SqlDialect
   private activeSessions = 0
   /** Outcome of the initial queries of each pooled connection: null = ok, else the error text. */
   private readonly initialState = new WeakMap<object, Promise<string | null>>()
@@ -138,6 +156,7 @@ export class MysqlDriverConnection implements MysqlFamilyConnection {
     readonly config: ConnectionConfig,
     readonly pool: Pool
   ) {
+    this.dialect = config.engine === 'mariadb' ? mariadbDialect : mysqlDialect
     this.attachPoolHooks()
   }
 
@@ -197,7 +216,7 @@ export class MysqlDriverConnection implements MysqlFamilyConnection {
    */
   private attachPoolHooks(): void {
     const config = this.config
-    const initial = splitStatements(config.initialQueries ?? '')
+    const initial = this.dialect.splitStatements(config.initialQueries ?? '')
     this.pool.on('connection', (raw) => {
       // The promise pool forwards the core (callback) connection here.
       const conn = raw as unknown as CoreConnection
@@ -255,10 +274,12 @@ export const mysqlDriver: Driver = {
     const conn = await createConnection(options)
     try {
       const info = await fetchServerInfo(queryableOf(conn), input)
+      const hint = flavorHint(input.engine, info.runtime?.flavor)
       return {
         ok: true,
         serverVersion: info.version,
-        durationMs: Math.round(performance.now() - startedAt)
+        durationMs: Math.round(performance.now() - startedAt),
+        ...(hint ? { details: [hint] } : {})
       }
     } finally {
       await conn.end().catch(() => conn.destroy())

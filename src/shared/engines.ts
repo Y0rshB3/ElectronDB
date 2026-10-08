@@ -3,9 +3,9 @@
  * section 3). Pure data plus small helpers: no driver, Node or browser imports,
  * so main and renderer read the same flags.
  *
- * `mysql`, `postgresql`, `sqlite` and `mongodb` ship drivers (`available`);
- * the last three stay `preview` (offered only with Ajustes › Motores en vista
- * previa). MariaDB is declared so the model is complete and is never offered.
+ * Every engine ships a driver (`available`). `mysql` and `mariadb` (the same
+ * mysql2 driver, P5) are always offered; `postgresql`, `sqlite` and `mongodb`
+ * stay `preview` (offered only with Ajustes › Motores en vista previa).
  */
 import type {
   ConnectionConfig,
@@ -170,15 +170,18 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     icon: 'mdi-seal',
     defaultPort: 3306,
     defaultUser: 'root',
-    groups: ['tables', 'views', 'functions', 'events', 'sequences', 'queries'],
-    available: false,
+    groups: ['tables', 'views', 'functions', 'events', 'sequences', 'queries', 'backups'],
+    available: true,
     capabilities: {
       ...MYSQL_FAMILY,
-      supportsBackupsNb3: false,
-      supportsBackupsVqb: false,
-      supportsAutomation: false,
-      preview: true,
+      // Same backups and jobs as MySQL: connections that were `mysql` before P5
+      // keep their .nb3/.vqb backups and their automation jobs.
+      supportsBackupsNb3: true,
+      supportsBackupsVqb: true,
+      supportsAutomation: true,
+      preview: false,
       sequences: true,
+      // INSERT/REPLACE … RETURNING from 10.5, DELETE … RETURNING from 10.0.
       returning: 'insert-delete',
       sqlDialect: 'mariadb'
     }
@@ -338,6 +341,11 @@ export function engineOf(c: { engine?: EngineId | null }): EngineDescriptor {
   const descriptor = isEngineId(id) ? ENGINES[id] : undefined
   if (!descriptor) throw new Error(`Motor de base de datos desconocido: "${String(id)}".`)
   return descriptor
+}
+
+/** MySQL and MariaDB: the engines served by the mysql2 driver (same SQL family, same backups). */
+export function isMysqlFamilyEngine(engine: EngineId | null | undefined): boolean {
+  return (engine ?? DEFAULT_ENGINE) === 'mysql' || engine === 'mariadb'
 }
 
 /** Any backup format (.vqb or .nb3): backups:* and the backup UI. */

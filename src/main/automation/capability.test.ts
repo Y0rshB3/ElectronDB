@@ -31,7 +31,7 @@ describe('automation capability gates', () => {
       queryTask('t2', pgId, 'public', 'SELECT 1')
     ])
     expect(() => validateJobInput(input, (id) => t.ctx.connections.get(id))).toThrow(
-      'Las tareas automáticas solo pueden usar conexiones MySQL; «PG local» es PostgreSQL.'
+      'Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
     )
   })
 
@@ -61,7 +61,7 @@ describe('automation capability gates', () => {
     expect(run.tasks.map((x) => x.status)).toEqual(['failed', 'failed'])
     for (const task of run.tasks) {
       expect(task.message).toBe(
-        'Las tareas automáticas solo pueden usar conexiones MySQL; «PG local» es PostgreSQL.'
+        'Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
       )
     }
     expect(backups.calls).toHaveLength(0)

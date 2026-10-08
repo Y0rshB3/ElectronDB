@@ -28,7 +28,7 @@ describe('backup capability gates', () => {
     ).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(DbUserError)
     expect((err as Error).message).toBe(
-      'Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL; «PG local» es PostgreSQL.'
+      'Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
     )
     expect(sessions.sessions).toHaveLength(0)
   })

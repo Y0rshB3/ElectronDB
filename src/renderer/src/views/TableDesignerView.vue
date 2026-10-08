@@ -39,6 +39,9 @@ const tableEngines = computed(() => engineUi.value.typeCatalog?.tableEngines ?? 
 const isPg = computed(() => engineUi.value.id === 'postgresql')
 /** SQLite: own columns editor, in-place or rebuild plans sent to sqlite:alterTable. */
 const isSqlite = computed(() => engineUi.value.id === 'sqlite')
+/** MariaDB: MySQL's editors plus its own types and system versioning (Opciones). */
+const isMariaDb = computed(() => engineUi.value.id === 'mariadb')
+const columnTypes = computed(() => engineUi.value.typeCatalog?.columnTypes)
 
 /** Index methods of PostgreSQL (pg_am); MySQL keeps IndexesEditor's own list. */
 const PG_INDEX_METHODS = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist']
@@ -571,7 +574,7 @@ defineExpose({ draft, previewSql, save })
               v-model="draft.columns"
               :without-rowid="draft.options?.withoutRowid === true"
             />
-            <ColumnsEditor v-else v-model="draft.columns" />
+            <ColumnsEditor v-else v-model="draft.columns" :column-types="columnTypes" />
           </v-window-item>
           <v-window-item value="indexes" class="fill">
             <IndexesEditor
@@ -687,6 +690,24 @@ defineExpose({ draft, previewSql, save })
                     </ul>
                   </v-col>
                 </template>
+                <v-col v-if="isMariaDb" cols="12">
+                  <v-checkbox
+                    :model-value="draft.options?.systemVersioning === true"
+                    label="Versionado de sistema (WITH SYSTEM VERSIONING)"
+                    density="compact"
+                    hide-details
+                    data-test="mariadb-system-versioning"
+                    @update:model-value="
+                      draft = {
+                        ...draft,
+                        options: { ...draft.options, systemVersioning: !!$event }
+                      }
+                    "
+                  />
+                  <div class="designer__hint">
+                    MariaDB guarda cada versión de las filas; quitarlo borra el historial.
+                  </div>
+                </v-col>
                 <v-col v-if="!isPg && !isSqlite" cols="12" md="6">
                   <v-combobox
                     v-model="draft.engine"
@@ -783,6 +804,11 @@ defineExpose({ draft, previewSql, save })
   max-width: 880px;
   padding: 20px 24px;
   overflow: auto;
+}
+.designer__hint {
+  margin: 0 4px 6px 40px;
+  font-size: var(--nd-fs-small);
+  color: var(--nd-text-muted);
 }
 .designer__options-title {
   margin: 0 4px 14px;

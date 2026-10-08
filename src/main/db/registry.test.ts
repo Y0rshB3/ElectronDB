@@ -3,7 +3,6 @@ import { mysqlDriver } from '../mysql/driver'
 import { postgresDriver } from '../postgres/driver'
 import { sqliteDriver } from '../sqlite/driver'
 import { mongoDriver } from '../mongo/driver'
-import { DbUserError } from './errors'
 import { getDriver, hasDriver } from './registry'
 
 describe('driver registry', () => {
@@ -27,18 +26,9 @@ describe('driver registry', () => {
     expect(await getDriver('mongodb')).toBe(mongoDriver)
   })
 
-  it('refuses every engine without a driver in this build', async () => {
-    const labels = {
-      mariadb: 'MariaDB'
-    } as const
-    for (const [engine, label] of Object.entries(labels) as [keyof typeof labels, string][]) {
-      expect(hasDriver(engine)).toBe(false)
-      const err = await getDriver(engine).catch((e: unknown) => e)
-      expect(err).toBeInstanceOf(DbUserError)
-      expect((err as Error).message).toBe(
-        `${label} todavía no está disponible en esta versión de Vortaq.`
-      )
-    }
+  it('serves the MySQL driver for mariadb connections (P5)', async () => {
+    expect(hasDriver('mariadb')).toBe(true)
+    expect(await getDriver('mariadb')).toBe(await getDriver('mysql'))
   })
 
   it('refuses an unknown engine', async () => {

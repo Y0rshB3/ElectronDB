@@ -133,5 +133,8 @@ export type MysqlFamilyConnection = SqlDriverConnection<PooledSession> & {
 }
 
 export function isMysqlFamily(connection: DriverConnection): connection is MysqlFamilyConnection {
-  return connection.family === 'sql' && connection.dialect.id === 'mysql'
+  return (
+    connection.family === 'sql' &&
+    (connection.dialect.id === 'mysql' || connection.dialect.id === 'mariadb')
+  )
 }

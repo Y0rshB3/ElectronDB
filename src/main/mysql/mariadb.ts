@@ -5,6 +5,7 @@
  * MariaDB 11.8 (tests/integration/mariadb.test.ts).
  */
 import { isMariaDbVersion } from '@shared/serverFlavor'
+import type { ObjectSummary } from '@shared/types'
 
 /** True when a session/queryable talks to a MariaDB server (it carries the server version). */
 export function isMariaDbSession(q: { serverVersion?: string } | null | undefined): boolean {
@@ -44,6 +45,25 @@ export function unquoteMariaDbDefault(raw: string | null): string | null {
     return out
   }
   return raw
+}
+
+/**
+ * Column-level CHECK constraints of a table. MariaDB stores `doc JSON` as
+ * LONGTEXT with the check `json_valid(\`doc\`)` named after the column.
+ */
+export const MARIADB_COLUMN_CHECKS_SQL = `SELECT CONSTRAINT_NAME AS name, CHECK_CLAUSE AS clause
+       FROM information_schema.CHECK_CONSTRAINTS
+      WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND LEVEL = 'Column'`
+
+/** Names of the columns whose only column check is MariaDB's JSON one. */
+export function jsonColumnsFromChecks(rows: { name: unknown; clause: unknown }[]): Set<string> {
+  const out = new Set<string>()
+  for (const r of rows) {
+    const name = String(r.name ?? '')
+    const quoted = '`' + name.replace(/`/g, '``') + '`'
+    if (String(r.clause ?? '').trim() === `json_valid(${quoted})`) out.add(name)
+  }
+  return out
 }
 
 /** Tables in the tree: system-versioned tables are tables too (MariaDB only). */
@@ -105,4 +125,62 @@ export function describeSkippedObjects(objects: SkippedBackupObject[]): string |
     parts.push(`${versioned} ${versioned === 1 ? 'tabla versionada' : 'tablas versionadas'}`)
   if (sequences) parts.push(`${sequences} ${sequences === 1 ? 'secuencia' : 'secuencias'}`)
   return `La copia no incluye ${parts.join(' y ')} (MariaDB): ${objects.map((o) => o.name).join(', ')}. Copia esos objetos con otra herramienta si los necesitas.`
+}
+
+/* ---------- Sequences (MariaDB engine, P5) ---------- */
+
+/** information_schema.SEQUENCES (MariaDB 11); older servers fall back to the TABLES listing. */
+export const MARIADB_SEQUENCES_SQL = `SELECT SEQUENCE_NAME AS name, DATA_TYPE AS dataType, START_VALUE AS seqStart,
+            MINIMUM_VALUE AS seqMin, MAXIMUM_VALUE AS seqMax, INCREMENT AS seqStep,
+            CYCLE_OPTION AS seqCycle
+       FROM information_schema.SEQUENCES
+      WHERE SEQUENCE_SCHEMA = ?
+      ORDER BY SEQUENCE_NAME`
+
+export const MARIADB_SEQUENCE_TABLES_SQL = `SELECT TABLE_NAME AS name, TABLE_COMMENT AS comment
+       FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'SEQUENCE'
+      ORDER BY TABLE_NAME`
+
+type SequenceQueryable = {
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>
+}
+
+/** "inicio 1 · incremento 1 · 1…9223372036854775806 · cíclica" */
+export function describeMariaDbSequence(row: Record<string, unknown>): string {
+  const text = (v: unknown): string => (v === null || v === undefined ? '' : String(v))
+  const cycle = text(row.seqCycle) === '1' || /^yes$/i.test(text(row.seqCycle))
+  return [
+    `inicio ${text(row.seqStart)}`,
+    `incremento ${text(row.seqStep)}`,
+    `${text(row.seqMin)}…${text(row.seqMax)}`,
+    cycle ? 'cíclica' : 'sin ciclo'
+  ].join(' · ')
+}
+
+/** Sequences of a database for the tree (`db:objects` type 'sequence'). Names and options only. */
+export async function listMariaDbSequences(
+  q: SequenceQueryable,
+  schema: string
+): Promise<ObjectSummary[]> {
+  try {
+    const rows = await q.query<Record<string, unknown>>(MARIADB_SEQUENCES_SQL, [schema])
+    return rows.map((r) => ({
+      name: String(r.name),
+      type: 'sequence' as const,
+      schema,
+      kind: String(r.dataType ?? ''),
+      detail: describeMariaDbSequence(r)
+    }))
+  } catch {
+    // MariaDB before information_schema.SEQUENCES: the names are in TABLES.
+    const rows = await q.query<Record<string, unknown>>(MARIADB_SEQUENCE_TABLES_SQL, [schema])
+    return rows.map((r) => ({
+      name: String(r.name),
+      type: 'sequence' as const,
+      schema,
+      detail: null,
+      comment: r.comment ? String(r.comment) : undefined
+    }))
+  }
 }

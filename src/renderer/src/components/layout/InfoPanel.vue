@@ -106,7 +106,7 @@ const objectInfo = computed(() => {
     title: itemLabel(n.group, item) || n.label,
     icon: GROUP_ICONS[n.group],
     subtitle: `${GROUP_LABELS[n.group]} · ${n.database !== undefined ? `${n.database}.${n.schema}` : n.schema}`,
-    rows: objectDetails(n.group, item)
+    rows: objectDetails(n.group, item, connections.get(n.connectionId)?.engine)
   }
 })
 

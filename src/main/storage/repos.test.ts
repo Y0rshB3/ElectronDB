@@ -294,6 +294,40 @@ describe('ConnectionsRepo engine model', () => {
     )
   })
 
+  it('lets a mysql record become mariadb, and keeps mariadb when saved as mysql (P5)', () => {
+    const repo = new ConnectionsRepo(dir)
+    const a = repo.save({ ...connInput('A'), engine: 'mysql' })
+    expect(repo.save({ ...connInput('A'), id: a.id, engine: 'mariadb' }).engine).toBe('mariadb')
+    // An importer or a stale form sending 'mysql' does not turn it back.
+    expect(repo.save({ ...connInput('A'), id: a.id, engine: 'mysql' }).engine).toBe('mariadb')
+    expect(() => repo.save({ ...connInput('A'), id: a.id, engine: 'postgresql' })).toThrow(
+      ENGINE_CHANGE_MESSAGE
+    )
+  })
+
+  it('promoteToMariaDb changes only engine and updatedAt, once', () => {
+    // A legacy record without engine (pre multi-engine) is MySQL and can be promoted.
+    const legacy = { ...connInput('Legacy'), id: 'legacy-1', createdAt: 'c', updatedAt: 'u' }
+    writeFileSync(
+      join(dir, 'connections.json'),
+      JSON.stringify({ version: 1, items: [legacy] }, null, 2)
+    )
+    const repo = new ConnectionsRepo(dir)
+    const pg = repo.save({ ...connInput('PG'), engine: 'postgresql' })
+    const promoted = repo.promoteToMariaDb('legacy-1')
+    expect(promoted).toMatchObject({ id: 'legacy-1', engine: 'mariadb', createdAt: 'c' })
+    expect(promoted?.updatedAt).not.toBe('u')
+    const { engine: _e, updatedAt: _u, ...rest } = promoted!
+    const { updatedAt: _lu, ...legacyRest } = legacy
+    expect(rest).toEqual(legacyRest)
+    const stored = JSON.parse(readFileSync(join(dir, 'connections.json'), 'utf8')).items[0]
+    expect(stored).toEqual({ ...legacy, engine: 'mariadb', updatedAt: promoted!.updatedAt })
+    expect(repo.promoteToMariaDb('legacy-1')).toBeNull()
+    expect(repo.promoteToMariaDb(pg.id)).toBeNull()
+    expect(repo.promoteToMariaDb('missing')).toBeNull()
+    expect(repo.get(pg.id)?.engine).toBe('postgresql')
+  })
+
   it('refuses unknown engines', () => {
     const repo = new ConnectionsRepo(dir)
     expect(() => repo.save({ ...connInput('X'), engine: 'oracle' as never })).toThrow(

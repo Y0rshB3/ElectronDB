@@ -83,11 +83,11 @@ describe('capability gates', () => {
     const cases: [() => void, string][] = [
       [
         () => requireConnectionCapability(pg, 'supportsBackupsNb3', CAPABILITY_MESSAGES.backups),
-        'Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL; «PG local» es PostgreSQL.'
+        'Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
       ],
       [
         () => requireConnectionCapability(pg, 'supportsAutomation', CAPABILITY_MESSAGES.automation),
-        'Las tareas automáticas solo pueden usar conexiones MySQL; «PG local» es PostgreSQL.'
+        'Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
       ],
       [
         () => requireConnectionCapability(pg, 'events', CAPABILITY_MESSAGES.events),

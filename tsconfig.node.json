@@ -42,6 +42,8 @@
     "src/renderer/src/utils/sql.ts",
     "src/renderer/src/components/designer/pg/planner.ts",
     "src/renderer/src/components/designer/pg/types.ts",
-    "src/renderer/src/components/designer/sqlite/planner.ts"
+    "src/renderer/src/components/designer/sqlite/planner.ts",
+    "src/renderer/src/components/designer/mariadb/planner.ts",
+    "src/renderer/src/components/designer/columnType.ts"
   ]
 }

@@ -75,6 +75,7 @@ const engine = computed<EngineId>(() => form.value.engine ?? 'mysql')
 const isPg = computed(() => engine.value === 'postgresql')
 const isSqlite = computed(() => engine.value === 'sqlite')
 const isMongo = computed(() => engine.value === 'mongodb')
+const isMariaDb = computed(() => engine.value === 'mariadb')
 const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
 /** Backups are MySQL-only: the backup folder fields follow the capability. */
 const showBackupDirs = computed(
@@ -486,7 +487,9 @@ async function save(): Promise<void> {
                 ? 'SQLite (vista previa): un archivo de base de datos'
                 : isMongo
                   ? 'MongoDB (vista previa): independiente, conjunto de réplicas o SRV'
-                  : 'MySQL / MariaDB, con SSH y SSL opcionales'
+                  : isMariaDb
+                    ? 'MariaDB, con SSH y SSL opcionales (también cuentas ed25519 y parsec)'
+                    : 'MySQL / MariaDB, con SSH y SSL opcionales'
         "
         :danger="form.environment === 'production'"
       />
@@ -522,9 +525,10 @@ async function save(): Promise<void> {
             >
           </button>
         </div>
-        <div v-else-if="editing && (isPg || isSqlite || isMongo)" class="mb-2">
+        <div v-else-if="editing && (isPg || isSqlite || isMongo || isMariaDb)" class="mb-2">
           <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip"
-            >{{ engineLabel }} · vista previa</v-chip
+            >{{ engineLabel
+            }}{{ ENGINES[engine].capabilities.preview ? ' · vista previa' : '' }}</v-chip
           >
         </div>
         <v-window v-model="tab">
@@ -892,6 +896,10 @@ async function save(): Promise<void> {
                     autocomplete="new-password"
                     :placeholder="hasPassword && !clearPassword ? '•••••• (guardada)' : ''"
                     :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                    :hint="
+                      isMariaDb ? 'Admite cuentas mysql_native_password, ed25519 y parsec' : ''
+                    "
+                    :persistent-hint="isMariaDb"
                     data-test="conn-password"
                     @click:append-inner="showPassword = !showPassword"
                   />

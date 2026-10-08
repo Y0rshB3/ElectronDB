@@ -32,9 +32,11 @@ import { MARIADB_TARGET, describeMysql, describeServer } from './targets'
 
 const CHEAP = { N: 1024, r: 8, p: 1 }
 
-function connectionInput(u: URL, dir: string, name: string): ConnectionInput {
+function connectionInput(u: URL, dir: string, name: string, maria: boolean): ConnectionInput {
   return {
     name,
+    // MariaDB 11 runs this suite on the MariaDB engine (P5): same .vqb, jobs and rollback.
+    engine: maria ? 'mariadb' : 'mysql',
     color: null,
     environment: 'local',
     host: u.hostname,
@@ -211,9 +213,9 @@ function suite(url: string, label: string, maria: boolean, is57: boolean): void 
       emit: <E extends IpcEventChannel>(_c: E, _p: IpcEventMap[E]) => {},
       headless: true
     }
-    id = ctx.connections.save(connectionInput(u, dir, 'Origen VQB')).id
+    id = ctx.connections.save(connectionInput(u, dir, 'Origen VQB', maria)).id
     ctx.credentials.set('mysql', id, decodeURIComponent(u.password))
-    otherId = ctx.connections.save(connectionInput(u, dir, 'Destino VQB')).id
+    otherId = ctx.connections.save(connectionInput(u, dir, 'Destino VQB', maria)).id
     ctx.credentials.set('mysql', otherId, decodeURIComponent(u.password))
     const sessions = getSessionFactory(ctx)
     service = createBackupService(ctx, sessions, { scrypt: CHEAP })

@@ -23,12 +23,15 @@ describe('ConnectionDialog · PostgreSQL (preview)', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('hides the engine picker while previews are off (MySQL as before)', async () => {
+  it('offers only MySQL and MariaDB while previews are off', async () => {
     const pinia = freshPinia()
     useUiStore().connectionDialog = { open: true, editing: null }
     wrapper = mountWith(ConnectionDialog, pinia)
     await settle()
-    expect(wrapper.find('[data-test="conn-engine-picker"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="conn-engine-picker"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="conn-engine-mysql"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="conn-engine-mariadb"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="conn-engine-postgresql"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="conn-pg-database"]').exists()).toBe(false)
   })
 

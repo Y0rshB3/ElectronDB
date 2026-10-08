@@ -6,6 +6,7 @@ import {
   assertCapability,
   engineOf,
   isEngineId,
+  isMysqlFamilyEngine,
   pickableEngines,
   withEngineDefaults
 } from './engines'
@@ -45,13 +46,38 @@ describe('engine descriptors', () => {
     for (const id of ENGINE_IDS) expect(ENGINES[id].id).toBe(id)
   })
 
-  it('ships the MySQL, PostgreSQL, SQLite and MongoDB drivers; every engine but MySQL is a preview', () => {
+  it('ships every driver; PostgreSQL, SQLite and MongoDB are previews', () => {
     const available = ENGINE_IDS.filter((id) => ENGINES[id].available)
-    expect(available).toEqual(['mysql', 'postgresql', 'sqlite', 'mongodb'])
+    expect(available).toEqual(['mysql', 'mariadb', 'postgresql', 'sqlite', 'mongodb'])
     expect(ENGINES.mysql.capabilities.preview).toBe(false)
-    for (const id of ENGINE_IDS.filter((e) => e !== 'mysql')) {
+    expect(ENGINES.mariadb.capabilities.preview).toBe(false)
+    for (const id of ['postgresql', 'sqlite', 'mongodb'] as const) {
       expect(ENGINES[id].capabilities.preview).toBe(true)
     }
+  })
+
+  it('gives MariaDB everything MySQL has, plus sequences and RETURNING', () => {
+    const { mysql, mariadb } = ENGINES
+    expect(mariadb).toMatchObject({ label: 'MariaDB', defaultPort: 3306, defaultUser: 'root' })
+    expect(mariadb.groups).toEqual([
+      'tables',
+      'views',
+      'functions',
+      'events',
+      'sequences',
+      'queries',
+      'backups'
+    ])
+    expect(mariadb.capabilities).toEqual({
+      ...mysql.capabilities,
+      sequences: true,
+      returning: 'insert-delete',
+      sqlDialect: 'mariadb'
+    })
+    expect(isMysqlFamilyEngine('mysql')).toBe(true)
+    expect(isMysqlFamilyEngine('mariadb')).toBe(true)
+    expect(isMysqlFamilyEngine(undefined)).toBe(true)
+    expect(isMysqlFamilyEngine('postgresql')).toBe(false)
   })
 
   it('keeps MySQL exactly as the app behaves today', () => {
@@ -95,8 +121,8 @@ describe('engine descriptors', () => {
 
   it('matches the capability table of the design for the other engines', () => {
     const caps = (id: EngineId) => ENGINES[id].capabilities
-    // only MySQL keeps backups and automation (feature gates follow the configured engine)
-    for (const id of ['mariadb', 'postgresql', 'sqlite', 'mongodb'] as const) {
+    // only the MySQL family keeps .nb3 backups and automation (feature gates follow the configured engine)
+    for (const id of ['postgresql', 'sqlite', 'mongodb'] as const) {
       expect(caps(id).supportsBackupsNb3).toBe(false)
       expect(caps(id).supportsAutomation).toBe(false)
     }
@@ -155,9 +181,10 @@ describe('engine helpers', () => {
   })
 
   it('offers PostgreSQL, SQLite and MongoDB in the pickers only with previews on', () => {
-    expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql'])
+    expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql', 'mariadb'])
     expect(pickableEngines(true).map((e) => e.id)).toEqual([
       'mysql',
+      'mariadb',
       'postgresql',
       'sqlite',
       'mongodb'

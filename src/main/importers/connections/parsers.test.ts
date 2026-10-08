@@ -21,7 +21,6 @@ import {
 import { IMPORT_FIXTURES } from './testing'
 import {
   FOREIGN_PATH_WARNING,
-  MARIADB_AS_MYSQL_WARNING,
   SQLITE_ENCRYPTED_REASON,
   sqliteFileReviewWarning
 } from './types'
@@ -107,8 +106,12 @@ describe('parseNcx', () => {
       ssl: { enabled: false, verifyServer: false }
     })
     const maria = byName.get('Maria Analytics')!
-    expect(maria).toMatchObject({ engine: 'mysql', engineLabel: 'MariaDB', navicatType: 'MariaDB' })
-    expect(maria.warnings).toContain(MARIADB_AS_MYSQL_WARNING)
+    expect(maria).toMatchObject({
+      engine: 'mariadb',
+      engineLabel: 'MariaDB',
+      navicatType: 'MariaDB'
+    })
+    expect(maria.warnings).toEqual([])
     expect(maria.ssh).toMatchObject({
       enabled: true,
       host: 'jump.example.test',
@@ -246,14 +249,14 @@ describe('parseDbeaverDataSources', () => {
     })
     const maria = byName.get('Maria staging')!
     expect(maria).toMatchObject({
-      engine: 'mysql',
+      engine: 'mariadb',
       engineLabel: 'MariaDB',
       host: 'maria.example.test',
       port: 3307,
       database: 'stats',
       environment: 'staging'
     })
-    expect(maria.warnings).toContain(MARIADB_AS_MYSQL_WARNING)
+    expect(maria.warnings).toEqual([])
   })
 
   it('maps PostgreSQL and lists other engines as not importable', () => {

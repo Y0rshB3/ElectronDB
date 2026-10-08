@@ -1,4 +1,5 @@
 import { mysqlDialect } from '@shared/dialects/mysql'
+import type { SqlDialect } from '@shared/dialects/types'
 import type { QueryExecuteOptions, QueryStatementResult } from '@shared/types'
 import { DEFAULT_ROW_LIMIT, executeScript as runScript } from '../db/query'
 import { describeError } from './errors'
@@ -39,12 +40,14 @@ export function toStatementResult(
  * USE / SET / transactions carry over. Stops at the first error unless
  * options.stopOnError === false. The loop lives in src/main/db/query.ts; MySQL
  * supplies its CLI splitter (the dialect's), mysql2 runner and result mapping.
+ * MariaDB connections pass their dialect, which also runs `/*M!` statements.
  */
 export function executeScript(
   session: FullSession,
   script: string,
   options: QueryExecuteOptions = {},
-  defaultMaxRows = DEFAULT_ROW_LIMIT
+  defaultMaxRows = DEFAULT_ROW_LIMIT,
+  dialect: Pick<SqlDialect, 'splitStatements'> = mysqlDialect
 ): Promise<QueryStatementResult[]> {
   return runScript(
     {
@@ -53,7 +56,7 @@ export function executeScript(
       toResult: toStatementResult,
       describeError
     },
-    mysqlDialect,
+    dialect,
     script,
     options,
     defaultMaxRows

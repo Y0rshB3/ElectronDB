@@ -251,7 +251,7 @@ describe('connection file import', () => {
       existingMode: 'replace'
     })
     expect(result.created.map((c) => c.source?.navicatType).sort()).toEqual(['MariaDB', 'MySQL'])
-    expect(result.created.every((c) => c.engine === 'mysql')).toBe(true)
+    expect(result.created.map((c) => c.engine).sort()).toEqual(['mariadb', 'mysql'])
   })
 
   it('validates the request and reports keys missing from the file', async () => {

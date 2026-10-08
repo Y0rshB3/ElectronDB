@@ -9,6 +9,7 @@ import { aboutPanelOptions } from './licenses'
 import { windowIconPath } from './windowOptions'
 import { quitVetoed, restoreQuitPrompt, vetoQuit } from './quitGuard'
 import { runProfileMigration, runSecretMigration } from './migration'
+import { migrateImportedMariaDb } from './migration/mariadbEngine'
 import { setSqliteSpawner } from './sqlite/spawner'
 import { electronSqliteSpawner } from './sqlite/electronSpawner'
 import {
@@ -59,6 +60,11 @@ app.whenReady().then(async () => {
   // them. Headless runs leave it to the next interactive start: macOS may ask
   // for keychain access and nobody would be there to answer.
   if (!runJobId) await runSecretMigration(ctx, { keychain: switches.legacyKeychain })
+  // P5: connections imported from MariaDB entries become MariaDB connections (once; idempotent).
+  if (!runJobId) {
+    const promoted = migrateImportedMariaDb(ctx.connections)
+    if (promoted) log.info(`${promoted} imported MariaDB connection(s) now use the MariaDB engine`)
+  }
   // SQLite connections run in utility processes (src/main/sqlite/worker.ts).
   setSqliteSpawner(electronSqliteSpawner)
   registerAllHandlers(ctx)

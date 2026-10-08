@@ -93,9 +93,8 @@ describe('engine availability', () => {
     )
     // PostgreSQL ships a driver (preview) since 0.2.0.
     expect(engineAvailabilityError({ engine: 'postgresql' })).toBeNull()
-    expect(engineAvailabilityError({ engine: 'mariadb' })).toBe(
-      'MariaDB todavía no está disponible en esta versión de Vortaq.'
-    )
+    // MariaDB ships the mysql2 driver since 2.0.0 (P5).
+    expect(engineAvailabilityError({ engine: 'mariadb' })).toBeNull()
     // SQLite ships a driver (preview) since 0.2.0: a file is required instead.
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
       'SQLite: selecciona el archivo de la base de datos.'

@@ -29,6 +29,8 @@ export interface TablePlanner {
 export interface TypeCatalog {
   /** Table storage engines offered in the designer (MySQL ENGINE=). */
   tableEngines: string[]
+  /** Column types of the MySQL-family designer; absent = MySQL's COLUMN_TYPES. */
+  columnTypes?: string[]
 }
 
 /** DDL editor: templates and the script that applies an edited CREATE statement. */

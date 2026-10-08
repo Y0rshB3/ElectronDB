@@ -398,8 +398,19 @@ const PG_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
   ]
 }
 
+/** MariaDB sequences: options instead of PostgreSQL's current value and owner. */
+const MARIADB_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
+  sequences: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({ key: 'kind', title: 'Tipo', value: (o) => o.kind ?? '' }),
+    col<ObjectSummary>({ key: 'detail', title: 'Definición', value: (o) => o.detail ?? '' }),
+    col<ObjectSummary>({ key: 'comment', title: 'Comentario', value: (o) => o.comment ?? '' })
+  ]
+}
+
 /** Columns of a group for a connection's engine (MySQL: GROUP_COLUMNS unchanged). */
 export function columnsFor(group: GroupKind, engine?: EngineId | null): ObjectColumn<unknown>[] {
+  if (engine === 'mariadb') return MARIADB_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   if (engine === 'postgresql') return PG_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   if (engine === 'sqlite') return SQLITE_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   if (engine === 'mongodb') return MONGO_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
@@ -489,7 +500,11 @@ const row = (label: string, value: string | null | undefined): DetailRow => ({
 })
 
 /** Detail rows shown in the Info panel for a selected object. */
-export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
+export function objectDetails(
+  group: GroupKind,
+  item: unknown,
+  engine?: EngineId | null
+): DetailRow[] {
   switch (group) {
     case 'tables': {
       const t = item as TableInfo
@@ -581,6 +596,9 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
     }
     case 'sequences': {
       const o = item as ObjectSummary
+      // MariaDB sequences carry their options in `detail` and have no owner.
+      if (engine === 'mariadb')
+        return [row('Tipo', o.kind), row('Definición', o.detail), row('Comentario', o.comment)]
       return [
         row('Tipo', o.kind),
         row('Valor actual', o.detail),

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MARIADB_SEQUENCES_SQL,
+  describeMariaDbSequence,
   describeSkippedObjects,
   isMariaDbSession,
+  jsonColumnsFromChecks,
+  listMariaDbSequences,
   skippedFromTableTypes,
   unquoteMariaDbDefault
 } from './mariadb'
@@ -84,5 +88,70 @@ describe('MariaDB extended type labels', () => {
     )
     expect(extendedTypeLabel({ name: 'n', columnType: 0x03 })).toBe('INT')
     expect(toQueryColumn({ name: 'j', columnType: 0xfc, extendedFormat: 'json' }).type).toBe('JSON')
+  })
+})
+
+describe('MariaDB engine helpers (P5)', () => {
+  it('recognises JSON columns from their json_valid column check', () => {
+    expect(
+      jsonColumnsFromChecks([
+        { name: 'doc', clause: 'json_valid(`doc`)' },
+        { name: 'a`b', clause: 'json_valid(`a``b`)' },
+        { name: 'other', clause: 'json_valid(`doc`)' },
+        { name: 'price', clause: '`price` > 0' }
+      ])
+    ).toEqual(new Set(['doc', 'a`b']))
+  })
+
+  it('describes a sequence from information_schema.SEQUENCES', () => {
+    expect(
+      describeMariaDbSequence({
+        seqStart: '500',
+        seqStep: 1,
+        seqMin: '1',
+        seqMax: '9223372036854775806',
+        seqCycle: 0
+      })
+    ).toBe('inicio 500 · incremento 1 · 1…9223372036854775806 · sin ciclo')
+    expect(describeMariaDbSequence({ seqCycle: 1 })).toContain('cíclica')
+  })
+
+  it('lists sequences, falling back to information_schema.TABLES on older servers', async () => {
+    const calls: string[] = []
+    const modern = {
+      query: async <T>(sql: string): Promise<T[]> => {
+        calls.push(sql)
+        return [
+          {
+            name: 's1',
+            dataType: 'bigint',
+            seqStart: 1,
+            seqStep: 1,
+            seqMin: 1,
+            seqMax: 9,
+            seqCycle: 0
+          }
+        ] as T[]
+      }
+    }
+    expect(await listMariaDbSequences(modern, 'db')).toEqual([
+      {
+        name: 's1',
+        type: 'sequence',
+        schema: 'db',
+        kind: 'bigint',
+        detail: 'inicio 1 · incremento 1 · 1…9 · sin ciclo'
+      }
+    ])
+    const old = {
+      query: async <T>(sql: string): Promise<T[]> => {
+        if (sql.includes('SEQUENCES')) throw new Error("Unknown table 'SEQUENCES'")
+        return [{ name: 's2', comment: '' }] as T[]
+      }
+    }
+    expect(await listMariaDbSequences(old, 'db')).toEqual([
+      { name: 's2', type: 'sequence', schema: 'db', detail: null, comment: undefined }
+    ])
+    expect(calls[0]).toBe(MARIADB_SEQUENCES_SQL)
   })
 })

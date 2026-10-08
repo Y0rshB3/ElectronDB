@@ -66,13 +66,15 @@ export function requireCapability(
 export const CAPABILITY_MESSAGES = {
   /** SessionFactory: the session type backups and jobs use is MySQL's. */
   sessions:
-    'Las copias de seguridad y la automatización solo están disponibles para conexiones MySQL.',
+    'Las copias de seguridad y la automatización solo están disponibles para conexiones MySQL y MariaDB.',
   backups: (name: string, engine: string): string =>
-    `Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL; «${name}» es ${engine}.`,
+    `Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL y MariaDB; «${name}» es ${engine}.`,
   automation: (name: string, engine: string): string =>
-    `Las tareas automáticas solo pueden usar conexiones MySQL; «${name}» es ${engine}.`,
+    `Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «${name}» es ${engine}.`,
   events: (name: string, engine: string): string =>
-    `Los eventos programados no existen en ${engine} («${name}»).`
+    `Los eventos programados no existen en ${engine} («${name}»).`,
+  sequences: (name: string, engine: string): string =>
+    `«${name}» es una conexión ${engine}: las secuencias de MySQL/MariaDB solo existen en conexiones MariaDB.`
 } as const
 
 /** requireCapability with the connection's own name and engine label in the message. */

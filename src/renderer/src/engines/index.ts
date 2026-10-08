@@ -1,7 +1,7 @@
 /**
  * Engine UI registry (docs/multi-engine-design.md, section 8.1). MySQL,
- * PostgreSQL and SQLite (previews) have renderer modules; the other engines register
- * theirs in their own phases. Capability checks read the shared descriptors
+ * MariaDB, PostgreSQL and SQLite have renderer modules; MongoDB has its own
+ * views instead (no SQL dialect). Capability checks read the shared descriptors
  * (`@shared/engines`), so they work for every engine, with or without a UI.
  */
 import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from 'vue'
@@ -14,12 +14,14 @@ import {
 import type { EngineId, ServerRuntime } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { descriptorOf } from './capabilities'
+import { mariadbUi } from './mariadb'
 import { mysqlUi } from './mysql'
 import { postgresqlUi } from './postgresql'
 import { sqliteUi } from './sqlite'
 import type { EngineUi } from './types'
 
 export type { DdlSupport, EngineUi, TablePlanner, TypeCatalog, UserSqlBuilder } from './types'
+export { mariadbUi } from './mariadb'
 export { mysqlUi } from './mysql'
 export { postgresqlUi } from './postgresql'
 export { sqliteUi } from './sqlite'
@@ -27,6 +29,7 @@ export { can, descriptorOf, groupsFor } from './capabilities'
 
 const UIS: Partial<Record<EngineId, EngineUi>> = {
   mysql: mysqlUi,
+  mariadb: mariadbUi,
   postgresql: postgresqlUi,
   sqlite: sqliteUi
 }

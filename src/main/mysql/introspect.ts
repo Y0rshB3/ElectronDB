@@ -4,6 +4,7 @@ import type {
   EventInfo,
   ForeignKeyInfo,
   IndexInfo,
+  ObjectSummary,
   ObjectType,
   RoutineInfo,
   ServerInfo,
@@ -16,7 +17,14 @@ import { MysqlUserError } from './errors'
 import { isSystemSchema } from '@shared/restoreTask'
 import { detectMysqlFlavor, mysqlReturning, mysqlVersionNumber } from '@shared/serverFlavor'
 import type { EngineId } from '@shared/types'
-import { MARIADB_LIST_TABLES_SQL, isMariaDbSession, unquoteMariaDbDefault } from './mariadb'
+import {
+  MARIADB_COLUMN_CHECKS_SQL,
+  MARIADB_LIST_TABLES_SQL,
+  isMariaDbSession,
+  jsonColumnsFromChecks,
+  listMariaDbSequences,
+  unquoteMariaDbDefault
+} from './mariadb'
 
 /** The subset of MysqlSession introspection needs (also satisfied by a bare connection). */
 export interface Queryable {
@@ -272,12 +280,32 @@ export async function listColumns(
     comment: text(r.COLUMN_COMMENT)
   }))
   if (!isMariaDbSession(q)) return columns
+  // MariaDB: JSON is LONGTEXT plus a json_valid() column check; report it as json.
+  const json = columns.some((c) => c.dataType.toLowerCase() === 'longtext')
+    ? await mariaDbJsonColumns(q, schema, table)
+    : new Set<string>()
   // MariaDB: 'NULL' / quoted literals in COLUMN_DEFAULT, INVISIBLE columns hidden from SELECT *.
   return columns.map((c) => ({
     ...c,
+    ...(json.has(c.name) ? { dataType: 'json', columnType: 'json' } : {}),
     defaultValue: unquoteMariaDbDefault(c.defaultValue),
     hidden: /\bINVISIBLE\b/i.test(c.extra)
   }))
+}
+
+/** Columns of a MariaDB table declared JSON (best effort: [] when the catalog lacks the view). */
+async function mariaDbJsonColumns(
+  q: Queryable,
+  schema: string,
+  table: string
+): Promise<Set<string>> {
+  try {
+    return jsonColumnsFromChecks(
+      await q.query<{ name: unknown; clause: unknown }>(MARIADB_COLUMN_CHECKS_SQL, [schema, table])
+    )
+  } catch {
+    return new Set()
+  }
 }
 
 export async function listIndexes(
@@ -464,6 +492,38 @@ export async function dropObject(
 ): Promise<void> {
   assertObjectType(type)
   await q.query(`DROP ${SHOW_CREATE_KEYWORD[type]} ${qualified(schema, name)}`)
+}
+
+/** Sequences exist only on MariaDB servers (MariaDB engine, P5). */
+function assertMariaDbSequences(q: Queryable): void {
+  if (!isMariaDbSession(q))
+    throw new MysqlUserError('Las secuencias solo existen en servidores MariaDB')
+}
+
+/** SHOW CREATE SEQUENCE (MariaDB). */
+export async function showCreateSequence(
+  q: Queryable,
+  schema: string,
+  name: string
+): Promise<string> {
+  assertMariaDbSequences(q)
+  const rows = await q.query<Row>(`SHOW CREATE SEQUENCE ${qualified(schema, name)}`)
+  const row = rows[0]
+  const key = row ? Object.keys(row).find((k) => /^create /i.test(k)) : undefined
+  if (!row || !key || row[key] === null || row[key] === undefined)
+    throw new MysqlUserError(`La secuencia ${schema}.${name} no existe`)
+  return String(row[key])
+}
+
+export async function dropSequence(q: Queryable, schema: string, name: string): Promise<void> {
+  assertMariaDbSequences(q)
+  await q.query(`DROP SEQUENCE ${qualified(schema, name)}`)
+}
+
+/** Sequences of a database (MariaDB); [] on MySQL servers. */
+export async function listSequences(q: Queryable, schema: string): Promise<ObjectSummary[]> {
+  if (!isMariaDbSession(q)) return []
+  return listMariaDbSequences(q, schema)
 }
 
 /* ---------- charsets ---------- */

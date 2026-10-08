@@ -73,6 +73,5 @@ export const SQLITE_ENCRYPTED_REASON =
   'Archivo SQLite cifrado: Vortaq no puede abrir bases de datos SQLite cifradas'
 
 export const FOREIGN_PATH_WARNING = 'Ruta de otro equipo: revísala'
-export const MARIADB_AS_MYSQL_WARNING = 'MariaDB se importa como conexión MySQL'
 export const unsupportedEngine = (label: string): string =>
   `Motor no soportado en esta versión: ${label}`

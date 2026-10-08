@@ -144,6 +144,7 @@ export function useObjectActions() {
 
   async function dropObject(node: TreeNode): Promise<void> {
     if (node.database !== undefined) return dropPgObject(node)
+    if (node.group === 'sequences') return dropMariaDbSequence(node)
     const type = objectTypeOf(node)
     if (!type || !node.schema || !node.name) return
     const ok = await confirmDestructive({
@@ -204,10 +205,69 @@ export function useObjectActions() {
       await copyText(ddl, 'DDL')
       return
     }
+    if (node.group === 'sequences' && node.schema && node.name) {
+      const ddl = await api.db.showCreate(node.connectionId, node.schema, 'sequence', node.name)
+      await copyText(ddl, 'DDL')
+      return
+    }
     const type = objectTypeOf(node)
     if (!type || !node.schema || !node.name) return
     const ddl = await api.db.showCreate(node.connectionId, node.schema, type, node.name)
     await copyText(ddl, 'DDL')
+  }
+
+  /* ---------- MariaDB sequences ---------- */
+
+  async function dropMariaDbSequence(node: TreeNode): Promise<void> {
+    if (!node.schema || !node.name) return
+    const target = qualified(node.schema, node.name)
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Eliminar secuencia',
+      message: `Se eliminará la secuencia ${target} de forma permanente.`,
+      confirmText: 'Eliminar',
+      destructive: {
+        title: `¿Eliminar la secuencia «${node.name}»?`,
+        message: 'Se eliminará de forma permanente. Esta acción no se puede deshacer.',
+        items: [{ tag: 'DROP SEQUENCE', text: target }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    await api.db.dropObject(node.connectionId, node.schema, 'sequence', node.name, {
+      confirmProduction: true
+    })
+    notify.success(`${node.name} eliminado`)
+    await tree.loadGroup(node.connectionId, node.schema, 'sequences', true)
+  }
+
+  /** MariaDB sequence actions: state (a read) and the next value (SETVAL, a guarded write). */
+  function mariaDbSequenceItems(node: TreeNode): MenuAction[] {
+    const c = node.connectionId
+    const s = node.schema!
+    const target = qualified(s, node.name!)
+    return [
+      {
+        key: 'seqState',
+        label: 'Ver estado',
+        icon: 'mdi-numeric',
+        action: () =>
+          ws.openQuery(c, s, {
+            sql: `SELECT next_not_cached_value, minimum_value, maximum_value, increment, cache_size, cycle_option, cycle_count\n  FROM ${target};`,
+            name: `Estado de ${node.name}`
+          })
+      },
+      {
+        key: 'setval',
+        label: 'Fijar siguiente valor…',
+        icon: 'mdi-numeric-positive-1',
+        action: () =>
+          ws.openQuery(c, s, {
+            sql: `-- El siguiente NEXTVAL devolverá el valor posterior a este.\nSELECT SETVAL(${target}, 1);`,
+            name: `SETVAL ${node.name}`
+          })
+      }
+    ]
   }
 
   /* ---------- PostgreSQL (preview) ---------- */
@@ -1504,6 +1564,21 @@ export function useObjectActions() {
             action: () => ws.openQuery(c, s)
           }
         ]
+      case 'sequences':
+        // MariaDB (the only MySQL-family engine with sequences).
+        if (!caps.sequences) return []
+        return [
+          {
+            key: 'new',
+            label: 'Nueva secuencia',
+            icon: 'mdi-plus',
+            action: () =>
+              ws.openQuery(c, s, {
+                sql: `CREATE SEQUENCE ${qualified(s, 'nueva_secuencia')}\n  START WITH 1 INCREMENT BY 1;`,
+                name: 'Nueva secuencia'
+              })
+          }
+        ]
       case 'backups':
         if (!caps.supportsBackupsNb3) return []
         return [
@@ -1668,6 +1743,7 @@ export function useObjectActions() {
         icon: 'mdi-table-edit',
         action: () => ws.designNode(node)
       })
+    if (node.group === 'sequences') items.push(...mariaDbSequenceItems(node))
     items.push(...newObjectFor({ ...node, kind: 'group' }))
     items.push({ key: 'd1', label: '', divider: true })
     if (isBackup) {

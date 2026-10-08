@@ -281,19 +281,13 @@ describe('ConnectionManager with the real registry', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('refuses to open or test a MariaDB connection in this build', async () => {
-    const { id } = ctx.connections.save(input('Maria', 'mariadb'))
+  it('opens a MariaDB connection with the MySQL driver (connection refused, not unavailable)', async () => {
+    const { id } = ctx.connections.save({ ...input('Maria', 'mariadb'), port: 1 })
     ctx.credentials.set('mysql', id, 'pw')
     const manager = getConnectionManager(ctx)
-    await expect(manager.open(id)).rejects.toThrow(
-      'MariaDB todavía no está disponible en esta versión de Vortaq.'
-    )
+    const err = await manager.open(id).catch((e: unknown) => e)
+    expect((err as Error).message).not.toMatch(/todavía no está disponible/)
     expect(manager.isOpen(id)).toBe(false)
-    const res = await manager.test(input('Maria', 'mariadb'), 'pw', null)
-    expect(res).toMatchObject({
-      ok: false,
-      error: 'MariaDB todavía no está disponible en esta versión de Vortaq.'
-    })
   })
 
   it('gives backups and jobs no session on a PostgreSQL connection', async () => {

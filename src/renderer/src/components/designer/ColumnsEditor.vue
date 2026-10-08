@@ -11,6 +11,13 @@ import {
   splitColumnType
 } from './columnType'
 
+const props = withDefaults(
+  defineProps<{
+    /** Type list of the engine (MariaDB adds uuid/inet types); MySQL's by default. */
+    columnTypes?: string[]
+  }>(),
+  { columnTypes: () => COLUMN_TYPES }
+)
 const model = defineModel<ColumnDraft[]>({ required: true })
 const selected = ref<number | null>(null)
 
@@ -140,7 +147,7 @@ function move(delta: number): void {
             <td>
               <v-combobox
                 :model-value="splitColumnType(col.columnType).base"
-                :items="COLUMN_TYPES"
+                :items="props.columnTypes"
                 density="compact"
                 variant="plain"
                 hide-details

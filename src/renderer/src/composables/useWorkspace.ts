@@ -302,6 +302,11 @@ export function useWorkspace() {
         return openQuery(connectionId, schema, { savedQueryId: name })
       case 'backups':
         return openBackups(connectionId, schema)
+      case 'sequences': {
+        // MariaDB: no dedicated editor, the DDL opens in a query tab (read it, edit it, run it).
+        const ddl = await api.db.showCreate(connectionId, schema, 'sequence', name)
+        return openQuery(connectionId, schema, { sql: ddl, name })
+      }
     }
   }
 

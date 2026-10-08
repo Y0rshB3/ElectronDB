@@ -1,5 +1,4 @@
 import { isAbsolutePathFor } from '@shared/connectionValidation'
-import { engineOf } from '@shared/engines'
 import type {
   EngineId,
   MongoAuthMechanism,
@@ -10,7 +9,6 @@ import type {
 } from '@shared/types'
 import {
   FOREIGN_PATH_WARNING,
-  MARIADB_AS_MYSQL_WARNING,
   sqliteFileReviewWarning,
   unsupportedEngine,
   type FileExists,
@@ -56,21 +54,9 @@ export interface EngineChoice {
   warning: string | null
 }
 
-/**
- * Engine Vortaq creates for a MySQL-family connection. MariaDB uses the MySQL
- * driver while the mariadb engine has no driver in this build.
- */
+/** Engine Vortaq creates for a MySQL-family connection (MariaDB is its own engine since P5). */
 export function mysqlFamily(isMariaDb: boolean): EngineChoice {
-  if (!isMariaDb) return { engine: 'mysql', unsupportedReason: null, warning: null }
-  let mariaAvailable = false
-  try {
-    mariaAvailable = engineOf({ engine: 'mariadb' }).available
-  } catch {
-    mariaAvailable = false
-  }
-  return mariaAvailable
-    ? { engine: 'mariadb', unsupportedReason: null, warning: null }
-    : { engine: 'mysql', unsupportedReason: null, warning: MARIADB_AS_MYSQL_WARNING }
+  return { engine: isMariaDb ? 'mariadb' : 'mysql', unsupportedReason: null, warning: null }
 }
 
 export function unsupported(label: string): EngineChoice {
