@@ -97,6 +97,31 @@ export interface EngineCapabilities {
   /** MongoDB views instead of SQL views. */
   documentModel: boolean
   designer: 'table' | 'collection'
+  /** AI assistant (structure only): see AiCapability. */
+  ai: AiCapability
+}
+
+/**
+ * What the AI assistant can read and do per engine (CLAUDE.md, AI privacy
+ * rule). Main picks the structure reader from `reader`; the panel words the
+ * scope menu from `scope`.
+ */
+export interface AiCapability {
+  /**
+   * The only structure source: information_schema (MetadataQueryable),
+   * pg_catalog (PgMetadataQueryable), sqlite_schema/pragmas
+   * (SqliteMetadataQueryable) or sampled field types (MongoStructureSource).
+   */
+  reader: 'information_schema' | 'pg_catalog' | 'sqlite_schema' | 'mongo_sample'
+  /** Plan of a single SELECT on user action; MongoDB never (it would run the pipeline). */
+  explain: 'explain' | 'explain-query-plan' | false
+  /**
+   * What «Toda la conexión» covers: every database of the server, the schemas
+   * of the current PostgreSQL database, or SQLite main plus its attachments.
+   */
+  scope: 'databases' | 'schemas' | 'attached'
+  /** What the assistant writes. */
+  language: 'sql' | 'mongo-shell'
 }
 
 export interface EngineDescriptor {
@@ -141,7 +166,8 @@ const MYSQL_FAMILY = {
   resultAliasMetadata: true,
   cancel: 'kill-query',
   documentModel: false,
-  designer: 'table'
+  designer: 'table',
+  ai: { reader: 'information_schema', explain: 'explain', scope: 'databases', language: 'sql' }
 } as const satisfies Partial<EngineCapabilities>
 
 export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
@@ -229,7 +255,8 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       cancel: 'pg-cancel',
       sqlDialect: 'postgresql',
       documentModel: false,
-      designer: 'table'
+      designer: 'table',
+      ai: { reader: 'pg_catalog', explain: 'explain', scope: 'schemas', language: 'sql' }
     }
   },
   sqlite: {
@@ -275,7 +302,13 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       cancel: 'kill-process',
       sqlDialect: 'sqlite',
       documentModel: false,
-      designer: 'table'
+      designer: 'table',
+      ai: {
+        reader: 'sqlite_schema',
+        explain: 'explain-query-plan',
+        scope: 'attached',
+        language: 'sql'
+      }
     }
   },
   mongodb: {
@@ -321,7 +354,8 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       cancel: 'kill-op',
       sqlDialect: null,
       documentModel: true,
-      designer: 'collection'
+      designer: 'collection',
+      ai: { reader: 'mongo_sample', explain: false, scope: 'databases', language: 'mongo-shell' }
     }
   }
 }

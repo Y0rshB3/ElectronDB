@@ -54,6 +54,7 @@ export function getAiService(ctx: AppContext): AiService {
       return session
     },
     isMongo: (id) => ctx.connections.get(id)?.engine === 'mongodb',
+    engineOf: (id) => ctx.connections.get(id)?.engine ?? null,
     mongoSource: async (connectionId) => {
       const { isMongoConnection } = await import('../mongo/connection')
       const { mongoStructureSource } = await import('./mongoMetadata')

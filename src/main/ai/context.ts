@@ -107,6 +107,20 @@ export interface SchemaContext {
 }
 
 /**
+ * "(MySQL 8.4.3)", "(MariaDB 11.8.9)", "(PostgreSQL 17.2 …)": MySQL-family
+ * snapshots carry a bare VERSION(); other engines name themselves.
+ */
+export function versionLabel(serverVersion: string): string {
+  if (!serverVersion) return ''
+  const maria = /^(?:5\.5\.5-)?(\d+\.\d+\.\d+)[^\s]*-MariaDB/i.exec(serverVersion)
+  if (maria) return ` (MariaDB ${maria[1]})`
+  return ` (${/^\d/.test(serverVersion) ? 'MySQL ' : ''}${serverVersion})`
+}
+
+const LEGEND =
+  'Leyenda: PK clave primaria, UQ única, AI auto_increment, GEN generada, ? admite NULL, ~N filas estimadas, «comentario».'
+
+/**
  * Schema text. When everything fits under the cap it is the plain alphabetical
  * listing (stable across questions). Otherwise tables are ordered by priority
  * (open tab, tables named in the hints, their FK neighbours, then the rest
@@ -117,21 +131,112 @@ export function buildSchemaContext(
   snap: SchemaSnapshot,
   options: SchemaContextOptions = {}
 ): SchemaContext {
-  const cap = options.cap ?? DEFAULT_CONTEXT_CAP
   const header = [
-    // MySQL snapshots carry a bare version ("8.4.3"); other engines name themselves.
-    `Base de datos: ${snap.schema}${snap.serverVersion ? ` (${/^\d/.test(snap.serverVersion) ? 'MySQL ' : ''}${snap.serverVersion})` : ''}`,
-    `Tablas y vistas: ${snap.tables.length}. Leyenda: PK clave primaria, UQ única, AI auto_increment, GEN generada, ? admite NULL, ~N filas estimadas, «comentario».`
+    `Base de datos: ${snap.schema}${versionLabel(snap.serverVersion)}`,
+    `Tablas y vistas: ${snap.tables.length}. ${LEGEND}`
   ]
-  const lines = snap.tables.map((t) => ({ name: t.name, line: formatTable(t, snap.schema) }))
-  const routines = snap.routines.map(formatRoutine)
+  return layout(header, snap.tables, snap.routines.map(formatRoutine), snap.schema, options)
+}
+
+/** Max namespaces written with structure in a whole-connection context; the rest go by name. */
+export const MAX_CONTEXT_DATABASES = 40
+
+/**
+ * Words of a whole-connection context, per engine: what the namespaces are
+ * (MySQL/MariaDB/MongoDB databases, PostgreSQL schemas of one database, SQLite
+ * main and its attachments) and how names are qualified.
+ */
+export interface ScopeWording {
+  /** Start of the header: «Conexión completa», «Base de datos tienda completa»… */
+  whole: string
+  /** «bases de datos», «esquemas». */
+  plural: string
+  /** «Base de datos seleccionada», «Esquema seleccionado». */
+  selected: string
+  /** «base.tabla», «esquema.tabla», «base.colección». */
+  qualified: string
+  /** «Otras bases de datos», «Otros esquemas». */
+  others: string
+}
+
+export const DATABASES_WORDING: ScopeWording = {
+  whole: 'Conexión completa',
+  plural: 'bases de datos',
+  selected: 'Base de datos seleccionada',
+  qualified: 'base.tabla',
+  others: 'Otras bases de datos'
+}
+
+/**
+ * Whole-connection text: every namespace's tables as `namespace.table` (FKs
+ * too), so the model can write queries that cross them. Prioritised like
+ * buildSchemaContext when over the cap, with the selected namespace's tables
+ * ahead of the others'. `snaps` must be sorted by name.
+ */
+export function buildConnectionContext(
+  snaps: SchemaSnapshot[],
+  selected: string | null,
+  options: SchemaContextOptions & { otherDatabases?: string[]; wording?: ScopeWording } = {}
+): SchemaContext {
+  const wording = options.wording ?? DATABASES_WORDING
+  const version = snaps.find((s) => s.serverVersion)?.serverVersion ?? ''
+  const tables: TableMeta[] = []
+  const routines: string[] = []
+  for (const snap of snaps) {
+    for (const t of snap.tables)
+      tables.push({
+        ...t,
+        name: `${snap.schema}.${t.name}`,
+        foreignKeys: t.foreignKeys.map((f) => ({
+          ...f,
+          refTable: `${f.refSchema || snap.schema}.${f.refTable}`,
+          refSchema: ''
+        }))
+      })
+    for (const r of snap.routines)
+      routines.push(formatRoutine({ ...r, name: `${snap.schema}.${r.name}` }))
+  }
+  const names = snaps.map((s) => s.schema)
+  const header = [
+    `${wording.whole}${versionLabel(version)}: ${names.length} ${wording.plural} (${names.join(', ') || '—'}).${selected ? ` ${wording.selected}: ${selected}.` : ''}`,
+    `Tablas y vistas: ${tables.length}, escritas como ${wording.qualified}. ${LEGEND}`
+  ]
+  if (options.otherDatabases?.length)
+    header.push(
+      `${wording.others} (solo el nombre; pide su estructura con get_table_structure): ${options.otherDatabases.join(', ')}`
+    )
+  return layout(header, tables, routines, '', {
+    ...options,
+    openTable: options.openTable && selected ? `${selected}.${options.openTable}` : null,
+    preferred: selected ? `${selected.toLowerCase()}.` : null
+  })
+}
+
+/** Lower-case name and, for `database.table`, the database and the bare table name. */
+function nameParts(name: string): { full: string; db: string | null; bare: string } {
+  const full = name.toLowerCase()
+  const dot = full.indexOf('.')
+  return dot < 0
+    ? { full, db: null, bare: full }
+    : { full, db: full.slice(0, dot), bare: full.slice(dot + 1) }
+}
+
+function layout(
+  header: string[],
+  tables: TableMeta[],
+  routines: string[],
+  schema: string,
+  options: SchemaContextOptions & { preferred?: string | null }
+): SchemaContext {
+  const cap = options.cap ?? DEFAULT_CONTEXT_CAP
+  const lines = tables.map((t) => ({ name: t.name, line: formatTable(t, schema) }))
   const routineBlock = routines.length ? ['', 'Rutinas:', ...routines] : []
   const full = [...header, '', ...lines.map((l) => l.line), ...routineBlock].join('\n')
   if (full.length <= cap)
     return {
       text: full,
       truncated: false,
-      tableCount: snap.tables.length,
+      tableCount: tables.length,
       detailed: lines.map((l) => l.name)
     }
 
@@ -139,23 +244,27 @@ export function buildSchemaContext(
   const mentioned = mentionedNames(...(options.hints ?? []))
   const open = options.openTable?.toLowerCase() ?? null
   const rank = new Map<string, number>()
-  for (const t of snap.tables) {
-    const lower = t.name.toLowerCase()
+  for (const t of tables) {
+    const { full: lower, db, bare } = nameParts(t.name)
     if (open && lower === open) rank.set(t.name, 0)
-    else if (mentioned.has(lower)) rank.set(t.name, 1)
+    else if (mentioned.has(lower) || mentioned.has(bare)) rank.set(t.name, 1)
+    else if (db && mentioned.has(db)) rank.set(t.name, 2)
   }
-  for (const t of snap.tables) {
+  for (const t of tables) {
     if (rank.has(t.name)) continue
     const linked =
       t.foreignKeys.some((f) => (rank.get(f.refTable) ?? 9) <= 1) ||
-      snap.tables.some(
+      tables.some(
         (o) => (rank.get(o.name) ?? 9) <= 1 && o.foreignKeys.some((f) => f.refTable === t.name)
       )
     if (linked) rank.set(t.name, 2)
   }
+  const preferred = options.preferred ?? null
+  const fallback = (name: string): number =>
+    preferred && name.toLowerCase().startsWith(preferred) ? 3 : 4
   const ordered = [...lines].sort((a, b) => {
-    const ra = rank.get(a.name) ?? 3
-    const rb = rank.get(b.name) ?? 3
+    const ra = rank.get(a.name) ?? fallback(a.name)
+    const rb = rank.get(b.name) ?? fallback(b.name)
     return ra - rb || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
   })
 
@@ -198,21 +307,31 @@ export function buildSchemaContext(
   return {
     text,
     truncated: true,
-    tableCount: snap.tables.length,
+    tableCount: tables.length,
     detailed: ordered.slice(0, detailed.length).map((l) => l.name)
   }
 }
 
-/** Memory notes block (connection then database). Empty notes are omitted. */
+/**
+ * Memory notes block (connection, then each database in order). Empty notes
+ * are omitted. `databaseNotes` is a single database's notes or a list of them.
+ */
 export function buildMemoryBlock(
   connectionNotes: string,
-  databaseNotes: string,
-  schema: string | null
+  databaseNotes: string | { schema: string; notes: string }[],
+  schema: string | null = null
 ): string {
+  const perDatabase =
+    typeof databaseNotes === 'string'
+      ? schema
+        ? [{ schema, notes: databaseNotes }]
+        : []
+      : databaseNotes
   const parts: string[] = []
   if (connectionNotes.trim())
     parts.push(`Notas del usuario sobre esta conexión:\n${connectionNotes.trim()}`)
-  if (schema && databaseNotes.trim())
-    parts.push(`Notas del usuario sobre la base de datos ${schema}:\n${databaseNotes.trim()}`)
+  for (const d of perDatabase)
+    if (d.notes.trim())
+      parts.push(`Notas del usuario sobre la base de datos ${d.schema}:\n${d.notes.trim()}`)
   return parts.join('\n\n')
 }

@@ -10,7 +10,7 @@ import { explainSelect, formatPlan, isSingleSelect } from './explain'
 import { isMetadataSql, type Queryable } from './metadata'
 import { buildUserMessage, trimHistory } from './prompts'
 import { normalizeProviderInput, resolveBaseUrl } from './providers'
-import { AiService, type BorrowedSession } from './service'
+import { AiService, type AiServiceDeps, type BorrowedSession } from './service'
 import { AiConversationsRepo, AiMemoryRepo } from './store'
 
 let dir: string
@@ -216,7 +216,9 @@ const SETTINGS: AppSettings = {
   previewEngines: false
 }
 
-function harness(options: { settings?: Partial<AppSettings>; answer?: string } = {}) {
+function harness(
+  options: { settings?: Partial<AppSettings>; answer?: string; deps?: Partial<AiServiceDeps> } = {}
+) {
   const credentials = new CredentialStore(dir, plainCodec, 'plain')
   const events: { channel: string; payload: unknown }[] = []
   const sessionSql: string[] = []
@@ -264,7 +266,8 @@ function harness(options: { settings?: Partial<AppSettings>; answer?: string } =
     acquire,
     emit: (channel, payload) => events.push({ channel, payload }),
     log: { info: () => undefined, warn: () => undefined },
-    adapterFactory: () => fakeAdapter
+    adapterFactory: () => fakeAdapter,
+    ...options.deps
   })
   const done = (): Promise<AiDoneEvent> =>
     vi.waitFor(() => {
@@ -400,14 +403,99 @@ describe('AiService', () => {
     await h2.done()
     expect(h2.sessionSql.filter((s) => !isMetadataSql(s))).toEqual([])
     expect(h2.requests[0].userMessage).not.toContain('EXPLAIN plan (from the server')
-    expect(h2.acquire).toHaveBeenCalledTimes(1) // metadata only, no session for EXPLAIN
+    expect(h2.acquire).toHaveBeenCalledTimes(2) // metadata only (structure + database names), no session for EXPLAIN
   })
 
-  it('lists the databases when none is selected', async () => {
+  it('sees the whole connection when no database is selected', async () => {
     const h = harness()
     const preview = await h.service.buildContext({ connectionId: 'c1', schema: null })
-    expect(preview.context).toContain('Bases de datos de la conexión: app, crm.')
+    expect(preview.context).toContain(
+      'Conexión completa (MySQL 8.4.3): 2 bases de datos (app, crm).'
+    )
+    expect(preview.context).toContain('app.orders')
+    expect(preview.context).toContain('crm.orders')
+    expect(preview.tableCount).toBe(2)
     expect(preview.chars).toBe(preview.instructions.length + preview.context.length)
+    expect(h.sessionSql.every(isMetadataSql)).toBe(true)
+  })
+
+  it('names the other databases when only one is in scope', async () => {
+    const h = harness()
+    const preview = await h.service.buildContext({ connectionId: 'c1', schema: 'app' })
+    expect(preview.context).toContain('Base de datos: app')
+    expect(preview.context).toContain('Otras bases de datos de esta conexión')
+    expect(preview.context).toContain(': crm.')
+    expect(preview.context).not.toContain('crm.orders')
+  })
+
+  it('includes every database with scope «connection», keeping the notes of each', async () => {
+    const h = harness()
+    h.service.memory.set('c1', 'crm', 'clientes del CRM')
+    const preview = await h.service.buildContext({
+      connectionId: 'c1',
+      schema: 'app',
+      scope: 'connection'
+    })
+    expect(preview.context).toContain('Base de datos seleccionada: app.')
+    expect(preview.context).toContain('crm.orders')
+    expect(preview.context).toContain(
+      'Notas del usuario sobre la base de datos crm:\nclientes del CRM'
+    )
+  })
+
+  it('a chat request with scope «connection» sends every database', async () => {
+    const h = harness()
+    h.service.saveProvider({
+      name: 'Claude',
+      type: 'anthropic',
+      baseUrl: '',
+      model: 'claude-opus-5-5'
+    })
+    h.service.startChat({
+      providerId: null,
+      connectionId: 'c1',
+      schema: 'app',
+      scope: 'connection',
+      mode: 'chat',
+      history: [],
+      input: '¿cómo se relacionan?'
+    })
+    await h.done()
+    expect(h.requests[0].context).toContain('crm.orders')
+    expect(h.requests[0].context).toContain('Base de datos seleccionada: app.')
+  })
+
+  it('leaves system databases out and caps the databases with structure', async () => {
+    const h = harness()
+    const names = ['mysql', 'sys', 'information_schema', 'performance_schema']
+    for (let i = 0; i < 45; i++) names.push(`db${String(i).padStart(2, '0')}`)
+    h.acquire.mockImplementation(async () => ({
+      async query<T>(sql: string): Promise<T[]> {
+        h.sessionSql.push(sql)
+        if (/SCHEMATA/.test(sql)) return names.map((name) => ({ name })) as T[]
+        if (/VERSION/.test(sql)) return [{ version: '11.8.9-MariaDB' }] as T[]
+        return []
+      },
+      release: async () => undefined
+    }))
+    const preview = await h.service.buildContext({
+      connectionId: 'c1',
+      schema: 'db44',
+      scope: 'connection'
+    })
+    expect(preview.context).toContain('(MariaDB 11.8.9): 40 bases de datos (')
+    expect(preview.context).toContain('db44')
+    expect(preview.context).not.toMatch(/\b(sys|performance_schema|information_schema)\b/)
+    expect(preview.context).toContain(
+      'Otras bases de datos (solo el nombre; pide su estructura con get_table_structure): db39, db40, db41, db42, db43'
+    )
+    expect(preview.truncated).toBe(true)
+  })
+
+  it('adds the MariaDB note on MariaDB connections', async () => {
+    const h = harness({ deps: { engineOf: () => 'mariadb' } })
+    const preview = await h.service.buildContext({ connectionId: 'c1', schema: 'app' })
+    expect(preview.context).toContain('Motor: MariaDB.')
   })
 
   it('cancels a running request', async () => {

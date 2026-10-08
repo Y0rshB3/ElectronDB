@@ -6,6 +6,7 @@ import { useNotify, errorMessage } from '@renderer/composables/useNotify'
 import { useAiStore } from '@renderer/stores/ai'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useUiStore } from '@renderer/stores/ui'
+import { descriptorOf } from '@renderer/engines/capabilities'
 import { environmentLabel, environmentPillClass } from '@renderer/components/backups/backupHelpers'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import { formatNumber } from '@renderer/utils/format'
@@ -44,11 +45,51 @@ const contextRequest = computed(() =>
     ? {
         connectionId: ai.target.connectionId,
         schema: ai.target.schema,
+        ...(ai.target.database ? { database: ai.target.database } : {}),
+        scope: ai.effectiveScope,
         input: input.value,
         openTable: ai.openTable
       }
     : null
 )
+
+/**
+ * Words of the scope menu for the connection's engine: «Toda la conexión» is
+ * every database of the server, every schema of the current PostgreSQL
+ * database, or SQLite main plus its attachments.
+ */
+const scopeWords = computed(() => {
+  const unit = descriptorOf(connection.value)?.capabilities.ai.scope ?? 'databases'
+  const schema = ai.target?.schema ?? ''
+  if (unit === 'schemas') {
+    const db = ai.target?.database || connection.value?.postgres?.initialDatabase || 'postgres'
+    return {
+      single: `Solo el esquema ${schema}`,
+      singleHint: 'Los demás esquemas se nombran y el asistente puede pedir su estructura',
+      wholeHint: `En PostgreSQL: todos los esquemas de la base de datos ${db} (las demás bases de datos de la conexión no se incluyen)`,
+      wholeLabel: `${db} · todos los esquemas`,
+      wholeTitle: `El asistente ve todos los esquemas de la base de datos ${db}`
+    }
+  }
+  if (unit === 'attached')
+    return {
+      single: `Solo ${schema}`,
+      singleHint: 'Las demás bases de datos del archivo se nombran',
+      wholeHint: 'main y todas sus bases de datos adjuntas',
+      wholeLabel: 'toda la conexión',
+      wholeTitle: 'El asistente ve main y todas las bases de datos adjuntas'
+    }
+  const mongo = connection.value?.engine === 'mongodb'
+  return {
+    single: `Solo ${schema}`,
+    singleHint: 'Las demás bases de datos se nombran y el asistente puede pedir su estructura',
+    wholeHint: mongo
+      ? 'Estructura muestreada de todas las bases de datos (sin valores), para relaciones entre ellas'
+      : 'Estructura de todas las bases de datos, para relaciones entre ellas',
+    wholeLabel: 'toda la conexión',
+    wholeTitle: 'El asistente ve todas las bases de datos de la conexión'
+  }
+})
 
 const SUGGESTIONS = [
   '¿Qué tablas hay y cómo se relacionan?',
@@ -198,10 +239,62 @@ onMounted(() => {
           <span class="ai-panel__conn nd-ellipsis" :title="connection.name">{{
             connection.name
           }}</span>
-          <span v-if="ai.target?.schema" class="ai-panel__schema nd-ellipsis">
-            <v-icon icon="mdi-database-outline" size="13" />{{ ai.target.schema }}
-          </span>
-          <span v-else class="ai-panel__schema ai-panel__schema--none">sin base de datos</span>
+          <v-menu v-if="ai.target?.schema" location="bottom start">
+            <template #activator="{ props: sp }">
+              <button
+                v-bind="sp"
+                type="button"
+                class="ai-panel__scope"
+                :title="
+                  ai.scope === 'connection'
+                    ? scopeWords.wholeTitle
+                    : `El asistente ve solo ${ai.target.schema}`
+                "
+                aria-label="Qué ve el asistente"
+                data-test="ai-scope"
+              >
+                <v-icon
+                  :icon="
+                    ai.scope === 'connection'
+                      ? 'mdi-database-search-outline'
+                      : 'mdi-database-outline'
+                  "
+                  size="13"
+                />
+                <span class="nd-ellipsis">{{
+                  ai.scope === 'connection' ? scopeWords.wholeLabel : ai.target.schema
+                }}</span>
+                <v-icon icon="mdi-chevron-down" size="13" />
+              </button>
+            </template>
+            <v-list density="compact" max-width="340" aria-label="Qué ve el asistente">
+              <v-list-item
+                :active="ai.scope === 'database'"
+                prepend-icon="mdi-database-outline"
+                :title="scopeWords.single"
+                :subtitle="scopeWords.singleHint"
+                lines="two"
+                data-test="ai-scope-database"
+                @click="ai.scope = 'database'"
+              />
+              <v-list-item
+                :active="ai.scope === 'connection'"
+                prepend-icon="mdi-database-search-outline"
+                title="Toda la conexión"
+                :subtitle="scopeWords.wholeHint"
+                lines="three"
+                data-test="ai-scope-connection"
+                @click="ai.scope = 'connection'"
+              />
+            </v-list>
+          </v-menu>
+          <span
+            v-else
+            class="ai-panel__schema ai-panel__schema--none"
+            :title="scopeWords.wholeTitle"
+            data-test="ai-scope-whole"
+            >{{ scopeWords.wholeLabel }}</span
+          >
         </template>
         <span v-else class="ai-panel__schema--none">Abre una conexión o una consulta</span>
       </div>
@@ -519,6 +612,23 @@ onMounted(() => {
   min-width: 0;
   font-family: var(--nd-font-mono);
   font-size: var(--nd-fs-xs);
+}
+.ai-panel__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: var(--nd-text-muted);
+  font-family: var(--nd-font-mono);
+  font-size: var(--nd-fs-xs);
+  cursor: pointer;
+}
+.ai-panel__scope:hover,
+.ai-panel__scope:focus-visible {
+  background: var(--nd-hover);
+  color: var(--nd-text);
 }
 .ai-panel__schema--none {
   color: var(--nd-text-muted);

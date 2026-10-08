@@ -182,11 +182,23 @@ export type AiStopReason =
   'end_turn' | 'max_tokens' | 'refusal' | 'tool_limit' | 'cancelled' | 'error' | 'other'
 
 /** Where the assistant looks: the connection and (optionally) the database. */
+/**
+ * How much of the connection the assistant sees: only the selected namespace
+ * (the others are listed by name) or every user namespace of the connection,
+ * with names written as `namespace.table`. The namespaces follow the engine
+ * (EngineCapabilities.ai.scope): MySQL/MariaDB/MongoDB databases, the schemas
+ * of the current PostgreSQL database, SQLite main and its attachments.
+ * Without a selected namespace the scope is always the whole connection.
+ */
+export type AiScope = 'database' | 'connection'
+
 export interface AiTarget {
   connectionId: string
   schema: string | null
   /** PostgreSQL: database that holds `schema` (absent/null = the connection's initial one). */
   database?: string | null
+  /** Default 'database'. */
+  scope?: AiScope
 }
 
 export interface AiChatRequest extends AiTarget {

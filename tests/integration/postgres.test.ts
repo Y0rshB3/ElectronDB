@@ -18,6 +18,7 @@ import { ConnectionManager } from '@main/db/manager'
 import { createPgDbHandlers, type PgDbHandlers } from '@main/ipc/dbPostgres'
 import { isPgConnection } from '@main/postgres/connection'
 import { PgMetadataQueryable, explainPgSelect, readPgSchemaSnapshot } from '@main/ai/pgMetadata'
+import { AiService } from '@main/ai/service'
 import { pgTablePlanner } from '../../src/renderer/src/components/designer/pg/planner'
 import {
   decideEditability,
@@ -709,6 +710,46 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
     expect(
       pgTablePlanner.buildAlter(after, pgTablePlanner.draftFromStructure(after)).statements
     ).toEqual([])
+  })
+
+  it('AI «Toda la conexión» on PostgreSQL: every user schema of the database, no values', async () => {
+    const ai = new AiService({
+      userDataPath: dir,
+      credentials: ctx.credentials,
+      settings: ctx.settings,
+      environmentOf: () => 'local',
+      acquire: () => Promise.reject(new Error('no MySQL sessions')),
+      isPostgres: () => true,
+      acquirePg: async (connectionId, database) => {
+        const connection = await manager.connection(connectionId)
+        if (!isPgConnection(connection)) throw new Error('not a PostgreSQL connection')
+        return connection.acquire(database ? { database, schema: null } : null)
+      },
+      emit: () => undefined,
+      log: { info: () => undefined, warn: () => undefined }
+    })
+    const whole = await ai.buildContext({
+      connectionId: id,
+      schema: SCHEMA,
+      database: db,
+      scope: 'connection'
+    })
+    expect(whole.context).toContain(
+      `Base de datos ${db} completa (todos sus esquemas; PostgreSQL no consulta las demás bases de datos de la conexión)`
+    )
+    expect(whole.context).toContain(`Esquema seleccionado: ${SCHEMA}.`)
+    expect(whole.context).toContain(`${SCHEMA}.items`)
+    expect(whole.context).toContain(`${OTHER}.items`)
+    expect(whole.context).not.toMatch(/\bpg_catalog\.|information_schema\./)
+    // Structure only: no row value reaches the context.
+    for (const value of ['alpha', 'beta', '9007199254740993'])
+      expect(whole.context).not.toContain(value)
+    const single = await ai.buildContext({ connectionId: id, schema: SCHEMA, database: db })
+    expect(single.context).toContain(`Otros esquemas de la base de datos ${db}`)
+    expect(single.context).not.toContain(`${OTHER}.items`)
+    // Without a database in the request, the initial one is named.
+    const initial = await ai.buildContext({ connectionId: id, schema: null })
+    expect(initial.context).toContain(`Base de datos ${db} completa`)
   })
 
   it('gives the AI assistant structure only (pg_catalog reader, plan-only EXPLAIN)', async () => {

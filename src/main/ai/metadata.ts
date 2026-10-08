@@ -173,20 +173,29 @@ export async function readSchemaSnapshot(
     ])
 
   const tables = new Map<string, TableMeta>()
+  // MariaDB sequences are TABLE_TYPE 'SEQUENCE': named, without their internal columns.
+  const sequences = new Set<string>()
   for (const r of tableRows) {
     const name = str(r.TABLE_NAME)
     const view = /VIEW/i.test(str(r.TABLE_TYPE))
+    const sequence = /^SEQUENCE$/i.test(str(r.TABLE_TYPE))
+    if (sequence) sequences.add(name)
     tables.set(name, {
       name,
       kind: view ? 'view' : 'table',
-      rows: view ? null : num(r.TABLE_ROWS),
-      comment: view ? '' : str(r.TABLE_COMMENT),
+      rows: view || sequence ? null : num(r.TABLE_ROWS),
+      comment: sequence
+        ? 'secuencia de MariaDB: NEXTVAL(nombre), SETVAL(nombre, n)'
+        : view
+          ? ''
+          : str(r.TABLE_COMMENT),
       columns: [],
       indexes: [],
       foreignKeys: []
     })
   }
   for (const r of columnRows) {
+    if (sequences.has(str(r.TABLE_NAME))) continue
     tables.get(str(r.TABLE_NAME))?.columns.push({
       name: str(r.COLUMN_NAME),
       type: str(r.COLUMN_TYPE),

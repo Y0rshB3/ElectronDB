@@ -149,9 +149,18 @@ describeServer(MONGO_TARGET, 'AI schema context on MongoDB', (url) => {
       expect(text, secret).not.toContain(secret)
   })
 
-  it('lists databases when none is selected', async () => {
-    const preview = await ai.buildContext({ connectionId: id, schema: null })
-    expect(preview.context).toContain(DB)
+  it('sees every user database with «Toda la conexión» (db.collection, still no values)', async () => {
+    const none = await ai.buildContext({ connectionId: id, schema: null })
+    expect(none.context).toContain('Conexión completa (MongoDB 8.2')
+    expect(none.context).toContain(`${DB}.people`)
+    const whole = await ai.buildContext({ connectionId: id, schema: DB, scope: 'connection' })
+    expect(whole.context).toContain(`Base de datos seleccionada: ${DB}.`)
+    expect(whole.context).toContain('escritas como base.colección')
+    expect(whole.context).toContain(`${DB}.people`)
+    for (const system of ['admin.', 'local.', 'config.'])
+      expect(whole.context, system).not.toContain(system)
+    for (const secret of [SECRET, ENUM, VIEW_LITERAL, PARTIAL_LITERAL, '^.+@example'])
+      expect(whole.context, secret).not.toContain(secret)
   })
 
   it('keeps only structural keys of a $jsonSchema', () => {

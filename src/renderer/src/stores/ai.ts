@@ -8,6 +8,7 @@ import type {
   AiMessage,
   AiMode,
   AiProviderView,
+  AiScope,
   AiStatusEvent,
   AiStopReason,
   AiTarget,
@@ -78,6 +79,16 @@ function titleFrom(text: string): string {
     .replace(/\s+/g, ' ')
     .trim()
   return (flat.length > TITLE_CHARS ? `${flat.slice(0, TITLE_CHARS - 1)}…` : flat) || 'Conversación'
+}
+
+const SCOPE_KEY = 'electrondb.ai.scope'
+
+function readScope(): AiScope {
+  try {
+    return localStorage.getItem(SCOPE_KEY) === 'connection' ? 'connection' : 'database'
+  } catch {
+    return 'database'
+  }
 }
 
 export const useAiStore = defineStore('ai', () => {
@@ -154,6 +165,22 @@ export const useAiStore = defineStore('ai', () => {
     const open = connections.items.filter((c) => connections.isOpen(c.id))
     return open.length === 1 ? { connectionId: open[0].id, schema: null } : null
   })
+
+  /**
+   * «Solo esta base de datos» or «Toda la conexión», remembered on this
+   * computer. Without a selected database the scope is the whole connection.
+   */
+  const scope = ref<AiScope>(readScope())
+  watch(scope, (value) => {
+    try {
+      localStorage.setItem(SCOPE_KEY, value)
+    } catch {
+      /* best effort */
+    }
+  })
+  const effectiveScope = computed<AiScope>(() =>
+    target.value?.schema ? scope.value : 'connection'
+  )
 
   /** Table of the open tab (table data / designer), prioritised in the context. */
   const openTable = computed<string | null>(() => {
@@ -296,6 +323,7 @@ export const useAiStore = defineStore('ai', () => {
       connectionId: t.connectionId,
       schema: t.schema,
       ...(t.database ? { database: t.database } : {}),
+      scope: effectiveScope.value,
       mode,
       input,
       sql: extras.sql ?? null,
@@ -484,6 +512,8 @@ export const useAiStore = defineStore('ai', () => {
     enabled,
     busy,
     target,
+    scope,
+    effectiveScope,
     openTable,
     loadProviders,
     loadConversations,

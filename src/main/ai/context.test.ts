@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildConnectionContext,
   buildMemoryBlock,
   buildSchemaContext,
+  versionLabel,
   formatTable,
   mentionedNames,
   roughRows
@@ -313,6 +315,81 @@ describe('schema context', () => {
     const names = mentionedNames('pedido de `Clientes`')
     expect(names.has('pedidos')).toBe(true)
     expect(names.has('clientes')).toBe(true)
+  })
+
+  it('whole-connection context qualifies names and cross-database FKs', () => {
+    const t = (name: string, fk?: { refSchema: string; refTable: string }): TableMeta => ({
+      name,
+      kind: 'table',
+      rows: 10,
+      comment: '',
+      columns: [
+        { name: 'id', type: 'int', nullable: false, key: 'PRI', extra: '', comment: '' },
+        { name: 'ref_id', type: 'int', nullable: true, key: '', extra: '', comment: '' }
+      ],
+      indexes: [{ name: 'PRIMARY', unique: true, columns: ['id'] }],
+      foreignKeys: fk ? [{ name: 'fk', columns: ['ref_id'], refColumns: ['id'], ...fk }] : []
+    })
+    const snaps = [
+      { schema: 'crm', serverVersion: '8.4.3', tables: [t('clientes')], routines: [] },
+      {
+        schema: 'ticket',
+        serverVersion: '8.4.3',
+        tables: [t('tiquetes', { refSchema: 'crm', refTable: 'clientes' })],
+        routines: []
+      }
+    ]
+    const ctx = buildConnectionContext(snaps, 'ticket')
+    expect(ctx.text).toContain('Conexión completa (MySQL 8.4.3): 2 bases de datos (crm, ticket).')
+    expect(ctx.text).toContain('Base de datos seleccionada: ticket.')
+    expect(ctx.text).toContain('crm.clientes ~10 filas')
+    expect(ctx.text).toContain('FK ref_id→crm.clientes.id')
+    expect(ctx.tableCount).toBe(2)
+
+    // Over the cap: the mentioned table first, then the selected database.
+    const many = Array.from({ length: 300 }, (_, i) => t(`tabla_${String(i).padStart(3, '0')}`))
+    const big = buildConnectionContext(
+      [
+        { schema: 'aaa', serverVersion: '', tables: many, routines: [] },
+        { schema: 'ticket', serverVersion: '', tables: [t('tiquetes')], routines: [] }
+      ],
+      'ticket',
+      { cap: 4000, hints: ['tabla_250'] }
+    )
+    expect(big.truncated).toBe(true)
+    expect(big.detailed.slice(0, 2)).toEqual(['aaa.tabla_250', 'ticket.tiquetes'])
+  })
+
+  it('words the whole-connection header per engine', () => {
+    const snap = {
+      schema: 'ventas',
+      serverVersion: 'PostgreSQL 17.2',
+      tables: [],
+      routines: []
+    }
+    const pg = buildConnectionContext([snap], 'ventas', {
+      wording: {
+        whole: 'Base de datos tienda completa',
+        plural: 'esquemas',
+        selected: 'Esquema seleccionado',
+        qualified: 'esquema.tabla',
+        others: 'Otros esquemas'
+      },
+      otherDatabases: ['z']
+    })
+    expect(pg.text).toContain(
+      'Base de datos tienda completa (PostgreSQL 17.2): 1 esquemas (ventas). Esquema seleccionado: ventas.'
+    )
+    expect(pg.text).toContain('escritas como esquema.tabla')
+    expect(pg.text).toContain('Otros esquemas (solo el nombre')
+  })
+
+  it('names MariaDB servers by their own version', () => {
+    expect(versionLabel('11.8.9-MariaDB-ubu2404')).toBe(' (MariaDB 11.8.9)')
+    expect(versionLabel('5.5.5-10.11.6-MariaDB-log')).toBe(' (MariaDB 10.11.6)')
+    expect(versionLabel('8.4.3')).toBe(' (MySQL 8.4.3)')
+    expect(versionLabel('SQLite 3.53.4')).toBe(' (SQLite 3.53.4)')
+    expect(versionLabel('')).toBe('')
   })
 
   it('memory block', () => {

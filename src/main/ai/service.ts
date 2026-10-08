@@ -11,13 +11,22 @@ import {
   type AiProviderView,
   type AiTestResult
 } from '@shared/ai'
-import type { AppSettings, Environment } from '@shared/types'
+import type { AppSettings, EngineId, Environment } from '@shared/types'
+import { isSystemSchema } from '@shared/restoreTask'
 import type { IpcEventChannel, IpcEventMap } from '@shared/ipc'
 import type { CredentialStore } from '../credentials/store'
 import { newId } from '../storage/ids'
 import type { ChatAdapter, FetchFn } from './adapter'
 import { AnthropicAdapter } from './anthropic'
-import { buildMemoryBlock, buildSchemaContext, formatTable } from './context'
+import {
+  DATABASES_WORDING,
+  MAX_CONTEXT_DATABASES,
+  buildConnectionContext,
+  buildMemoryBlock,
+  buildSchemaContext,
+  formatTable,
+  type ScopeWording
+} from './context'
 import { explainSelect, isSingleSelect } from './explain'
 import {
   PgMetadataQueryable,
@@ -39,7 +48,12 @@ import {
   type Queryable,
   type SchemaSnapshot
 } from './metadata'
-import { MONGO_ENGINE_NOTE, readMongoSnapshot, type MongoStructureSource } from './mongoMetadata'
+import {
+  MONGO_ENGINE_NOTE,
+  MONGO_SYSTEM_DATABASES,
+  readMongoSnapshot,
+  type MongoStructureSource
+} from './mongoMetadata'
 import { OpenAiCompatAdapter } from './openaiCompat'
 import { buildUserMessage, SYSTEM_INSTRUCTIONS, trimHistory } from './prompts'
 import { AiProvidersRepo, normalizeProviderInput } from './providers'
@@ -75,6 +89,8 @@ export interface AiServiceDeps {
   isMongo?(connectionId: string): boolean
   /** The structure-only source of a MongoDB connection. */
   mongoSource?(connectionId: string): Promise<MongoStructureSource>
+  /** Engine of a connection (MariaDB gets its own note). */
+  engineOf?(connectionId: string): EngineId | null
   emit<E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]): void
   log: AiLogger
   fetch?: FetchFn
@@ -94,6 +110,15 @@ const ENV_LABEL: Record<Environment, string> = {
 }
 
 const MODES: readonly AiMode[] = ['chat', 'generateSql', 'explain', 'explainError']
+
+/** Collections sampled across a whole MongoDB connection (each costs a $sample). */
+const MONGO_CONNECTION_SAMPLE_BUDGET = 120
+
+/** Context line for MariaDB connections (the system instructions speak of MySQL). */
+export const MARIADB_ENGINE_NOTE =
+  'Motor: MariaDB. Escribe SQL de MariaDB: secuencias (NEXT VALUE FOR s, NEXTVAL(s), SETVAL(s, n)), INSERT/DELETE … RETURNING, tablas versionadas (FOR SYSTEM_TIME AS OF / ALL), JSON es un alias de LONGTEXT (funciones JSON_VALUE, JSON_QUERY…), y UUID, INET4 e INET6 son tipos nativos.'
+
+type Reader = 'mysql' | 'pg' | 'sqlite' | 'mongo'
 const MAX_INPUT_CHARS = 20_000
 const MAX_SQL_CHARS = 100_000
 
@@ -260,25 +285,150 @@ export class AiService {
     }
   }
 
-  private async snapshot(
+  private readerOf(connectionId: string): Reader {
+    if (this.isMongo(connectionId)) return 'mongo'
+    if (this.isPg(connectionId)) return 'pg'
+    if (this.isLite(connectionId)) return 'sqlite'
+    return 'mysql'
+  }
+
+  /**
+   * User namespaces «Toda la conexión» covers, sorted, system ones left out:
+   * the databases of a MySQL/MariaDB/MongoDB server, the schemas of the
+   * current PostgreSQL database, SQLite main and its attachments (not temp).
+   */
+  private async namespaces(connectionId: string, database: string | null): Promise<string[]> {
+    switch (this.readerOf(connectionId)) {
+      case 'mongo':
+        return (await (await this.deps.mongoSource!(connectionId)).databases())
+          .filter((n) => !MONGO_SYSTEM_DATABASES.has(n))
+          .sort()
+      case 'pg':
+        return this.withPgMetadata(connectionId, database, (q) => readPgSchemaNames(q))
+      case 'sqlite':
+        return (
+          await this.withSqliteMetadata(connectionId, (q) => readSqliteDatabaseNames(q))
+        ).filter((n) => n !== 'temp')
+      default:
+        return (
+          await this.withMetadata(connectionId, async (q) =>
+            (
+              await q.query<{ name: string }>(
+                'SELECT SCHEMA_NAME AS name FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME'
+              )
+            ).map((r) => String(r.name))
+          )
+        ).filter((n) => !isSystemSchema(n))
+    }
+  }
+
+  /** PostgreSQL: name of the database a request reads (the initial one when none is given). */
+  private async pgDatabaseName(connectionId: string, database: string | null): Promise<string> {
+    if (database) return database
+    const rows = await this.withPgMetadata(connectionId, null, (q) =>
+      q.query<{ name: string }>(
+        'SELECT d.datname AS name FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database()'
+      )
+    )
+    return String(rows[0]?.name ?? '')
+  }
+
+  /** Words of a whole-connection context for the connection's engine. */
+  private async wordingOf(connectionId: string, database: string | null): Promise<ScopeWording> {
+    switch (this.readerOf(connectionId)) {
+      case 'mongo':
+        return { ...DATABASES_WORDING, qualified: 'base.colección' }
+      case 'pg': {
+        const db = await this.pgDatabaseName(connectionId, database)
+        return {
+          whole: `Base de datos ${db} completa (todos sus esquemas; PostgreSQL no consulta las demás bases de datos de la conexión)`,
+          plural: 'esquemas',
+          selected: 'Esquema seleccionado',
+          qualified: 'esquema.tabla',
+          others: 'Otros esquemas'
+        }
+      }
+      case 'sqlite':
+        return {
+          whole: 'Archivo completo (main y sus bases de datos adjuntas)',
+          plural: 'bases de datos',
+          selected: 'Base de datos seleccionada',
+          qualified: 'base.tabla',
+          others: 'Otras bases de datos'
+        }
+      default:
+        return DATABASES_WORDING
+    }
+  }
+
+  /** «Otras … (solo el nombre)» line of a single-namespace context. */
+  private async othersLine(
     connectionId: string,
-    schema: string,
+    database: string | null,
+    others: string[]
+  ): Promise<string> {
+    const tail = `(solo el nombre; pide su estructura con get_table_structure si la pregunta los necesita): ${others.join(', ')}.`
+    switch (this.readerOf(connectionId)) {
+      case 'pg':
+        return `Otros esquemas de la base de datos ${await this.pgDatabaseName(connectionId, database)} ${tail}`
+      case 'sqlite':
+        return `Otras bases de datos del archivo (main y adjuntas) ${tail}`
+      default:
+        return `Otras bases de datos de esta conexión ${tail}`
+    }
+  }
+
+  /**
+   * Snapshots of several namespaces: cached ones reused, the rest read in one
+   * metadata session (MongoDB: through its structure source, sharing a
+   * sampling budget when there are several databases).
+   */
+  private async readSnapshots(
+    connectionId: string,
+    schemas: string[],
     fresh = false,
     database: string | null = null
-  ): Promise<SchemaSnapshot> {
-    const key = `${connectionId}\u0000${database ?? ''}\u0000${schema}`
+  ): Promise<SchemaSnapshot[]> {
+    const reader = this.readerOf(connectionId)
+    const mongoLimit =
+      reader === 'mongo' && schemas.length > 1
+        ? Math.max(3, Math.floor(MONGO_CONNECTION_SAMPLE_BUDGET / schemas.length))
+        : null
+    const keyOf = (schema: string): string =>
+      `${connectionId}\u0000${database ?? ''}\u0000${schema}${mongoLimit ? `\u0000${mongoLimit}` : ''}`
     const ttl = this.deps.snapshotTtlMs ?? 5 * 60_000
-    const hit = this.snapshots.get(key)
-    if (!fresh && hit && Date.now() - hit.at < ttl) return hit.snap
-    const snap = this.isMongo(connectionId)
-      ? await readMongoSnapshot(await this.deps.mongoSource!(connectionId), schema)
-      : this.isPg(connectionId)
-        ? await this.withPgMetadata(connectionId, database, (q) => readPgSchemaSnapshot(q, schema))
-        : this.isLite(connectionId)
-          ? await this.withSqliteMetadata(connectionId, (q) => readSqliteSchemaSnapshot(q, schema))
-          : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
-    this.snapshots.set(key, { at: Date.now(), snap })
-    return snap
+    const now = Date.now()
+    const out = new Map<string, SchemaSnapshot>()
+    const missing: string[] = []
+    for (const schema of schemas) {
+      const hit = this.snapshots.get(keyOf(schema))
+      if (!fresh && hit && now - hit.at < ttl) out.set(schema, hit.snap)
+      else missing.push(schema)
+    }
+    const keep = (schema: string, snap: SchemaSnapshot): void => {
+      this.snapshots.set(keyOf(schema), { at: Date.now(), snap })
+      out.set(schema, snap)
+    }
+    if (missing.length) {
+      if (reader === 'mongo') {
+        const source = await this.deps.mongoSource!(connectionId)
+        for (const schema of missing)
+          keep(schema, await readMongoSnapshot(source, schema, undefined, mongoLimit ?? undefined))
+      } else if (reader === 'pg') {
+        await this.withPgMetadata(connectionId, database, async (q) => {
+          for (const schema of missing) keep(schema, await readPgSchemaSnapshot(q, schema))
+        })
+      } else if (reader === 'sqlite') {
+        await this.withSqliteMetadata(connectionId, async (q) => {
+          for (const schema of missing) keep(schema, await readSqliteSchemaSnapshot(q, schema))
+        })
+      } else {
+        await this.withMetadata(connectionId, async (q) => {
+          for (const schema of missing) keep(schema, await readSchemaSnapshot(q, schema))
+        })
+      }
+    }
+    return schemas.map((s) => out.get(s) as SchemaSnapshot)
   }
 
   /** Instructions + context text of a request. Deterministic for the same structure and notes. */
@@ -290,20 +440,45 @@ export class AiService {
     const schema = typeof request.schema === 'string' && request.schema ? request.schema : null
     const database =
       typeof request.database === 'string' && request.database ? request.database : null
+    // Without a selected namespace the assistant always sees the whole connection.
+    const wholeConnection = !schema || request.scope === 'connection'
     const env = this.deps.environmentOf(connectionId)
     const parts: string[] = []
     if (env) parts.push(`Entorno de la conexión: ${ENV_LABEL[env]}.`)
     if (this.isMongo(connectionId)) parts.push(MONGO_ENGINE_NOTE)
-    const memory = buildMemoryBlock(
-      this.memory.get(connectionId, null),
-      schema ? this.memory.get(connectionId, schema) : '',
-      schema
-    )
-    if (memory) parts.push(memory)
+    else if (this.deps.engineOf?.(connectionId) === 'mariadb') parts.push(MARIADB_ENGINE_NOTE)
     let truncated = false
     let tableCount = 0
-    if (schema) {
-      const snap = await this.snapshot(connectionId, schema, options.fresh, database)
+    if (wholeConnection) {
+      const names = await this.namespaces(connectionId, database)
+      // The selected namespace always gets its structure, even past the limit.
+      const ordered =
+        schema && names.includes(schema) ? [schema, ...names.filter((n) => n !== schema)] : names
+      const included = ordered.slice(0, MAX_CONTEXT_DATABASES).sort()
+      const others = ordered.slice(MAX_CONTEXT_DATABASES).sort()
+      const memory = buildMemoryBlock(
+        this.memory.get(connectionId, null),
+        included.map((s) => ({ schema: s, notes: this.memory.get(connectionId, s) }))
+      )
+      if (memory) parts.push(memory)
+      const snaps = await this.readSnapshots(connectionId, included, options.fresh, database)
+      const built = buildConnectionContext(snaps, schema, {
+        hints: [request.input, request.editorSql],
+        openTable: request.openTable,
+        otherDatabases: others,
+        wording: await this.wordingOf(connectionId, database)
+      })
+      truncated = built.truncated || others.length > 0
+      tableCount = built.tableCount
+      parts.push(built.text)
+    } else {
+      const memory = buildMemoryBlock(
+        this.memory.get(connectionId, null),
+        this.memory.get(connectionId, schema),
+        schema
+      )
+      if (memory) parts.push(memory)
+      const [snap] = await this.readSnapshots(connectionId, [schema], options.fresh, database)
       const built = buildSchemaContext(snap, {
         hints: [request.input, request.editorSql],
         openTable: request.openTable
@@ -311,34 +486,8 @@ export class AiService {
       truncated = built.truncated
       tableCount = built.tableCount
       parts.push(built.text)
-    } else {
-      if (this.isMongo(connectionId)) {
-        const names = await (await this.deps.mongoSource!(connectionId)).databases()
-        parts.push(
-          `No hay ninguna base de datos seleccionada (MongoDB). Bases de datos: ${names.join(', ') || '(ninguna)'}.`
-        )
-      } else if (this.isLite(connectionId)) {
-        const names = await this.withSqliteMetadata(connectionId, (q) => readSqliteDatabaseNames(q))
-        parts.push(
-          `No hay ninguna base de datos seleccionada (SQLite). Bases de datos adjuntas: ${names.join(', ') || '(ninguna)'}.`
-        )
-      } else if (this.isPg(connectionId)) {
-        const names = await this.withPgMetadata(connectionId, database, (q) => readPgSchemaNames(q))
-        parts.push(
-          `No hay ningún esquema seleccionado (PostgreSQL${database ? `, base de datos ${database}` : ''}). Esquemas: ${names.join(', ') || '(ninguno)'}.`
-        )
-      } else {
-        const names = await this.withMetadata(connectionId, async (q) =>
-          (
-            await q.query<{ name: string }>(
-              'SELECT SCHEMA_NAME AS name FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME'
-            )
-          ).map((r) => String(r.name))
-        )
-        parts.push(
-          `No hay ninguna base de datos seleccionada. Bases de datos de la conexión: ${names.join(', ') || '(ninguna)'}.`
-        )
-      }
+      const others = (await this.namespaces(connectionId, database)).filter((n) => n !== schema)
+      if (others.length) parts.push(await this.othersLine(connectionId, database, others))
     }
     const context = parts.join('\n\n')
     return {
@@ -408,6 +557,7 @@ export class AiService {
       connectionId: requireString(raw.connectionId, 'Conexión'),
       schema: typeof raw.schema === 'string' && raw.schema ? raw.schema : null,
       database: typeof raw.database === 'string' && raw.database ? raw.database : null,
+      scope: raw.scope === 'connection' ? 'connection' : 'database',
       mode: raw.mode,
       history: Array.isArray(raw.history) ? raw.history : [],
       input,
@@ -466,6 +616,7 @@ export class AiService {
         connectionId: request.connectionId,
         schema: request.schema,
         database: request.database ?? null,
+        scope: request.scope,
         input: request.input,
         editorSql: request.mode === 'chat' ? request.editorSql : (request.sql ?? request.editorSql),
         openTable: request.openTable

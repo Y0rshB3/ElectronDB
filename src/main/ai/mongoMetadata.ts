@@ -157,11 +157,14 @@ function indexMeta(ix: Document): IndexMeta & { detail: string } {
 export async function readMongoSnapshot(
   source: MongoStructureSource,
   database: string,
-  only?: string[]
+  only?: string[],
+  /** Collections sampled at most (a whole-connection context shares a budget). */
+  limit = MAX_COLLECTIONS
 ): Promise<SchemaSnapshot> {
   const all = await source.collections(database)
   const wanted = only ? all.filter((c) => only.includes(c.name)) : all
-  const described = wanted.slice(0, MAX_COLLECTIONS)
+  const max = Math.max(0, Math.min(limit, MAX_COLLECTIONS))
+  const described = wanted.slice(0, max)
   const tables: TableMeta[] = []
   for (const c of described) {
     const isView = c.type === 'view'
@@ -220,7 +223,7 @@ export async function readMongoSnapshot(
       foreignKeys: []
     })
   }
-  for (const c of wanted.slice(MAX_COLLECTIONS))
+  for (const c of wanted.slice(max))
     tables.push({
       name: c.name,
       kind: c.type === 'view' ? 'view' : 'table',
@@ -237,6 +240,9 @@ export async function readMongoSnapshot(
     routines: []
   }
 }
+
+/** Databases a whole-connection context leaves out (server internals, not user data). */
+export const MONGO_SYSTEM_DATABASES: ReadonlySet<string> = new Set(['admin', 'local', 'config'])
 
 /** Context line that tells the model which engine and syntax to use. */
 export const MONGO_ENGINE_NOTE =

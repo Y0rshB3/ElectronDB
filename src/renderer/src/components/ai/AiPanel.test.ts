@@ -8,6 +8,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useTabsStore } from '@renderer/stores/tabs'
 import QueryMessages from '@renderer/components/query/QueryMessages.vue'
 import { calls, freshPinia, makeConnection, mountWith, settle } from '../dialogs/testing'
+import { installDomPolyfills } from '@renderer/__tests__/shellTestUtils'
 import AiPanel from './AiPanel.vue'
 
 const PROVIDER: AiProviderView = {
@@ -65,6 +66,7 @@ describe('AiPanel', () => {
   beforeEach(async () => {
     nextId = 0
     insertAtCursor.mockClear()
+    localStorage.removeItem('electrondb.ai.scope')
     bridge = installBridge({
       'ai:providers': () => [PROVIDER],
       'ai:conversations': () => [],
@@ -125,6 +127,7 @@ describe('AiPanel', () => {
       input: '¿pedidos pendientes?',
       connectionId: 'c1',
       schema: 'app',
+      scope: 'database',
       providerId: 'p1',
       history: []
     })
@@ -148,6 +151,47 @@ describe('AiPanel', () => {
     // The exchange is saved locally.
     const [saved] = calls(bridge.invoke, 'ai:saveConversation').at(-1) as [{ messages: unknown[] }]
     expect(saved.messages).toHaveLength(2)
+  })
+
+  it('can look at the whole connection and remembers the choice', async () => {
+    useAiStore().scope = 'connection'
+    await settle()
+    expect(wrapper!.find('[data-test="ai-scope"]').text()).toContain('toda la conexión')
+    await ask('¿cómo se relacionan los tiquetes con los clientes?')
+    const [request] = calls(bridge.invoke, 'ai:chat')[0] as [Record<string, unknown>]
+    expect(request).toMatchObject({ schema: 'app', scope: 'connection' })
+    expect(localStorage.getItem('electrondb.ai.scope')).toBe('connection')
+  })
+
+  it('words «Toda la conexión» per engine: PostgreSQL means every schema of the database', async () => {
+    wrapper?.unmount()
+    useConnectionsStore().items = [
+      makeConnection({
+        id: 'c1',
+        name: 'PG',
+        engine: 'postgresql',
+        postgres: {
+          initialDatabase: 'tienda',
+          showSystemSchemas: false,
+          timeZone: '',
+          searchPath: ''
+        }
+      })
+    ]
+    useAiStore().scope = 'connection'
+    installDomPolyfills()
+    wrapper = mountWith(AiPanel, pinia)
+    await settle()
+    expect(wrapper.find('[data-test="ai-scope"]').text()).toContain('tienda · todos los esquemas')
+    await wrapper.get('[data-test="ai-scope"]').trigger('click')
+    await settle()
+    const item = document.querySelector('[data-test="ai-scope-connection"]')
+    expect(item?.textContent).toContain(
+      'En PostgreSQL: todos los esquemas de la base de datos tienda'
+    )
+    expect(document.querySelector('[data-test="ai-scope-database"]')?.textContent).toContain(
+      'Solo el esquema app'
+    )
   })
 
   it('Shift+Enter does not send', async () => {

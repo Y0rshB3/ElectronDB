@@ -127,11 +127,19 @@ describe('AiService on SQLite connections', () => {
       log: { info: () => undefined, warn: () => undefined }
     })
     try {
+      // No database selected: the whole file (main and its attachments), names as base.tabla.
       const none = await service.buildContext({ connectionId: 'c', schema: null })
-      expect(none.context).toContain('Bases de datos adjuntas: main, aux')
+      expect(none.context).toContain(
+        'Archivo completo (main y sus bases de datos adjuntas) (SQLite 3.53.4): 2 bases de datos (aux, main).'
+      )
+      expect(none.context).toContain('main.orders')
+      expect(none.context).toContain('aux.orders')
       const ctx = await service.buildContext({ connectionId: 'c', schema: 'main' })
       expect(ctx.context).toContain('orders')
       expect(ctx.context).toContain('SQLite 3.53.4')
+      expect(ctx.context).toContain('Otras bases de datos del archivo (main y adjuntas)')
+      expect(ctx.context).toContain(': aux.')
+      expect(ctx.context).not.toContain('aux.orders')
       expect(mysqlAcquire).not.toHaveBeenCalled()
       expect(seen.every((sql) => isSqliteMetadataSql(sql))).toBe(true)
     } finally {
