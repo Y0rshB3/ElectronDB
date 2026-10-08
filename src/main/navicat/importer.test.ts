@@ -259,14 +259,12 @@ describe('importFromNavicat: MariaDB and PostgreSQL sections (P5)', () => {
 
   it('creates one connection per section, with the section kept for identity', async () => {
     const result = await importFromNavicat(ctx, { connections: keys, jobs: [] })
-    // PostgreSQL is a preview engine: refused (with the reason) while previews are off.
     expect(result.connections.map((c) => `${c.engine}:${c.name}`)).toEqual([
       'mysql:Shared name',
-      'mariadb:Shared name'
+      'mariadb:Shared name',
+      'postgresql:PG local'
     ])
-    expect(result.warnings).toEqual([
-      'La conexión "PG local" no se ha importado: PostgreSQL está en vista previa: actívalo en Ajustes › Motores en vista previa'
-    ])
+    expect(result.warnings).toEqual([])
     const [mysql, maria] = result.connections
     expect(mysql.source?.navicatType).toBeUndefined()
     expect(maria.source).toMatchObject({
@@ -279,11 +277,10 @@ describe('importFromNavicat: MariaDB and PostgreSQL sections (P5)', () => {
     // Re-import updates in place, per section.
     const again = await importFromNavicat(ctx, { connections: keys.slice(0, 2), jobs: [] })
     expect(again.connections.map((c) => c.id)).toEqual([mysql.id, maria.id])
-    expect(ctx.connections.list()).toHaveLength(2)
+    expect(ctx.connections.list()).toHaveLength(3)
   })
 
-  it('imports PostgreSQL with previews on, and never an unsupported fork', async () => {
-    ctx.settings.update({ previewEngines: true })
+  it('imports PostgreSQL, and never an unsupported fork', async () => {
     const result = await importFromNavicat(ctx, {
       connections: [
         'PostgreSQL\u001fPG local',
@@ -309,7 +306,6 @@ describe('importFromNavicat: MariaDB and PostgreSQL sections (P5)', () => {
   })
 
   it('imports SQLite and MongoDB rows; a SQLite file from another computer needs review', async () => {
-    ctx.settings.update({ previewEngines: true })
     const result = await importFromNavicat(ctx, {
       connections: [
         'SQLite\u001fInventario Windows',

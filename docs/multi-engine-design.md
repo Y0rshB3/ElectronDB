@@ -1,6 +1,6 @@
 # Multi-engine architecture (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB)
 
-Status: **design; P1a, P1b, P2a, P2b, P3, P4a/P4b and P5 implemented on branch `v2` (MariaDB is a regular engine; PostgreSQL, SQLite and MongoDB still behind the preview flag), shipping as **Vortaq 2.0.0**. Revision 3** (2026-10-07): the product is now
+Status: **design; P1a, P1b, P2a, P2b, P3, P4a/P4b and P5 implemented on branch `v2` (every engine is a regular one since 2026-10-08: the preview flag is gone), shipping as **Vortaq 2.0.0**. Revision 3** (2026-10-07): the product is now
 called **Vortaq** (formerly ElectronDB, and Navidog before that); revision 3 renames it, removes
 the Navicat Keychain recovery (section 12.3) and limits the sources to the ones in section 19.
 Revision 2 (2026-10-05, at `c147306`) answered two reviews: an adversarial review (guard bypasses,
@@ -426,7 +426,8 @@ are nested, collapsed, under their parent. Foreign tables (`relkind 'f'`) are li
 
 The groups come from coupling §11, drivers §2.6, §3.2, §4.3 and §5.2, and the daily-use review.
 
-**Preview flag (D14).** An engine with `preview: true` is hidden in the "Nueva conexión" picker
+**Preview flag (D14) — removed for 2.0.0 (2026-10-08).** Every engine is offered; the text below
+describes the flag as it was during development. An engine with `preview: true` was hidden in the "Nueva conexión" picker
 and in Navicat import unless "Motores en vista previa" is switched on in `SettingsDialog.vue`. Existing
 connections of a preview engine still open. Each phase flips its engine to `preview: false` in its
 "done when". Independently of the flag, every build made from multi-engine work is published as a
@@ -2317,6 +2318,23 @@ dicts), replica set, auth source and mechanism (Kerberos/AWS/OIDC refused), read
 options and providers. Rows whose engine is known but unusable (encrypted file, Kerberos) are now
 refused by `navicatBlockReason` too. Tested with synthetic files only; never a credential store.
 
+#### Version 2.0.0: every engine is regular (2026-10-08)
+
+- `EngineCapabilities.preview` and `AppSettings.previewEngines` are gone; `pickableEngines()` lists every
+  engine with a driver. The toolbar's Conexión menu has one «Nueva conexión X…» per engine (MySQL,
+  MariaDB, PostgreSQL, SQLite, MongoDB; the two MySQL toolbar snapshots were edited by hand for exactly
+  these three entries), the connection dialog always shows the engine picker without «vista previa»
+  labels, Ajustes has no «Motores» section, and the importers (wizard, Navicat folder) no longer block
+  rows by engine. A stored `previewEngines` is ignored by `SettingsRepo.get()` and removed on the next
+  write (also when a stale renderer sends it).
+- Tour, «Novedades» of 2.0.0, README and CLAUDE.md say so.
+- **Audit of what was behind the flag** (nothing hidden is half-wired; these are named gaps, visible in
+  the UI as absent features rather than broken ones): PostgreSQL has no users/roles screen
+  (`hasUsers: false`; `db:users` answers that it is not available), no "Ejecutar función…" runner, and
+  RLS policies/rules are not shown; SQLite has no drag-and-drop of `.db` files and its Windows packaged
+  smoke was never run; MongoDB has no visual aggregation stage builder (aggregates run in the query
+  tab), no explain view and no users/roles screens; job query steps are MySQL/MariaDB only.
+
 #### AI assistant scope and per-engine AI capability (2026-10-07)
 
 - `EngineCapabilities.ai` (new, non-boolean): `reader` (`information_schema` | `pg_catalog` |
@@ -2601,3 +2619,7 @@ Invariant 1 allows only these, each additive and named in release notes:
   instead of always `.nb3`).
 - The AI assistant without a selected database (or with «Toda la conexión») sends the structure of every
   user database instead of only their names; the update feed is `Y0rshB3/Vortaq`.
+- 2.0.0: the «Motores en vista previa» switch is removed and every engine is offered, so the toolbar's
+  Conexión menu gains «Nueva conexión PostgreSQL/SQLite/MongoDB…» (snapshots edited by hand for these
+  entries) and Ajustes loses its «Motores» section. MySQL-family job query steps on MariaDB servers split
+  with the MariaDB splitter (MySQL servers keep the line splitting).

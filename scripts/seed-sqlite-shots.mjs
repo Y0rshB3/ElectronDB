@@ -158,5 +158,5 @@ const write = (name, data) =>
   writeFileSync(join(PROFILE, name), JSON.stringify(data, null, 2), { mode: 0o600 })
 write('connections.json', { version: 1, items: connections })
 write('credentials.json', { version: 1, codec: 'plain', items: {} })
-write('settings.json', { previewEngines: true, theme: 'dark', checkUpdatesOnStartup: false })
+write('settings.json', { theme: 'dark', checkUpdatesOnStartup: false })
 console.log(`Seeded ${PROFILE} (SQLite files in ${FILES})`)

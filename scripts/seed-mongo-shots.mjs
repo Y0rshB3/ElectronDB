@@ -167,5 +167,5 @@ write('credentials.json', {
   codec: 'plain',
   items: { 'mysql:shot-mongo': b64(decodeURIComponent(u.password)) }
 })
-write('settings.json', { previewEngines: true, theme: 'dark', checkUpdatesOnStartup: false })
+write('settings.json', { theme: 'dark', checkUpdatesOnStartup: false })
 console.log(`Seeded ${PROFILE} (database ${DB} on ${u.hostname}:${u.port})`)

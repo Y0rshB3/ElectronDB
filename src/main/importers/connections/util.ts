@@ -175,9 +175,6 @@ export function firstHost(raw: string, warnings: string[]): { host: string; port
   return { host, port: m?.[2] ? Number(m[2]) : null }
 }
 
-export const previewEngineReason = (label: string): string =>
-  `${label} está en vista previa: actívalo en Ajustes › Motores en vista previa`
-
 /* ---------- SQLite ---------- */
 
 export const SQLITE_CHOICE: EngineChoice = {

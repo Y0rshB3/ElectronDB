@@ -51,13 +51,9 @@ const connPreviews = ref<NavicatConnectionPreview[]>([])
 const jobPreviews = ref<NavicatJobPreview[]>([])
 const selectedConnections = ref<string[]>([])
 
-/** Why a row cannot be imported (unsupported server or a preview engine with previews off). */
+/** Why a row cannot be imported (unsupported server or setup), from main. */
 function blockOf(c: NavicatConnectionPreview): string | null {
-  if (c.blockedReason) return c.blockedReason
-  const engine = c.engine ? ENGINES[c.engine] : null
-  if (engine?.capabilities.preview && settingsStore.settings.previewEngines !== true)
-    return `${engine.label} está en vista previa: actívalo en Ajustes › Motores en vista previa`
-  return null
+  return c.blockedReason
 }
 /** Rows that can be selected (the others show their reason). */
 const importablePreviews = computed(() => connPreviews.value.filter((c) => !blockOf(c)))

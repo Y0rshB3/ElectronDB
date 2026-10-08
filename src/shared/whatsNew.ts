@@ -31,7 +31,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
       'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
-      'PostgreSQL, SQLite y MongoDB (vista previa): actívalos en Ajustes › Motores en vista previa',
+      'PostgreSQL, SQLite y MongoDB, con copias .vqb y tareas automáticas: Conexión › Nueva conexión',
       'MariaDB como motor propio: secuencias, tablas versionadas y cuentas ed25519/parsec'
     ],
     important: ['Tus datos se trasladan automáticamente a Vortaq'],
@@ -54,22 +54,32 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         target: 'toolbar-backup',
         title: 'Copias .vqb',
-        text: '«Nueva copia» guarda por defecto un .vqb: el formato abierto y documentado de Vortaq, también para PostgreSQL y SQLite, con «Cifrar con contraseña» opcional. Sigues pudiendo elegir .nb3 (Navicat) o .sql; los pasos de copia de la automatización también tienen «Formato: .vqb | .nb3 | .sql».'
+        text: '«Nueva copia» guarda por defecto un .vqb: el formato abierto y documentado de Vortaq, para todos los motores, con «Cifrar con contraseña» opcional. En MySQL y MariaDB sigues pudiendo elegir .nb3 (Navicat) o .sql, también en los pasos de copia de la automatización.'
       },
       {
         target: 'toolbar-connection',
-        title: 'SQLite (vista previa)',
-        text: 'Con Ajustes › Motores en vista previa activado, Conexión › Nueva conexión SQLite abre un archivo .db o crea uno nuevo. Las pestañas de consulta de un archivo comparten su transacción: confírmala o deshazla desde la pestaña que la abrió.'
+        title: 'PostgreSQL',
+        text: 'Conexión › Nueva conexión PostgreSQL: bases de datos y esquemas, una sesión con su transacción por pestaña de consulta, datos editables, diseñador y copias .vqb.'
       },
       {
         target: 'toolbar-connection',
-        title: 'MongoDB (vista previa)',
+        title: 'SQLite',
+        text: 'Conexión › Nueva conexión SQLite abre un archivo .db o crea uno nuevo. Las pestañas de consulta de un archivo comparten su transacción: confírmala o deshazla desde la pestaña que la abrió.'
+      },
+      {
+        target: 'toolbar-connection',
+        title: 'MongoDB',
         text: 'Conexión › Nueva conexión MongoDB (con «Pegar URI»): documentos en tabla, árbol o JSON que se editan sin cambiar sus tipos, consultas con órdenes del shell como db.pedidos.find({...}) o aggregate([...]), índices, validador y copias .vqb.'
       },
       {
         target: 'toolbar-connection',
         title: 'MariaDB',
         text: 'Conexión › Nueva conexión MariaDB: secuencias en el árbol, tablas versionadas en el diseñador, tipos UUID e INET6 y cuentas ed25519 o parsec. Tus conexiones MySQL a servidores MariaDB pasan a ser MariaDB al abrirlas, con sus copias y tareas.'
+      },
+      {
+        target: 'toolbar-automation',
+        title: 'Tareas para todos los motores',
+        text: 'Las tareas automáticas copian y restauran también bases de datos PostgreSQL, SQLite y MongoDB, en .vqb y con cifrado opcional. Las restauraciones nunca escriben en producción sin escribir su nombre.'
       },
       {
         target: 'toolbar-ai',

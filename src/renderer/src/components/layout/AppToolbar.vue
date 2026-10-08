@@ -12,7 +12,6 @@ import { useNotify } from '@renderer/composables/useNotify'
 import { runSafely } from '@renderer/utils/errors'
 import { descriptorOf, groupsFor } from '@renderer/engines/capabilities'
 import { pickableEngines } from '@shared/engines'
-import { useSettingsStore } from '@renderer/stores/settings'
 
 const ws = useWorkspace()
 const tree = useTreeStore()
@@ -23,28 +22,15 @@ const updates = useUpdatesStore()
 const tour = useTourStore()
 const notify = useNotify()
 const { context: objectsContext } = useObjectsContext()
-const settingsStore = useSettingsStore()
 
-/*
- * «Nueva conexión» entries: with Ajustes › Motores en vista previa off only
- * MySQL is offered (today's single entry); with it on, one entry per engine.
- */
-const newConnectionItems = computed<ToolbarMenuItem[]>(() => {
-  const engines = pickableEngines(settingsStore.settings.previewEngines === true)
-  if (engines.length <= 1)
-    return [
-      {
-        label: 'Nueva conexión MySQL…',
-        icon: 'mdi-database-plus-outline',
-        action: () => ui.openConnectionDialog(null)
-      }
-    ]
-  return engines.map((e) => ({
-    label: `Nueva conexión ${e.label}${e.capabilities.preview ? ' (vista previa)' : ''}…`,
+/* «Nueva conexión» entries: one per engine (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB). */
+const newConnectionItems = computed<ToolbarMenuItem[]>(() =>
+  pickableEngines().map((e) => ({
+    label: `Nueva conexión ${e.label}…`,
     icon: e.icon,
     action: () => ui.openConnectionDialog(null, e.id)
   }))
-})
+)
 
 const hasConnection = computed(() => !!ws.currentConnectionId())
 const schemaContext = computed(() => {

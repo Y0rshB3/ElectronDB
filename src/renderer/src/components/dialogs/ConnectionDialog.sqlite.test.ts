@@ -3,7 +3,6 @@ import type { Mock } from 'vitest'
 import type { ConnectionInput } from '@shared/types'
 import { defaultSqliteOptions } from '@shared/engines'
 import { useUiStore } from '@renderer/stores/ui'
-import { useSettingsStore } from '@renderer/stores/settings'
 import ConnectionDialog from './ConnectionDialog.vue'
 import { emptyConnectionInput, sqliteNameFromPath } from './connectionForm'
 import { freshPinia, makeConnection, mockVortaq, mountWith, settle } from './testing'
@@ -31,7 +30,6 @@ describe('ConnectionDialog · SQLite (preview)', () => {
 
   async function openNew(): Promise<void> {
     const pinia = freshPinia()
-    useSettingsStore().settings.previewEngines = true
     useUiStore().connectionDialog = { open: true, editing: null, engine: 'sqlite' }
     wrapper = mountWith(ConnectionDialog, pinia)
     await settle()
@@ -93,7 +91,6 @@ describe('ConnectionDialog · SQLite (preview)', () => {
 
   it('warns about a path from another computer until a file is picked', async () => {
     const pinia = freshPinia()
-    useSettingsStore().settings.previewEngines = true
     const editing = makeConnection({
       id: 'lite-2',
       name: 'Imported',

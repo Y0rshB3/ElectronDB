@@ -10,12 +10,7 @@ import type {
   ImportSourceId
 } from '@shared/importers'
 import { engineAvailabilityError } from '@shared/connectionValidation'
-import {
-  DEFAULT_NETWORK,
-  defaultMongoOptions,
-  defaultSqliteOptions,
-  engineOf
-} from '@shared/engines'
+import { DEFAULT_NETWORK, defaultMongoOptions, defaultSqliteOptions } from '@shared/engines'
 import type { ConnectionConfig, ConnectionInput, EngineId, Environment } from '@shared/types'
 import type { AppContext } from '../../context'
 import type { ConnectionSecretKind } from '../../credentials/store'
@@ -24,7 +19,6 @@ import { nowIso } from '../../storage/ids'
 import { parseDbeaverDataSources } from './dbeaver'
 import { parseNcx } from './ncx'
 import type { ConnectionSecrets, FileExists, ParsedConnection, ParsedConnectionFile } from './types'
-import { previewEngineReason } from './util'
 import { parseWorkbenchConnections } from './workbench'
 
 /** The slice of the app context connection imports need (keeps tests free of Electron). */
@@ -97,29 +91,18 @@ export function findImported(
 }
 
 /**
- * Why a parsed connection cannot be imported here: unsupported engine, an engine without a
- * driver in this build, or a preview engine while «Motores en vista previa» is off. null = ok.
+ * Why a parsed connection cannot be imported here: unsupported engine or an engine without a
+ * driver in this build. null = ok.
  */
 export function importBlockReason(
-  parsed: Pick<ParsedConnection, 'engine' | 'unsupportedReason'>,
-  previewEngines: boolean
+  parsed: Pick<ParsedConnection, 'engine' | 'unsupportedReason'>
 ): string | null {
   if (!parsed.engine) return parsed.unsupportedReason ?? 'Motor no soportado'
   if (parsed.unsupportedReason) return parsed.unsupportedReason
-  const unavailable = engineAvailabilityError({ engine: parsed.engine })
-  if (unavailable) return unavailable
-  const engine = engineOf({ engine: parsed.engine })
-  return engine.capabilities.preview && !previewEngines ? previewEngineReason(engine.label) : null
+  return engineAvailabilityError({ engine: parsed.engine })
 }
 
-const previewOn = (ctx: Pick<AppContext, 'settings'>): boolean =>
-  ctx.settings.get().previewEngines === true
-
-function toItem(
-  parsed: ParsedConnection,
-  existing: ConnectionConfig | null,
-  previewEngines: boolean
-): ImportConnectionItem {
+function toItem(parsed: ParsedConnection, existing: ConnectionConfig | null): ImportConnectionItem {
   return {
     key: parsed.key,
     name: parsed.name,
@@ -135,9 +118,7 @@ function toItem(
     environment: parsed.environment,
     hasPassword: parsed.secrets.mysql !== undefined,
     existingConnectionId: existing?.id ?? null,
-    unsupportedReason: parsed.engine
-      ? importBlockReason(parsed, previewEngines)
-      : parsed.unsupportedReason,
+    unsupportedReason: parsed.engine ? importBlockReason(parsed) : parsed.unsupportedReason,
     warnings: [...parsed.warnings]
   }
 }
@@ -153,10 +134,7 @@ export async function previewConnectionFile(
   const source = sourceOf(sourceId)
   const file = await readConnectionFile(source, path, platform, fileExists)
   const existing = ctx.connections.list()
-  const preview = previewOn(ctx)
-  const items = file.connections.map((c) =>
-    toItem(c, findImported(existing, source.app, c), preview)
-  )
+  const items = file.connections.map((c) => toItem(c, findImported(existing, source.app, c)))
   return {
     source: sourceId,
     path,
@@ -334,7 +312,6 @@ export async function importConnectionFile(
   }
   const importedAt = nowIso()
   const backupsRootDir = ctx.settings.get().backupsRootDir
-  const preview = previewOn(ctx)
 
   for (const key of new Set(keys)) {
     const parsed = byKey.get(key)
@@ -342,8 +319,8 @@ export async function importConnectionFile(
       result.warnings.push(`La conexión «${key}» ya no está en el archivo`)
       continue
     }
-    // Main enforces the same rules as the preview (unsupported, unavailable, preview engine off).
-    const blocked = importBlockReason(parsed, preview)
+    // Main enforces the same rules as the preview (unsupported, unavailable).
+    const blocked = importBlockReason(parsed)
     if (!parsed.engine || blocked) {
       result.warnings.push(
         `«${parsed.name}» no se ha importado: ${blocked ?? 'motor no soportado'}`

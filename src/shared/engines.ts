@@ -3,9 +3,9 @@
  * section 3). Pure data plus small helpers: no driver, Node or browser imports,
  * so main and renderer read the same flags.
  *
- * Every engine ships a driver (`available`). `mysql` and `mariadb` (the same
- * mysql2 driver, P5) are always offered; `postgresql`, `sqlite` and `mongodb`
- * stay `preview` (offered only with Ajustes › Motores en vista previa).
+ * Every engine ships a driver (`available`) and is offered in the connection
+ * pickers: `mysql` and `mariadb` (the same mysql2 driver, P5), `postgresql`,
+ * `sqlite` and `mongodb` (regular engines since 2.0.0; there is no preview flag).
  */
 import type {
   ConnectionConfig,
@@ -63,8 +63,6 @@ export interface EngineCapabilities {
   passwordOptional: boolean
   /** Query tabs own a dedicated session. false for mysql/mariadb in v1. */
   tabSessions: boolean
-  /** Engine is hidden from the connection pickers unless previews are enabled. */
-  preview: boolean
   /** Run SQL on every new session. */
   initialQueries: boolean
   createDatabase: 'charset' | 'pg' | 'mongo' | false
@@ -184,7 +182,6 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       supportsBackupsNb3: true,
       supportsBackupsVqb: true,
       supportsAutomation: true,
-      preview: false,
       sequences: false,
       returning: 'none',
       sqlDialect: 'mysql'
@@ -205,7 +202,6 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       supportsBackupsNb3: true,
       supportsBackupsVqb: true,
       supportsAutomation: true,
-      preview: false,
       sequences: true,
       // INSERT/REPLACE … RETURNING from 10.5, DELETE … RETURNING from 10.0.
       returning: 'insert-delete',
@@ -234,7 +230,6 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       needsHost: true,
       passwordOptional: false,
       tabSessions: true,
-      preview: true,
       initialQueries: true,
       createDatabase: 'pg',
       charsets: false,
@@ -281,7 +276,6 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       needsHost: false,
       passwordOptional: true,
       tabSessions: true,
-      preview: true,
       initialQueries: true,
       createDatabase: false,
       charsets: false,
@@ -333,7 +327,6 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       needsHost: true,
       passwordOptional: true,
       tabSessions: true,
-      preview: true,
       initialQueries: false,
       createDatabase: 'mongo',
       charsets: false,
@@ -403,14 +396,11 @@ export function assertCapability(
 }
 
 /**
- * Engines a user may pick for a new connection (and, later, import).
- * Preview engines appear only with Ajustes > "Motores en vista previa" on;
- * an engine without a driver in this build never appears.
+ * Engines a user may pick for a new connection (and import): every engine
+ * with a driver in this build.
  */
-export function pickableEngines(previewEnabled: boolean): EngineDescriptor[] {
-  return ENGINE_IDS.map((id) => ENGINES[id]).filter(
-    (e) => e.available && (previewEnabled || !e.capabilities.preview)
-  )
+export function pickableEngines(): EngineDescriptor[] {
+  return ENGINE_IDS.map((id) => ENGINES[id]).filter((e) => e.available)
 }
 
 /* ---------- Engine block defaults (used by ConnectionsRepo normalisation) ---------- */

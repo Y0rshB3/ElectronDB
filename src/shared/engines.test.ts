@@ -46,14 +46,10 @@ describe('engine descriptors', () => {
     for (const id of ENGINE_IDS) expect(ENGINES[id].id).toBe(id)
   })
 
-  it('ships every driver; PostgreSQL, SQLite and MongoDB are previews', () => {
+  it('ships every driver; no engine is a preview any more', () => {
     const available = ENGINE_IDS.filter((id) => ENGINES[id].available)
     expect(available).toEqual(['mysql', 'mariadb', 'postgresql', 'sqlite', 'mongodb'])
-    expect(ENGINES.mysql.capabilities.preview).toBe(false)
-    expect(ENGINES.mariadb.capabilities.preview).toBe(false)
-    for (const id of ['postgresql', 'sqlite', 'mongodb'] as const) {
-      expect(ENGINES[id].capabilities.preview).toBe(true)
-    }
+    for (const id of ENGINE_IDS) expect('preview' in ENGINES[id].capabilities).toBe(false)
   })
 
   it('gives MariaDB everything MySQL has, plus sequences and RETURNING', () => {
@@ -181,9 +177,8 @@ describe('engine helpers', () => {
     ).toThrow('Sin copias .nb3')
   })
 
-  it('offers PostgreSQL, SQLite and MongoDB in the pickers only with previews on', () => {
-    expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql', 'mariadb'])
-    expect(pickableEngines(true).map((e) => e.id)).toEqual([
+  it('offers every engine in the pickers', () => {
+    expect(pickableEngines().map((e) => e.id)).toEqual([
       'mysql',
       'mariadb',
       'postgresql',

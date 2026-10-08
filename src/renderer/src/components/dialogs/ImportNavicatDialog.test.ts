@@ -120,7 +120,7 @@ describe('ImportNavicatDialog', () => {
     )
   })
 
-  it('imports MariaDB rows by key and blocks PostgreSQL while previews are off', async () => {
+  it('imports MariaDB and PostgreSQL rows by key, blocking only unsupported servers', async () => {
     invoke = mockVortaq({
       'navicat:detect': () => ({
         found: true,
@@ -175,13 +175,12 @@ describe('ImportNavicatDialog', () => {
       'PostgreSQL'
     ])
     const blocked = table.findAll('[data-test="import-blocked"]').map((e) => e.text())
-    expect(blocked[0]).toContain('vista previa')
-    expect(blocked[1]).toBe('Amazon Redshift no es compatible')
+    expect(blocked).toEqual(['Amazon Redshift no es compatible'])
     expect(table.get('[data-test="import-warning"]').text()).toContain('solo se usa el primero')
     await wrapper.get('[data-test="import-run"]').trigger('click')
     await settle()
     expect(calls(invoke, 'navicat:import')).toEqual([
-      [{ connections: ['Local', 'MariaDB\u001fMaria'], jobs: [] }, '/nav']
+      [{ connections: ['Local', 'MariaDB\u001fMaria', 'PostgreSQL\u001fPG'], jobs: [] }, '/nav']
     ])
   })
 

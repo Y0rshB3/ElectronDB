@@ -20,7 +20,6 @@ const base: AppSettings = {
   aiDefaultProviderId: null,
   aiEffort: 'low',
   aiMaxTokens: 16000,
-  previewEngines: false
 }
 
 describe('SettingsDialog › Seguridad typed-confirmation environments', () => {
@@ -122,8 +121,7 @@ describe('SettingsDialog › Ver tour de bienvenida', () => {
   })
 })
 
-// Written before "Motores en vista previa" existed: no previewEngines key.
-const legacySettings: Omit<AppSettings, 'previewEngines'> = {
+const savedSettings: AppSettings = {
   navicatRootPath: '/nav',
   backupsRootDir: '/backups',
   defaultRowLimit: 1000,
@@ -138,61 +136,31 @@ const legacySettings: Omit<AppSettings, 'previewEngines'> = {
   aiMaxTokens: 16000
 }
 
-describe('SettingsDialog preview engines switch', () => {
+describe('SettingsDialog without «Motores en vista previa» (every engine is regular)', () => {
   let invoke: Mock
   let wrapper: ReturnType<typeof mountWith> | null = null
-  let stored: Record<string, unknown>
 
   beforeEach(() => {
-    stored = { ...legacySettings }
     invoke = mockVortaq({
-      'app:info': () => ({ version: '0.1.9' }),
-      'settings:get': () => ({ ...stored }),
-      'settings:update': (patch) => {
-        stored = { ...stored, ...(patch as Partial<AppSettings>) }
-        return { ...stored }
-      }
+      'app:info': () => ({ version: '2.0.0' }),
+      'settings:get': () => ({ ...savedSettings }),
+      'settings:update': (patch) => ({ ...savedSettings, ...(patch as Partial<AppSettings>) })
     })
   })
   afterEach(() => wrapper?.unmount())
 
-  async function openDialog() {
+  it('has no preview switch and never sends one', async () => {
     const pinia = freshPinia()
     await useSettingsStore().load()
     useUiStore().settingsDialog = true
     wrapper = mountWith(SettingsDialog, pinia)
     await settle()
-    return wrapper
-  }
-
-  const switchInput = () =>
-    wrapper!.get('[data-test="settings-preview-engines"] input[type="checkbox"]')
-
-  it('shows the Spanish switch, off by default, and names the preview engines', async () => {
-    await openDialog()
-    const field = wrapper!.get('[data-test="settings-preview-engines"]')
-    expect(field.text()).toContain('Motores en vista previa')
-    expect(field.text()).toContain(
-      'motores que aún están en desarrollo: PostgreSQL, SQLite, MongoDB.'
-    )
-    expect((switchInput().element as HTMLInputElement).checked).toBe(false)
-  })
-
-  it('saves the switch with the other settings', async () => {
-    await openDialog()
-    await switchInput().setValue(true)
-    await wrapper!.get('[data-test="settings-save"]').trigger('click')
+    expect(wrapper.find('[data-test="settings-preview-engines"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('vista previa')
+    await wrapper.get('[data-test="settings-save"]').trigger('click')
     await settle()
     const [patch] = calls(invoke, 'settings:update')[0] as [AppSettings]
-    expect(patch).toMatchObject({ ...legacySettings, previewEngines: true })
-    expect(useSettingsStore().settings.previewEngines).toBe(true)
-  })
-
-  it('saving without touching it keeps it off', async () => {
-    await openDialog()
-    await wrapper!.get('[data-test="settings-save"]').trigger('click')
-    await settle()
-    const [patch] = calls(invoke, 'settings:update')[0] as [AppSettings]
-    expect(patch.previewEngines).toBe(false)
+    expect(patch).toMatchObject(savedSettings)
+    expect('previewEngines' in patch).toBe(false)
   })
 })

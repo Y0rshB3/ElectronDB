@@ -337,23 +337,26 @@ describe('ConnectionsRepo engine model', () => {
   })
 })
 
-describe('SettingsRepo previewEngines', () => {
+describe('SettingsRepo: the 2.0 preview switch is gone', () => {
   let dir: string
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'vortaq-repos-settings-'))
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('is off by default, also for settings files written before it existed', () => {
-    expect(DEFAULT_SETTINGS('/data', '/home/test', 'darwin').previewEngines).toBe(false)
-    expect(new SettingsRepo(dir, '/home/test', 'darwin').get().previewEngines).toBe(false)
+  it('ignores a stored «Motores en vista previa» and drops it on the next write', () => {
+    expect('previewEngines' in DEFAULT_SETTINGS('/data', '/home/test', 'darwin')).toBe(false)
     writeFileSync(
       join(dir, 'settings.json'),
-      JSON.stringify({ defaultRowLimit: 50, theme: 'light', confirmProductionWrites: true })
+      JSON.stringify({ defaultRowLimit: 50, theme: 'light', previewEngines: true })
     )
     const settings = new SettingsRepo(dir, '/home/test', 'darwin')
-    expect(settings.get()).toMatchObject({ defaultRowLimit: 50, previewEngines: false })
-    expect(settings.update({ previewEngines: true }).previewEngines).toBe(true)
-    expect(new SettingsRepo(dir, '/home/test', 'darwin').get().previewEngines).toBe(true)
+    expect('previewEngines' in settings.get()).toBe(false)
+    expect(settings.get()).toMatchObject({ defaultRowLimit: 50, theme: 'light' })
+    // A stale renderer sending it is ignored too.
+    settings.update({ defaultRowLimit: 60, previewEngines: false } as never)
+    const stored = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8'))
+    expect(stored).toMatchObject({ defaultRowLimit: 60, theme: 'light' })
+    expect('previewEngines' in stored).toBe(false)
   })
 })

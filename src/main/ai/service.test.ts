@@ -213,7 +213,6 @@ const SETTINGS: AppSettings = {
   aiDefaultProviderId: null,
   aiEffort: 'medium',
   aiMaxTokens: 8000,
-  previewEngines: false
 }
 
 function harness(

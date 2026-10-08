@@ -1491,7 +1491,7 @@ export interface NavicatConnectionPreview {
   navicatType: NavicatSection
   /** Engine Vortaq creates; null for an unsupported server (a PostgreSQL fork). */
   engine: EngineId | null
-  /** Why the row cannot be imported (unsupported server); the preview flag is checked apart. */
+  /** Why the row cannot be imported (unsupported server, encrypted file, Kerberos…). */
   blockedReason: string | null
   /** Fields the import could not map exactly (e.g. «solo se usa el primer host»). */
   warnings: string[]
@@ -1597,8 +1597,6 @@ export interface AppSettings {
   aiEffort: AiEffort
   /** Max output tokens per answer. */
   aiMaxTokens: number
-  /** Shows engines that are still in preview in the connection pickers. Off by default. */
-  previewEngines: boolean
   /**
    * Format «Nueva copia» starts with: 'vqb' (default; absent = 'vqb'), 'nb3'
    * or 'sql'. PostgreSQL connections always use .vqb.

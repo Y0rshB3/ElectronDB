@@ -21,7 +21,6 @@ import type {
   NavicatSection
 } from '@shared/types'
 import type { AppContext } from '../context'
-import { previewEngineReason } from '../importers/connections/util'
 import { newId, nowIso } from '../storage/ids'
 import { isJobImportedFromNavicat, readNavicatJobs } from './batchJobs'
 import {
@@ -63,21 +62,14 @@ function mergeExtraDirs(current: string[], navicatDir: string | null): string[] 
   return dirs
 }
 
-/**
- * Why a row cannot be imported: an unsupported server, an engine without a
- * driver, or a preview engine while «Motores en vista previa» is off.
- */
+/** Why a row cannot be imported: an unsupported server or setup, or an engine without a driver. */
 export function navicatBlockReason(
-  connection: Pick<NavicatConnectionEntry['connection'], 'engine' | 'unsupportedReason'>,
-  previewEngines: boolean
+  connection: Pick<NavicatConnectionEntry['connection'], 'engine' | 'unsupportedReason'>
 ): string | null {
   // A known engine can still be unusable (an encrypted SQLite file, Kerberos sign-in).
   if (!connection.engine || connection.unsupportedReason)
     return connection.unsupportedReason ?? 'Motor no soportado'
-  const unavailable = engineAvailabilityError({ engine: connection.engine })
-  if (unavailable) return unavailable
-  const engine = engineOf({ engine: connection.engine })
-  return engine.capabilities.preview && !previewEngines ? previewEngineReason(engine.label) : null
+  return engineAvailabilityError({ engine: connection.engine })
 }
 
 /**
@@ -266,7 +258,6 @@ export async function importFromNavicat(
 
   if (wantedConnections.size > 0) {
     const byKey = new Map(connectionEntries.map((e) => [e.preview.key, e]))
-    const previewEngines = ctx.settings.get().previewEngines === true
     for (const key of wantedConnections) {
       const entry = byKey.get(key)
       const name = entry?.connection.name ?? key.split('\u001f').pop() ?? key
@@ -274,8 +265,8 @@ export async function importFromNavicat(
         warnings.push(`La conexión "${name}" no existe en conn.plist de Navicat`)
         continue
       }
-      // Main enforces what the preview shows (unsupported server, preview engine off).
-      const blocked = navicatBlockReason(entry.connection, previewEngines)
+      // Main enforces what the preview shows (unsupported server or setup).
+      const blocked = navicatBlockReason(entry.connection)
       if (blocked) {
         warnings.push(`La conexión "${name}" no se ha importado: ${blocked}`)
         continue

@@ -234,16 +234,17 @@ export const DEFAULT_SETTINGS = (
   aiDefaultProviderId: null,
   aiEffort: 'low',
   aiMaxTokens: DEFAULT_AI_MAX_TOKENS,
-  previewEngines: false,
   defaultBackupFormat: 'vqb'
 })
 
 /**
  * settings.json as stored. `confirmProductionWrites` is the pre-0.1.5 boolean:
  * it is read only to be dropped (production can no longer be turned off) and
- * never written again.
+ * never written again. `previewEngines` is the «Motores en vista previa»
+ * switch of the 2.0 previews: every engine is a regular one now, so it is
+ * ignored and dropped on the next write.
  */
-type StoredSettings = AppSettings & { confirmProductionWrites?: unknown }
+type StoredSettings = AppSettings & { confirmProductionWrites?: unknown; previewEngines?: unknown }
 
 export class SettingsRepo {
   private store: JsonStore<StoredSettings>
@@ -256,7 +257,11 @@ export class SettingsRepo {
     this.staleMacDefault = platform === 'darwin' ? null : macNavicatRootPath(home)
   }
   get(): AppSettings {
-    const { confirmProductionWrites: _legacy, ...stored } = this.store.get()
+    const {
+      confirmProductionWrites: _legacy,
+      previewEngines: _previews,
+      ...stored
+    } = this.store.get()
     const settings: AppSettings = {
       ...stored,
       // Only an explicit false turns the destructive confirmation off (missing or invalid: on).
@@ -272,8 +277,6 @@ export class SettingsRepo {
         typeof stored.aiDefaultProviderId === 'string' ? stored.aiDefaultProviderId : null,
       aiEffort: AI_EFFORTS.includes(stored.aiEffort) ? stored.aiEffort : 'low',
       aiMaxTokens: normalizeAiMaxTokens(stored.aiMaxTokens),
-      // Profiles saved before the switch existed (or invalid values): previews hidden.
-      previewEngines: stored.previewEngines === true,
       // Profiles saved before .vqb (or invalid values): .vqb is the default for new backups.
       defaultBackupFormat:
         stored.defaultBackupFormat && BACKUP_FORMATS.includes(stored.defaultBackupFormat)
@@ -286,11 +289,15 @@ export class SettingsRepo {
   }
   update(patch: Partial<AppSettings>): AppSettings {
     this.store.update((s) => {
-      const { confirmProductionWrites: _ignored, ...rest } = (patch ??
-        {}) as Partial<StoredSettings>
+      const {
+        confirmProductionWrites: _ignored,
+        previewEngines: _previews,
+        ...rest
+      } = (patch ?? {}) as Partial<StoredSettings>
       Object.assign(s, rest)
       s.typedConfirmEnvironments = normalizeTypedConfirmEnvironments(s.typedConfirmEnvironments)
       delete s.confirmProductionWrites
+      delete s.previewEngines
     })
     return this.get()
   }

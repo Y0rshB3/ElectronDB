@@ -3,9 +3,10 @@
 <img src="build/icons/256x256.png" alt="" width="96" height="96" />
 
 Vortaq es un gestor de bases de datos de escritorio, independiente y de código abierto, para macOS, Windows y
-Linux. Hoy trabaja con MySQL y MariaDB: explora y edita datos, escribe consultas con autocompletado, diseña
-tablas, saca copias de seguridad y automatiza copias y restauraciones entre entornos (por ejemplo, de staging a
-local). Funciona por su cuenta: no necesita los clientes `mysql`/`mysqldump`, porque usa su propio driver. Si
+Linux. Trabaja con MySQL, MariaDB, PostgreSQL, SQLite y MongoDB: explora y edita datos, escribe consultas con
+autocompletado, diseña tablas, saca copias de seguridad y automatiza copias y restauraciones entre entornos (por
+ejemplo, de staging a local). Funciona por su cuenta: no necesita `mysql`/`mysqldump`, `psql`, `sqlite3` ni
+`mongosh`, porque usa sus propios drivers. Si
 ya usabas otro gestor, puede importar tus conexiones (Navicat, DBeaver, MySQL Workbench) y tus copias `.sql` o
 `.nb3`, y exportar copias en `.sql` que otros programas leen (ver
 [Importar desde otros gestores](#importar-desde-otros-gestores)). Sus copias nuevas usan `.vqb`, un formato propio,
@@ -36,15 +37,17 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 
 ## Funciones
 
-- **PostgreSQL (vista previa)**: bases de datos y esquemas, consultas con sesión y transacción propias por
-  pestaña, cancelación, datos editables, diseñador y DDL ([PostgreSQL (vista previa)](#postgresql-vista-previa)).
-- **SQLite (vista previa)**: abre un archivo `.db` o crea uno nuevo (nunca se crea por error), bases de datos
-  adjuntas, consultas con cancelación, datos editables por `rowid`, diseñador que reconstruye la tabla sin perder
-  datos y copias `.vqb` ([SQLite (vista previa)](#sqlite-vista-previa)).
-- **MongoDB (vista previa)**: independiente, conjunto de réplicas o SRV (también por túnel SSH), documentos en
-  tabla, árbol o JSON que se editan **sin cambiar sus tipos BSON**, pestañas de consulta con órdenes del shell
-  (sin ejecutar JavaScript), índices, validador, transacciones en conjuntos de réplicas y copias `.vqb`
-  ([MongoDB (vista previa)](#mongodb-vista-previa)).
+- **PostgreSQL**: bases de datos y esquemas, consultas con sesión y transacción propias por pestaña,
+  cancelación, datos editables, diseñador y DDL ([PostgreSQL](#postgresql)).
+- **SQLite**: abre un archivo `.db` o crea uno nuevo (nunca se crea por error), bases de datos adjuntas,
+  consultas con cancelación, datos editables por `rowid`, diseñador que reconstruye la tabla sin perder datos y
+  copias `.vqb` ([SQLite](#sqlite)).
+- **MongoDB**: independiente, conjunto de réplicas o SRV (también por túnel SSH), documentos en tabla, árbol o
+  JSON que se editan **sin cambiar sus tipos BSON**, pestañas de consulta con órdenes del shell (sin ejecutar
+  JavaScript), índices, validador, transacciones en conjuntos de réplicas y copias `.vqb`
+  ([MongoDB](#mongodb)).
+- **MariaDB** como motor propio: secuencias, tablas versionadas (también en las copias, con su historial) y
+  cuentas ed25519/parsec ([MariaDB](#mariadb)).
 - **Conexiones MySQL/MariaDB** con colores, entorno (Local, Staging, Producción, Otro), túnel SSH (contraseña o
   clave privada), SSL, sin contraseña para proxies o certificados, lista de bases de datos personalizada y
   consultas iniciales de sesión.
@@ -57,10 +60,10 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 - **Diseñador de tablas** (columnas, índices, claves foráneas) y editor DDL de vistas y rutinas.
 - **Copias de seguridad `.vqb` y `.nb3`**: crear, listar (incluidas las importadas de otros gestores, en solo
   lectura), restaurar en cualquier conexión del mismo motor y "rollback a local". Por defecto se usa `.vqb`, el
-  formato abierto de Vortaq, con **Cifrar con contraseña** opcional (también para PostgreSQL); `.nb3` sigue
-  disponible para compartir copias con Navicat.
-- **Automatización**: trabajos con pasos de backup, de SQL y de restauración, programador tipo cron, historial
-  y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
+  formato abierto de Vortaq, con **Cifrar con contraseña** opcional (para todos los motores); en MySQL y
+  MariaDB, `.nb3` sigue disponible para compartir copias con Navicat.
+- **Automatización**: trabajos con pasos de backup y de restauración para todos los motores (y de SQL en MySQL y
+  MariaDB), programador tipo cron, historial y registro de ejecución. **Restaurar todo en Local** reemplaza tus bases de datos locales con las copias que
   sacó una ejecución (por ejemplo, todo staging en local); **Restaurar paquete en Local** hace lo mismo desde
   la lista de copias de seguridad con un paquete entero (también los lotes importados de otros gestores).
 - **Importación desde otros gestores** (**Más › Importar…**): conexiones de Navicat (carpeta de macOS o archivo
@@ -315,8 +318,9 @@ derecha, el asistente de IA (✦) y los ajustes (⚙).
 
 ### Crear una conexión
 
-1. **Conexión → Nueva conexión MySQL…**
-2. Rellena host, puerto, usuario y contraseña. Elige el **Entorno**: marca como **Producción** cualquier servidor
+1. **Conexión → Nueva conexión MySQL…** (o MariaDB, PostgreSQL, SQLite o MongoDB; el formulario también deja
+   cambiar de motor antes de guardar).
+2. Rellena host, puerto, usuario y contraseña (en SQLite, el archivo). Elige el **Entorno**: marca como **Producción** cualquier servidor
    real que no quieras modificar por accidente.
 3. Opcional: túnel SSH (contraseña o archivo de clave privada) y SSL (CA, certificado y clave de cliente).
 4. **Probar conexión** y guarda.
@@ -350,9 +354,14 @@ además:
 - **Producción**: además de lo de MySQL, cuentan como escritura `NEXTVAL`/`SETVAL`/`NEXT VALUE FOR`, el contenido
   de `/*M! … */` y la sentencia de `SET STATEMENT … FOR`.
 - **Asistente de IA**: sabe que es MariaDB (secuencias, `RETURNING`, tablas versionadas, JSON como alias).
-- **Copias**: como las copias aún no guardan secuencias ni tablas versionadas (se avisa antes), **reemplazar**
-  una base de datos que las tenga (restaurar o importar un `.sql` con copia previa) se rechaza para no
-  perderlas.
+- **Copias**: las copias `.vqb` y `.sql` guardan las **secuencias** (con su valor) y las **tablas versionadas
+  con todo su historial**; al restaurar en MariaDB 10.11 o posterior el historial se recupera tal cual (en un
+  servidor más antiguo, solo las filas actuales, con un aviso). Las `.nb3` guardan las tablas versionadas con
+  sus filas actuales y no tienen sitio para secuencias (la ventana de copia lo avisa). Al **reemplazar** una
+  base de datos con secuencias o tablas versionadas, la copia previa se guarda en `.vqb` aunque restaures un
+  `.nb3`, para no perder nada. Solo el historial de las tablas versionadas **por transacción** (columnas de
+  periodo con ids de transacción) no se puede llevar a otro servidor: la copia guarda sus filas actuales con un
+  aviso, y reemplazar una base de datos que las tenga con copia previa se rechaza.
 
 **Tus conexiones MySQL a MariaDB** siguen funcionando: las importadas de una entrada MariaDB (Navicat `.ncx`
 o la sección MariaDB de su carpeta) pasan a ser MariaDB al arrancar, y una conexión MySQL cuyo servidor
@@ -373,13 +382,13 @@ MySQL nada cambia.
 - El total de filas usa `SET STATEMENT max_statement_time` (MariaDB ignora la pista de MySQL) y el tipo de las
   columnas JSON, UUID e INET aparece con su nombre.
 - El diseñador parte de la colación de la base de datos al crear una tabla.
-- **Copias `.nb3`**: el formato no tiene sitio para tablas versionadas ni secuencias; la ventana de copia y el
-  registro de la tarea avisan con sus nombres antes de omitirlas.
+- **Copias**: como en las conexiones MariaDB (ver arriba): `.vqb` y `.sql` lo guardan todo; `.nb3` guarda las
+  filas actuales de las tablas versionadas y no las secuencias, y la ventana de copia y el registro de la tarea
+  lo avisan con sus nombres.
 
-### PostgreSQL (vista previa)
+### PostgreSQL
 
-Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión** ofrece PostgreSQL. Las conexiones
-PostgreSQL ya creadas se abren aunque desactives el ajuste.
+**Conexión › Nueva conexión PostgreSQL…** crea una conexión PostgreSQL.
 
 - **Conexión**: host, puerto (5432), usuario, contraseña o «Sin contraseña», **base de datos inicial**,
   `search_path` opcional y «Mostrar esquemas y bases de datos del sistema». Pestaña **SSL** con los modos de
@@ -421,17 +430,16 @@ PostgreSQL ya creadas se abren aunque desactives el ajuste.
 - **Asistente de IA**: lee solo la estructura (catálogo `pg_catalog`/`information_schema`) con la misma regla
   que en MySQL.
 - **Importar**: las conexiones PostgreSQL de DBeaver, de los `.ncx` de Navicat y de la sección PostgreSQL de la
-  carpeta de Navicat se importan con la vista previa activada (Redshift y otras variantes quedan como no
-  soportadas; con varios servidores solo se usa el primero, con un aviso).
-- **Copias de seguridad**: en formato `.vqb` (ver [Copias .vqb](#copias-vqb-formato-abierto-con-cifrado-opcional)).
-  La automatización sigue siendo solo para MySQL: Vortaq rechaza las tareas que apunten a una conexión
-  PostgreSQL.
+  carpeta de Navicat (Redshift y otras variantes quedan como no soportadas; con varios servidores solo se usa
+  el primero, con un aviso).
+- **Copias de seguridad**: en formato `.vqb` (ver [Copias .vqb](#copias-vqb-formato-abierto-con-cifrado-opcional)),
+  también desde la [Automatización](#automatización) (pasos de copia y de restauración).
+- **Límites**: sin pantalla de usuarios y roles.
 
-### SQLite (vista previa)
+### SQLite
 
-Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión SQLite**. Una conexión SQLite es un
-**archivo**: no hay servidor, usuario, contraseña, SSH ni SSL. Las conexiones SQLite ya creadas se abren aunque
-desactives el ajuste.
+**Conexión › Nueva conexión SQLite…**. Una conexión SQLite es un **archivo**: no hay servidor, usuario,
+contraseña, SSH ni SSL.
 
 - **Abrir o crear**: **Abrir archivo…** elige un archivo existente; **Crear base de datos nueva…** pregunta dónde
   guardarlo y lo crea. Es la única forma en que Vortaq crea un archivo SQLite: abrir, probar o importar una ruta
@@ -473,17 +481,17 @@ KEY`). El filtro «contiene» usa `LIKE`, que en SQLite no distingue mayúsculas
   que confirmas la escritura.
 - **Copias**: `.vqb` de una base de datos (cada valor con su tipo exacto), que se restaura en un **archivo
   nuevo** (opcionalmente con su conexión) o **reemplazando** la base de datos tras una copia de seguridad previa.
-  La automatización todavía no admite SQLite.
+  La [Automatización](#automatización) también copia y restaura bases de datos SQLite.
 - **Asistente de IA**: lee solo la estructura (`sqlite_schema` y los `PRAGMA` de lectura).
-- **Importar**: las conexiones SQLite de DBeaver y de los `.ncx` de Navicat se importan con la vista previa
-  activada (los archivos cifrados de Navicat no se pueden abrir).
+- **Importar**: las conexiones SQLite de DBeaver, de los `.ncx` de Navicat y de la carpeta de Navicat (los
+  archivos cifrados de Navicat no se pueden abrir; una ruta de otro equipo queda marcada hasta que eliges el
+  archivo).
 - **Límites**: no se abren archivos cifrados (SQLCipher); como mucho 4 archivos SQLite abiertos a la vez (cada
   uno usa su propio proceso).
 
-### MongoDB (vista previa)
+### MongoDB
 
-Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión MongoDB**. Las conexiones MongoDB ya
-creadas se abren aunque desactives el ajuste.
+**Conexión › Nueva conexión MongoDB…**.
 
 - **Conexión**: **Pegar URI** rellena los campos a partir de una URI `mongodb://` o `mongodb+srv://` (la
   contraseña pasa a su campo y la URI no se guarda; una URI con credenciales en los parámetros, como
@@ -540,15 +548,16 @@ creadas se abren aunque desactives el ajuste.
   escapes: se decide con el pipeline ya analizado.
 - **Copias**: `.vqb` de una base de datos (o de algunas colecciones): documentos con todos sus tipos BSON,
   opciones de cada colección, validador, índices y vistas. Se restaura en otra base de datos (nueva o
-  existente) o **reemplazando** la base de datos tras una copia previa. La automatización todavía no admite
-  MongoDB.
+  existente) o **reemplazando** la base de datos tras una copia previa. La [Automatización](#automatización)
+  también copia y restaura bases de datos MongoDB.
 - **Asistente de IA**: lee solo la estructura (nombres de colecciones, índices, la parte estructural del
   `$jsonSchema` y los nombres y tipos de los campos de una muestra; nunca valores) y responde con órdenes del
   shell.
-- **Importar**: las conexiones MongoDB de los `.ncx` de Navicat (con sus contraseñas) y de DBeaver se importan
-  con la vista previa activada (DocumentDB y Cosmos DB, sin reintento de escrituras).
-- **Límites**: sin pantallas de usuarios y roles; sin conjuntos de réplicas ni SRV por túnel SSH; sin GSSAPI,
-  AWS ni OIDC.
+- **Importar**: las conexiones MongoDB de los `.ncx` de Navicat (con sus contraseñas), de la carpeta de Navicat
+  y de DBeaver (DocumentDB y Cosmos DB, sin reintento de escrituras).
+- **Límites**: sin pantallas de usuarios y roles; sin constructor visual de agregaciones (los `aggregate` se
+  escriben en la pestaña de consulta) ni vista de `explain`; sin conjuntos de réplicas ni SRV por túnel SSH; sin
+  GSSAPI, AWS ni OIDC.
 
 ### Importar desde otros gestores
 
@@ -557,19 +566,19 @@ del tour) abre un asistente: eliges el **origen**, luego el **archivo o la carpe
 marcas qué traer. Vortaq solo lee el archivo o la carpeta que eliges (o que confirmas en su ubicación habitual):
 nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almacenes cifrados de otros programas.
 
-| Origen                          | Qué se importa                                                                                | Contraseñas                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                                       | No (no están en esos archivos)             |
-| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL (y PostgreSQL/SQLite/MongoDB en vista previa)          | Sí, si lo exportaste con «Export Password» |
-| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (y PostgreSQL/SQLite/MongoDB en vista previa) | No                                         |
-| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                                         | No                                         |
-| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                                 | —                                          |
-| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                                 | —                                          |
-| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada)              | —                                          |
-| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                                   | —                                          |
+| Origen                          | Qué se importa                                                                   | Contraseñas                                |
+| ------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ |
+| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                          | No (no están en esos archivos)             |
+| **Navicat — archivo .ncx**      | Conexiones MySQL, MariaDB, PostgreSQL, SQLite y MongoDB con SSH y SSL            | Sí, si lo exportaste con «Export Password» |
+| **DBeaver**                     | Conexiones MySQL, MariaDB, PostgreSQL, SQLite y MongoDB de `data-sources.json`   | No                                         |
+| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                            | No                                         |
+| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                    | —                                          |
+| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                    | —                                          |
+| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada) | —                                          |
+| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                      | —                                          |
 
-Las conexiones PostgreSQL, SQLite y MongoDB se importan con **Ajustes › Motores en vista previa** activado; las de otros
-motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se importa como conexión MariaDB. Si una conexión ya se importó antes desde
+Las conexiones de otros motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se
+importa como conexión MariaDB. Si una conexión ya se importó antes desde
 el mismo programa (mismo nombre), sale como **ya importada**: al marcarla se actualizan sus datos y se
 conservan su entorno (Producción nunca se rebaja), su carpeta de copias y sus contraseñas guardadas.
 
@@ -650,7 +659,12 @@ rechazan.
    conexiones y, a igualdad, la más reciente). **Detectar** con la ruta vacía vuelve a buscar. La búsqueda solo
    lee: no escribe nada en esas carpetas, no usa la red y no guarda nada salvo la carpeta que confirmes.
 
-2. Marca las conexiones y los trabajos que quieras traer. Navicat no se modifica.
+2. Marca las conexiones y los trabajos que quieras traer. Navicat no se modifica. Se leen las secciones MySQL,
+   MariaDB, PostgreSQL, SQLite y MongoDB (las cuatro últimas, con los nombres de campo documentados en
+   `docs/navicat-storage.md`, sin comprobar todavía con archivos reales): en SQLite se guarda la ruta del archivo
+   tal cual (si no existe en este equipo, la conexión queda marcada hasta que lo eliges; nunca se crea ni se
+   abre al importar) y las bases de datos adjuntas no se importan. Los trabajos por lotes de Navicat son de
+   MySQL.
 3. Navicat no guarda las contraseñas en esos archivos y Vortaq no las busca en ningún otro sitio (tampoco en el
    Llavero): escríbelas una vez en cada conexión, o márcala **Sin contraseña** si el servidor no la pide.
 
@@ -901,6 +915,12 @@ trabajos o de ninguno, en **Automatización › Restauraciones manuales**, con s
 Un trabajo agrupa pasos de **backup de esquema**, de **SQL** y de **restauración**, con una programación tipo
 cron, historial y registro de cada ejecución.
 
+Todos los motores tienen trabajos: en **PostgreSQL**, **SQLite** y **MongoDB** los pasos de copia guardan un
+`.vqb` (con **Cifrar con contraseña** opcional, la misma contraseña de la tarea) y los pasos de restauración
+reemplazan una base de datos del mismo motor con esa copia (en SQLite, `main` o una base adjunta; con la copia
+previa propia de cada motor). Los pasos **SQL** y los formatos `.nb3` y `.sql` son solo de MySQL y MariaDB, y
+una copia nunca se restaura en una conexión de otro motor (el editor solo ofrece destinos del mismo motor).
+
 El paso **Restaurar** reemplaza una base de datos con una copia, igual que «Restaurar todo en Local»
 (comprobación de la copia, copia previa, borrado y creación, restauración). Su origen es:
 
@@ -920,7 +940,8 @@ una en la conexión Local; programado, mantiene tu local al día cada mañana. P
 nunca puede escribir en una conexión de Producción** (las ejecuciones programadas o de launchd no tienen a nadie
 que confirme): Vortaq lo rechaza al guardar el trabajo y otra vez al ejecutarlo. Tampoco permite restaurar
 una base de datos sobre sí misma (misma conexión y esquema que el origen) ni sobre una base de datos del sistema
-(`mysql`, `sys`, `performance_schema`, `information_schema`).
+(`mysql`, `sys`, `performance_schema`, `information_schema`; en PostgreSQL `template0`/`template1`, en MongoDB
+`admin`, `local` y `config`).
 
 | Modo                                  | Sistemas   | Cómo funciona                                                                       |
 | ------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |

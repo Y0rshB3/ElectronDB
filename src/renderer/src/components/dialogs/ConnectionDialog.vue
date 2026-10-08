@@ -77,19 +77,14 @@ const isSqlite = computed(() => engine.value === 'sqlite')
 const isMongo = computed(() => engine.value === 'mongodb')
 const isMariaDb = computed(() => engine.value === 'mariadb')
 const engineLabel = computed(() => ENGINES[engine.value]?.label ?? 'MySQL')
-/** Backups are MySQL-only: the backup folder fields follow the capability. */
+/** Backup folder fields: every engine with backups (.nb3 or .vqb). */
 const showBackupDirs = computed(
   () =>
     can({ engine: engine.value }, 'supportsBackupsNb3') ||
     can({ engine: engine.value }, 'supportsBackupsVqb')
 )
-/**
- * Engines offered for a new connection: only with Ajustes › Motores en vista
- * previa on (otherwise MySQL, as before, and no picker is shown).
- */
-const engineChoices = computed(() =>
-  editing.value ? [] : pickableEngines(settingsStore.settings.previewEngines === true)
-)
+/** Engines offered for a new connection (every engine; the engine of a saved one is fixed). */
+const engineChoices = computed(() => (editing.value ? [] : pickableEngines()))
 
 function selectEngine(id: EngineId): void {
   if (id === engine.value) return
@@ -482,11 +477,11 @@ async function save(): Promise<void> {
               ? (editing.sqlite?.filePath ?? '')
               : `${editing.host}:${editing.port}`
             : isPg
-              ? 'PostgreSQL (vista previa), con SSH y SSL opcionales'
+              ? 'PostgreSQL, con SSH y SSL opcionales'
               : isSqlite
-                ? 'SQLite (vista previa): un archivo de base de datos'
+                ? 'SQLite: un archivo de base de datos'
                 : isMongo
-                  ? 'MongoDB (vista previa): independiente, conjunto de réplicas o SRV'
+                  ? 'MongoDB: independiente, conjunto de réplicas o SRV'
                   : isMariaDb
                     ? 'MariaDB, con SSH y SSL opcionales (también cuentas ed25519 y parsec)'
                     : 'MySQL / MariaDB, con SSH y SSL opcionales'
@@ -520,15 +515,11 @@ async function save(): Promise<void> {
           >
             <v-icon :icon="e.icon" size="18" aria-hidden="true" />
             <span>{{ e.label }}</span>
-            <span v-if="e.capabilities.preview" class="connection-dialog__preview"
-              >vista previa</span
-            >
           </button>
         </div>
         <div v-else-if="editing && (isPg || isSqlite || isMongo || isMariaDb)" class="mb-2">
           <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip"
-            >{{ engineLabel
-            }}{{ ENGINES[engine].capabilities.preview ? ' · vista previa' : '' }}</v-chip
+            >{{ engineLabel }}</v-chip
           >
         </div>
         <v-window v-model="tab">
@@ -1500,10 +1491,6 @@ async function save(): Promise<void> {
 .connection-dialog__engine--active {
   border-color: rgba(var(--nd-accent-rgb), 0.6);
   box-shadow: var(--nd-glow);
-}
-.connection-dialog__preview {
-  font-size: var(--nd-fs-xs);
-  color: var(--nd-warning);
 }
 .connection-dialog__body {
   min-height: 300px;

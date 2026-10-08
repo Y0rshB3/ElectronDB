@@ -72,7 +72,7 @@ export const WELCOME_FEATURE_STEPS: readonly ActiveTourStep[] = [
   {
     target: 'toolbar-backup',
     title: 'Copias de seguridad',
-    text: 'Crea copias .nb3 y restáuralas, también las que ya tenías. «Restaurar en Local» lleva una copia a tu conexión local sin tocar el servidor original.'
+    text: 'Crea copias .vqb (o .nb3 en MySQL y MariaDB) y restáuralas, también las que ya tenías. «Restaurar en Local» lleva una copia a tu conexión local sin tocar el servidor original.'
   },
   {
     target: 'toolbar-automation',
@@ -129,7 +129,7 @@ export function importStep(
   return {
     target: 'toolbar-connection',
     title: 'Crea tu primera conexión',
-    text: 'Añade un servidor MySQL o importa lo que ya tienes en otro gestor: conexiones de Navicat, DBeaver o MySQL Workbench, y copias .sql o .nb3.',
+    text: 'Añade un servidor MySQL, MariaDB, PostgreSQL o MongoDB, o un archivo SQLite, o importa lo que ya tienes en otro gestor: conexiones de Navicat, DBeaver o MySQL Workbench, y copias .sql o .nb3.',
     testId: 'tour-import-none',
     actions: [
       {

@@ -2,12 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Mock } from 'vitest'
 import type { ConnectionInput } from '@shared/types'
 import { useUiStore } from '@renderer/stores/ui'
-import { useSettingsStore } from '@renderer/stores/settings'
 import ConnectionDialog from './ConnectionDialog.vue'
 import { connectionUri, emptyConnectionInput, withSslMode } from './connectionForm'
 import { freshPinia, makeConnection, mockVortaq, mountWith, settle } from './testing'
 
-describe('ConnectionDialog · PostgreSQL (preview)', () => {
+describe('ConnectionDialog · PostgreSQL', () => {
   let invoke: Mock
   let wrapper: ReturnType<typeof mountWith> | null = null
 
@@ -23,15 +22,16 @@ describe('ConnectionDialog · PostgreSQL (preview)', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('offers only MySQL and MariaDB while previews are off', async () => {
+  it('offers every engine, without any «vista previa» label', async () => {
     const pinia = freshPinia()
     useUiStore().connectionDialog = { open: true, editing: null }
     wrapper = mountWith(ConnectionDialog, pinia)
     await settle()
     expect(wrapper.find('[data-test="conn-engine-picker"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="conn-engine-mysql"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="conn-engine-mariadb"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="conn-engine-postgresql"]').exists()).toBe(false)
+    for (const id of ['mysql', 'mariadb', 'postgresql', 'sqlite', 'mongodb'])
+      expect(wrapper.find(`[data-test="conn-engine-${id}"]`).exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('vista previa')
+    // MySQL is still the default engine of a new connection.
     expect(wrapper.find('[data-test="conn-pg-database"]').exists()).toBe(false)
   })
 
@@ -59,9 +59,8 @@ describe('ConnectionDialog · PostgreSQL (preview)', () => {
     expect(call[1]).toMatchObject({ engine: 'mariadb', name: 'Maria local', port: 3306 })
   })
 
-  it('offers PostgreSQL with previews on and saves the postgres block', async () => {
+  it('offers PostgreSQL and saves the postgres block', async () => {
     const pinia = freshPinia()
-    useSettingsStore().settings.previewEngines = true
     const ui = useUiStore()
     ui.connectionDialog = { open: true, editing: null }
     wrapper = mountWith(ConnectionDialog, pinia)
@@ -96,7 +95,6 @@ describe('ConnectionDialog · PostgreSQL (preview)', () => {
 
   it('opens directly on the engine chosen from the toolbar and shows the chip when editing', async () => {
     const pinia = freshPinia()
-    useSettingsStore().settings.previewEngines = true
     useUiStore().connectionDialog = { open: true, editing: null, engine: 'postgresql' }
     wrapper = mountWith(ConnectionDialog, pinia)
     await settle()

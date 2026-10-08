@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import { pickableEngines } from '@shared/engines'
 import {
   ALL_ENVIRONMENTS,
   MANDATORY_TYPED_ENVIRONMENTS,
@@ -29,15 +28,6 @@ const tour = useTourStore()
 
 const form = ref<AppSettings>({ ...settingsStore.settings })
 
-/** Preview engines this build can offer (none until an engine phase ships its driver). */
-const previewEngineHint = computed(() => {
-  const labels = pickableEngines(true)
-    .filter((e) => e.capabilities.preview)
-    .map((e) => e.label)
-  return labels.length > 0
-    ? `Muestra al crear o importar conexiones los motores que aún están en desarrollo: ${labels.join(', ')}.`
-    : 'Muestra al crear o importar conexiones los motores que aún están en desarrollo. Esta versión todavía no incluye ninguno.'
-})
 const saving = ref(false)
 
 /** Closes Ajustes (unsaved changes are dropped, as with Cancelar) and replays the welcome tour. */
@@ -196,21 +186,6 @@ async function save(): Promise<void> {
               <v-btn value="light" prepend-icon="mdi-white-balance-sunny">Claro</v-btn>
             </v-btn-toggle>
           </div>
-        </section>
-
-        <section class="settings-section" aria-label="Motores">
-          <div class="settings-section__title">
-            <v-icon icon="mdi-flask-outline" size="15" aria-hidden="true" />Motores
-          </div>
-          <v-switch
-            v-model="form.previewEngines"
-            color="primary"
-            label="Motores en vista previa"
-            :hint="previewEngineHint"
-            persistent-hint
-            density="compact"
-            data-test="settings-preview-engines"
-          />
         </section>
 
         <section class="settings-section" aria-label="Actualizaciones">

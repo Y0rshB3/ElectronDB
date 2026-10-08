@@ -206,6 +206,9 @@ exports[`MySQL main toolbar (golden) > is unchanged with an open MySQL database 
     "toolbar-connection": [
       "Nueva conexión MySQL…",
       "Nueva conexión MariaDB…",
+      "Nueva conexión PostgreSQL…",
+      "Nueva conexión SQLite…",
+      "Nueva conexión MongoDB…",
       "Importar…",
     ],
     "toolbar-more": [
@@ -284,6 +287,9 @@ exports[`MySQL main toolbar (golden) > is unchanged without a selection 1`] = `
     "toolbar-connection": [
       "Nueva conexión MySQL…",
       "Nueva conexión MariaDB…",
+      "Nueva conexión PostgreSQL…",
+      "Nueva conexión SQLite…",
+      "Nueva conexión MongoDB…",
       "Importar…",
     ],
     "toolbar-more": [

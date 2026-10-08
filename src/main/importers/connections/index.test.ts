@@ -11,7 +11,6 @@ import { encryptNcxAes } from '../navicat/ncxCipher'
 import { importConnectionFile, previewConnectionFile, type ConnectionImportContext } from './index'
 import { IMPORT_FIXTURES } from './testing'
 import { SQLITE_ENCRYPTED_REASON, sqliteFileReviewWarning } from './types'
-import { previewEngineReason } from './util'
 
 const DBEAVER = join(IMPORT_FIXTURES, 'dbeaver', 'data-sources.json')
 const WORKBENCH = join(IMPORT_FIXTURES, 'workbench', 'connections.xml')
@@ -63,15 +62,13 @@ describe('connection file import', () => {
     })
     expect(result.created.map((c) => c.name).sort()).toEqual([
       'Local MySQL',
+      'Local notes',
       'Maria staging',
-      'Shop production'
+      'Shop production',
+      'Warehouse'
     ])
     expect(result.updated).toEqual([])
     expect(result.passwordsSaved).toBe(0)
-    expect(result.warnings).toEqual([
-      `«Warehouse» no se ha importado: ${previewEngineReason('PostgreSQL')}`,
-      `«Local notes» no se ha importado: ${previewEngineReason('SQLite')}`
-    ])
     const prod = result.created.find((c) => c.name === 'Shop production')!
     expect(prod).toMatchObject({
       engine: 'mysql',
@@ -321,28 +318,7 @@ describe('PostgreSQL connection import', () => {
   const LEDGER = `<Connection ConnectionName="Ledger" ConnType="POSTGRESQL" Host="ledger.example.test" UserName="ledger"
       Password="${encryptNcxAes('pg-secret')}" InitialDatabase="ledger_db" SSL="true" SSL_Mode="verify-full" />`
 
-  it('lists PostgreSQL rows as disabled while previews are off, and main refuses them', async () => {
-    const path = writeNcx(LEDGER)
-    const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
-    expect(preview.items[0]).toMatchObject({
-      engine: 'postgresql',
-      unsupportedReason: previewEngineReason('PostgreSQL')
-    })
-    const result = await importConnectionFile(ctx, {
-      source: 'navicat-ncx',
-      path,
-      keys: ['PostgreSQL:Ledger'],
-      existingMode: 'replace'
-    })
-    expect(result.created).toEqual([])
-    expect(result.warnings).toEqual([
-      `«Ledger» no se ha importado: ${previewEngineReason('PostgreSQL')}`
-    ])
-    expect(ctx.connections.list()).toEqual([])
-  })
-
-  it('imports a PostgreSQL connection with previews on; re-import keeps engine and options', async () => {
-    settings.update({ previewEngines: true })
+  it('imports a PostgreSQL connection; re-import keeps engine and options', async () => {
     const path = writeNcx(LEDGER)
     const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
     expect(preview.items[0].unsupportedReason).toBeNull()
@@ -393,7 +369,6 @@ describe('PostgreSQL connection import', () => {
   })
 
   it('imports DBeaver PostgreSQL entries with previews on', async () => {
-    settings.update({ previewEngines: true })
     const result = await importConnectionFile(ctx, {
       source: 'dbeaver',
       path: DBEAVER,
@@ -414,30 +389,7 @@ describe('PostgreSQL connection import', () => {
     const ncxEntry = (name: string, file: string, extra = ''): string =>
       `<Connection ConnectionName="${name}" ConnType="SQLITE" DatabaseFileName="${file}" ${extra}/>`
 
-    it('lists SQLite rows as disabled while previews are off, and main refuses them', async () => {
-      const db = join(dir, 'app.db')
-      writeFileSync(db, '')
-      const path = writeNcx(ncxEntry('Notes', db))
-      const preview = await previewConnectionFile(ctx, 'navicat-ncx', path)
-      expect(preview.items[0]).toMatchObject({
-        engine: 'sqlite',
-        engineLabel: 'SQLite',
-        unsupportedReason: previewEngineReason('SQLite')
-      })
-      const result = await importConnectionFile(ctx, {
-        source: 'navicat-ncx',
-        path,
-        keys: ['SQLite:Notes'],
-        existingMode: 'replace'
-      })
-      expect(result.created).toEqual([])
-      expect(result.warnings).toEqual([
-        `«Notes» no se ha importado: ${previewEngineReason('SQLite')}`
-      ])
-    })
-
-    it('imports an .ncx SQLite file with previews on: no password, FKs off, path kept', async () => {
-      settings.update({ previewEngines: true })
+    it('imports an .ncx SQLite file: no password, FKs off, path kept', async () => {
       const db = join(dir, 'app.db')
       writeFileSync(db, '')
       const missing = join(dir, 'gone.db')
@@ -495,7 +447,6 @@ describe('PostgreSQL connection import', () => {
     })
 
     it('a production SQLite import opens read-only by default', async () => {
-      settings.update({ previewEngines: true })
       const db = join(dir, 'prod.db')
       writeFileSync(db, '')
       const path = writeNcx(ncxEntry('Shop production', db))
@@ -512,7 +463,6 @@ describe('PostgreSQL connection import', () => {
     })
 
     it('imports DBeaver SQLite entries; existence check is injected', async () => {
-      settings.update({ previewEngines: true })
       const result = await importConnectionFile(
         ctx,
         {
@@ -536,7 +486,6 @@ describe('PostgreSQL connection import', () => {
   })
 
   it('imports .ncx MongoDB connections with previews on: options and password kept', async () => {
-    settings.update({ previewEngines: true })
     const path = writeNcx(
       `<Connection ConnectionName="Mongo RS" ConnType="MONGODB" Host="localhost" ConnMethod="ReplicaSet" ReplicaSetName="rs0" UserName="app" Password="${encryptNcxAes('mongo-pass')}"><Member Host="m1.example.test" Port="27017"/><Advance Database="shop"/></Connection>` +
         '<Connection ConnectionName="Mongo Open" ConnType="MONGODB" Host="127.0.0.1"/>'

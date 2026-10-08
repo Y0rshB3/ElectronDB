@@ -21,7 +21,6 @@ const DEFAULTS: AppSettings = {
   aiDefaultProviderId: null,
   aiEffort: 'low',
   aiMaxTokens: 16000,
-  previewEngines: false,
   defaultBackupFormat: 'vqb'
 }
 

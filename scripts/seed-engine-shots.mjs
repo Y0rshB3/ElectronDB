@@ -214,7 +214,6 @@ write('credentials.json', {
   }
 })
 write('settings.json', {
-  previewEngines: true,
   theme: 'dark',
   checkUpdatesOnStartup: false,
   aiEnabled: true,

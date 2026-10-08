@@ -95,7 +95,7 @@ describe('WHATS_NEW (curated list)', () => {
       'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
       'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
-      'PostgreSQL, SQLite y MongoDB (vista previa): actívalos en Ajustes › Motores en vista previa',
+      'PostgreSQL, SQLite y MongoDB, con copias .vqb y tareas automáticas: Conexión › Nueva conexión',
       'MariaDB como motor propio: secuencias, tablas versionadas y cuentas ed25519/parsec'
     ])
     expect(entry?.important).toEqual(['Tus datos se trasladan automáticamente a Vortaq'])
@@ -107,8 +107,11 @@ describe('WHATS_NEW (curated list)', () => {
       'toolbar-connection',
       'toolbar-connection',
       'toolbar-connection',
+      'toolbar-connection',
+      'toolbar-automation',
       'toolbar-ai'
     ])
+    expect(JSON.stringify(entry)).not.toContain('vista previa')
     // ElectronDB ended at 0.1.9: updating to Vortaq 2.0.0 shows this entry once.
     expect(versions(whatsNewBetween('0.1.9', '2.0.0'))).toEqual(['2.0.0'])
     expect(versions(whatsNewBetween('0.1.9', '2.0.0-alpha.1'))).toEqual(['2.0.0'])
