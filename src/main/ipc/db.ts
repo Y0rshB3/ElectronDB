@@ -267,4 +267,12 @@ export function registerDbHandlers(ctx: AppContext): void {
     requireLite(id)
     return lite.maintenance(id, action, options)
   })
+  handle('sqlite:tableDependents', (id, schema, table) => {
+    requireLite(id)
+    return lite.tableDependents(id, schema, table)
+  })
+  handle('sqlite:alterTable', (id, schema, request, options) => {
+    requireLite(id)
+    return lite.alterTable(id, schema, request, options)
+  })
 }

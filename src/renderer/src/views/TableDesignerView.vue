@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { DataTypeInfo, TableStructure } from '@shared/types'
+import type { DataTypeInfo, SqliteTableDependents, TableStructure } from '@shared/types'
+import { buildRebuildScript, rebuildPreview } from '@shared/sqlite/rebuild'
 import { api } from '@renderer/api'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
@@ -12,6 +13,12 @@ import IndexesEditor from '@renderer/components/designer/IndexesEditor.vue'
 import ConstraintsEditor from '@renderer/components/designer/pg/ConstraintsEditor.vue'
 import PgColumnsEditor from '@renderer/components/designer/pg/PgColumnsEditor.vue'
 import { pgBuildCreatePlan, pgNewTableDraft } from '@renderer/components/designer/pg/planner'
+import SqliteColumnsEditor from '@renderer/components/designer/sqlite/SqliteColumnsEditor.vue'
+import {
+  sqliteBuildCreatePlan,
+  sqliteNewTableDraft,
+  type SqliteDesignerAlter
+} from '@renderer/components/designer/sqlite/planner'
 import { validateDraft } from '@renderer/components/designer/validateDraft'
 import { useConfirm } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -30,6 +37,8 @@ const designer = computed(() => engineUi.value.designer!)
 const tableEngines = computed(() => engineUi.value.typeCatalog?.tableEngines ?? [])
 /** PostgreSQL: own columns editor, constraints tab, transactional save (see save()). */
 const isPg = computed(() => engineUi.value.id === 'postgresql')
+/** SQLite: own columns editor, in-place or rebuild plans sent to sqlite:alterTable. */
+const isSqlite = computed(() => engineUi.value.id === 'sqlite')
 
 /** Index methods of PostgreSQL (pg_am); MySQL keeps IndexesEditor's own list. */
 const PG_INDEX_METHODS = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist']
@@ -59,6 +68,10 @@ const pgEnumAdditions = computed({
 })
 /** PostgreSQL type picker (db:dataTypes). */
 const dataTypes = ref<DataTypeInfo[]>([])
+/** SQLite: triggers/views a rebuild recreates, the AUTOINCREMENT mark (preview only). */
+const sqliteDependents = ref<SqliteTableDependents | null>(null)
+/** SQLite: «Copiar el archivo antes» of a rebuild (VACUUM INTO next to the file). */
+const copyBefore = ref(true)
 const section = ref('fields')
 const loading = ref(false)
 const saving = ref(false)
@@ -75,6 +88,10 @@ const columnNames = computed(() => draft.value.columns.map((c) => c.name).filter
 
 const plan = computed<DesignerAlter>(() => {
   if (!original.value) {
+    if (isSqlite.value)
+      return draft.value.name && draft.value.columns.length
+        ? sqliteBuildCreatePlan(schema.value, draft.value)
+        : { statements: [], risks: [], problems: [], drops: [] }
     if (isPg.value)
       return draft.value.name && draft.value.columns.length
         ? pgBuildCreatePlan(schema.value, draft.value)
@@ -88,8 +105,32 @@ const plan = computed<DesignerAlter>(() => {
   return designer.value.buildAlter(original.value, draft.value)
 })
 const statements = computed(() => plan.value.statements)
+/** SQLite plan extras: the sqlite:alterTable request and the rebuild reason. */
+const sqlitePlan = computed(() => (isSqlite.value ? (plan.value as SqliteDesignerAlter) : null))
+const rebuildReason = computed(() => sqlitePlan.value?.rebuild?.reason ?? null)
+
+/** SQLite: exactly what sqlite:alterTable runs (the rebuild with the dependents read on load). */
+function sqlitePreview(): string {
+  const p = sqlitePlan.value
+  const request = p?.request
+  if (!p || !p.statements.length) return '-- Sin cambios'
+  if (!request) return p.statements.map((st) => (st.startsWith('--') ? st : `${st};`)).join('\n')
+  if (!request.rebuild)
+    return ['BEGIN;', ...request.statements.map((st) => `${st};`), 'COMMIT;'].join('\n')
+  const deps = sqliteDependents.value
+  return rebuildPreview(
+    buildRebuildScript(request.rebuild, request.statements, {
+      schema: schema.value,
+      table: request.newName,
+      dependents: deps?.dependents ?? [],
+      sequence: deps?.sequence ?? null,
+      foreignKeys: deps?.foreignKeys ?? false
+    })
+  )
+}
 const preStatements = computed(() => plan.value.preStatements ?? [])
 const previewSql = computed(() => {
+  if (isSqlite.value) return sqlitePreview()
   if (!statements.value.length && !preStatements.value.length) return '-- Sin cambios'
   if (!isPg.value) return statements.value.join('\n\n')
   // PostgreSQL: what save() runs, in order (ADD VALUE outside the transaction).
@@ -127,6 +168,7 @@ function setCharset(name: string | null): void {
 
 function newTableDraft(): TableDraft {
   if (isPg.value) return pgNewTableDraft()
+  if (isSqlite.value) return sqliteNewTableDraft()
   const id = {
     ...emptyColumn(),
     name: 'id',
@@ -156,6 +198,10 @@ async function loadStructure(): Promise<void> {
       )
       original.value = structure
       draft.value = designer.value.draftFromStructure(structure)
+      if (isSqlite.value)
+        sqliteDependents.value = await api
+          .invokeSilent('sqlite:tableDependents', connectionId.value, schema.value, tableName.value)
+          .catch(() => null)
     } else {
       original.value = null
       draft.value = newTableDraft()
@@ -183,6 +229,11 @@ async function databaseCollation(): Promise<string> {
 
 async function loadLookups(): Promise<void> {
   if (!connectionId.value) return
+  if (isSqlite.value) {
+    // No charsets; foreign keys reference tables of the same database file.
+    schemas.value = [schema.value]
+    return
+  }
   if (isPg.value) {
     // No charsets in PostgreSQL; types and schemas come from the tab's database.
     const db = database.value ?? ''
@@ -208,11 +259,12 @@ async function save(): Promise<void> {
     notify.warning(validation.value)
     return
   }
-  const sql = isPg.value
-    ? statements.value.length || preStatements.value.length
-      ? previewSql.value
-      : ''
-    : statements.value.join('\n')
+  const sql =
+    isPg.value || isSqlite.value
+      ? statements.value.length || preStatements.value.length
+        ? previewSql.value
+        : ''
+      : statements.value.join('\n')
   if (!sql) return
   // Risky changes (drops, type narrowing, NOT NULL, renames) always ask; production always asks via useConfirm.
   const risks = plan.value.risks
@@ -243,7 +295,9 @@ async function save(): Promise<void> {
 
   saving.value = true
   try {
-    if (isPg.value) {
+    if (isSqlite.value) {
+      if (!(await saveSqlite())) return
+    } else if (isPg.value) {
       if (!(await savePg())) return
     } else {
       const results = await api.invokeSilent('db:execute', connectionId.value, sql, {
@@ -325,6 +379,53 @@ async function savePg(): Promise<boolean> {
     return false
   }
   return true
+}
+
+/**
+ * SQLite save: one sqlite:alterTable call (in place, or the rebuild with its
+ * foreign key check), after the optional copy of the file (VACUUM INTO).
+ * Returns false (after telling the user) when something failed.
+ */
+async function saveSqlite(): Promise<boolean> {
+  const request = sqlitePlan.value?.request
+  if (!request) return false
+  if (request.rebuild && copyBefore.value && !(await copyFileFirst())) return false
+  try {
+    const result = await api.invokeSilent(
+      'sqlite:alterTable',
+      connectionId.value,
+      schema.value,
+      request,
+      { confirmProduction: true }
+    )
+    for (const warning of result.warnings) notify.warning(warning)
+    return true
+  } catch (err) {
+    notify.error(`${errorMessage(err)} No se aplicó ningún cambio.`)
+    if (!isNew.value) await loadStructure()
+    return false
+  }
+}
+
+/** «Copiar el archivo antes»: VACUUM INTO a file the user confirms. False = do not apply. */
+async function copyFileFirst(): Promise<boolean> {
+  const file = connections.get(connectionId.value)?.sqlite?.filePath ?? 'base.db'
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+  const base = file.replace(/\.[^./\\]*$/, '')
+  const target = await api.app.pickSaveFile(
+    'Copia del archivo antes de reconstruir la tabla',
+    `${base}-antes-${tableName.value ?? 'tabla'}-${stamp}.db`,
+    [{ name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }]
+  )
+  if (!target) return false
+  try {
+    await api.invokeSilent('sqlite:copyFile', connectionId.value, target)
+    notify.success('Copia del archivo guardada')
+    return true
+  } catch (err) {
+    notify.error(`No se pudo copiar el archivo: ${errorMessage(err)}`)
+    return false
+  }
 }
 
 async function revert(): Promise<void> {
@@ -426,6 +527,25 @@ defineExpose({ draft, previewSql, save })
           <v-icon icon="mdi-code-tags" size="15" class="mr-2" />Vista previa SQL
         </v-tab>
       </v-tabs>
+      <div
+        v-if="rebuildReason && dirty"
+        class="designer__rebuild"
+        role="note"
+        data-test="rebuild-note"
+      >
+        <v-icon icon="mdi-alert-outline" size="16" />
+        <span class="designer__rebuild-text"
+          >La tabla se reconstruirá ({{ rebuildReason }}): se crea de nuevo y se copian sus datos,
+          índices, triggers y vistas en una sola transacción.</span
+        >
+        <v-checkbox
+          v-model="copyBefore"
+          label="Copiar el archivo antes"
+          density="compact"
+          hide-details
+          data-test="copy-before"
+        />
+      </div>
       <div class="nd-viewpanel">
         <v-progress-linear
           v-if="loading"
@@ -443,6 +563,11 @@ defineExpose({ draft, previewSql, save })
               :data-types="dataTypes"
               :original="original"
             />
+            <SqliteColumnsEditor
+              v-else-if="isSqlite"
+              v-model="draft.columns"
+              :without-rowid="draft.options?.withoutRowid === true"
+            />
             <ColumnsEditor v-else v-model="draft.columns" />
           </v-window-item>
           <v-window-item value="indexes" class="fill">
@@ -452,6 +577,12 @@ defineExpose({ draft, previewSql, save })
               :column-names="columnNames"
               :types="PG_INDEX_METHODS"
               allow-expressions
+            />
+            <IndexesEditor
+              v-else-if="isSqlite"
+              v-model="draft.indexes"
+              :column-names="columnNames"
+              :types="['INDEX']"
             />
             <IndexesEditor v-else v-model="draft.indexes" :column-names="columnNames" />
           </v-window-item>
@@ -521,7 +652,39 @@ defineExpose({ draft, previewSql, save })
                     />
                   </v-col>
                 </template>
-                <v-col v-if="!isPg" cols="12" md="6">
+                <template v-if="isSqlite">
+                  <v-col cols="12" md="6" class="d-flex align-center ga-4">
+                    <v-checkbox
+                      :model-value="draft.options?.withoutRowid === true"
+                      label="WITHOUT ROWID"
+                      density="compact"
+                      hide-details
+                      data-test="sqlite-without-rowid"
+                      @update:model-value="
+                        draft = { ...draft, options: { ...draft.options, withoutRowid: !!$event } }
+                      "
+                    />
+                    <v-checkbox
+                      :model-value="draft.options?.strict === true"
+                      label="STRICT (tipos estrictos)"
+                      density="compact"
+                      hide-details
+                      data-test="sqlite-strict"
+                      @update:model-value="
+                        draft = { ...draft, options: { ...draft.options, strict: !!$event } }
+                      "
+                    />
+                  </v-col>
+                  <v-col v-if="original?.constraints?.length" cols="12">
+                    <div class="designer__options-title">Restricciones CHECK (se conservan)</div>
+                    <ul class="designer__checks" data-test="sqlite-checks">
+                      <li v-for="(c, i) in original.constraints" :key="i">
+                        <code>{{ c.name ? `CONSTRAINT ${c.name} ` : '' }}{{ c.definition }}</code>
+                      </li>
+                    </ul>
+                  </v-col>
+                </template>
+                <v-col v-if="!isPg && !isSqlite" cols="12" md="6">
                   <v-combobox
                     v-model="draft.engine"
                     :items="tableEngines"
@@ -531,7 +694,7 @@ defineExpose({ draft, previewSql, save })
                     hide-details
                   />
                 </v-col>
-                <v-col v-if="!isPg" cols="12" md="6">
+                <v-col v-if="!isPg && !isSqlite" cols="12" md="6">
                   <v-select
                     :model-value="charset"
                     :items="charsets.map((c) => c.charset)"
@@ -540,7 +703,7 @@ defineExpose({ draft, previewSql, save })
                     @update:model-value="setCharset"
                   />
                 </v-col>
-                <v-col v-if="!isPg" cols="12" md="6">
+                <v-col v-if="!isPg && !isSqlite" cols="12" md="6">
                   <v-combobox
                     v-model="draft.collation"
                     :items="collationItems"
@@ -550,7 +713,7 @@ defineExpose({ draft, previewSql, save })
                     hide-details
                   />
                 </v-col>
-                <v-col v-if="!isPg" cols="12" md="6">
+                <v-col v-if="!isPg && !isSqlite" cols="12" md="6">
                   <v-text-field
                     :model-value="draft.autoIncrement ?? ''"
                     label="Auto incremento"
@@ -561,7 +724,7 @@ defineExpose({ draft, previewSql, save })
                     "
                   />
                 </v-col>
-                <v-col cols="12">
+                <v-col v-if="!isSqlite" cols="12">
                   <v-textarea
                     v-model="draft.comment"
                     label="Comentario"
@@ -623,6 +786,25 @@ defineExpose({ draft, previewSql, save })
   font-size: var(--nd-fs-title);
   font-weight: var(--nd-fw-heading);
   color: var(--nd-text);
+}
+.designer__rebuild {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--nd-warning);
+  border-radius: 8px;
+  color: var(--nd-warning);
+}
+.designer__rebuild-text {
+  flex: 1 1 auto;
+  color: var(--nd-text);
+}
+.designer__checks {
+  margin: 0 4px;
+  padding-left: 18px;
+  font-family: var(--nd-font-mono, monospace);
 }
 .designer__options :deep(.v-col) {
   padding-block: 8px;

@@ -30,6 +30,7 @@ import { SqliteUserError } from '../sqlite/errors'
 import * as introspect from '../sqlite/introspect'
 import { executeSqliteScript } from '../sqlite/query'
 import { applySqliteRowChanges } from '../sqlite/rowChanges'
+import { alterSqliteTable, tableDependents } from '../sqlite/rebuild'
 import { fetchSqliteTableData } from '../sqlite/tableData'
 import { buildSqliteFilterWhere } from '../sqlite/tableFilter'
 import { assertProductionWriteConfirmed, assertScriptAllowed } from './productionGuard'
@@ -58,6 +59,8 @@ export interface SqliteDbHandlers {
   reopenWritable: H<'sqlite:reopenWritable'>
   copyFile: H<'sqlite:copyFile'>
   maintenance: H<'sqlite:maintenance'>
+  tableDependents: H<'sqlite:tableDependents'>
+  alterTable: H<'sqlite:alterTable'>
 }
 
 /** Main-side refusals for channels SQLite does not have (the renderer never calls them). */
@@ -266,6 +269,12 @@ export function createSqliteDbHandlers(
           action === 'vacuum' ? 'VACUUM' : 'Optimizar'
         )
       return maintenance(id, action)
+    },
+    tableDependents: async (id, schema, table) =>
+      read(id, (s) => tableDependents(s, sqliteDb(schema), table)),
+    alterTable: async (id, schema, request, options) => {
+      assertProductionWriteConfirmed(ctx, id, options, 'Modificar la estructura de la tabla')
+      return alterSqliteTable(await connectionOf(id), sqliteDb(schema), request)
     }
   }
 }

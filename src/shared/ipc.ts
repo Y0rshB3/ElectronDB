@@ -42,9 +42,12 @@ import type {
   SchemaInfo,
   SchemaRef,
   ServerInfo,
+  SqliteAlterRequest,
+  SqliteAlterResult,
   SqliteCopyResult,
   SqliteMaintenanceAction,
   SqliteMaintenanceResult,
+  SqliteTableDependents,
   StartupNotice,
   TabSessionState,
   TableDataPage,
@@ -324,6 +327,21 @@ export interface IpcInvokeMap {
     args: [connectionId: string, action: SqliteMaintenanceAction, options?: WriteOptions]
     result: SqliteMaintenanceResult
   }
+  /** Table designer: triggers and views a rebuild recreates, the AUTOINCREMENT mark and foreign_keys. */
+  'sqlite:tableDependents': {
+    args: [connectionId: string, schema: string, table: string]
+    result: SqliteTableDependents
+  }
+  /** Table designer: creates, alters in place or rebuilds a table in one transaction. */
+  'sqlite:alterTable': {
+    args: [
+      connectionId: string,
+      schema: string,
+      request: SqliteAlterRequest,
+      options?: WriteOptions
+    ]
+    result: SqliteAlterResult
+  }
 
   'backups:list': { args: [connectionId: string, schema?: string | null]; result: BackupFile[] }
   /** An encrypted .vqb without `password` answers its locked header meta; a wrong password throws. */
@@ -562,6 +580,8 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'sqlite:reopenWritable',
   'sqlite:copyFile',
   'sqlite:maintenance',
+  'sqlite:tableDependents',
+  'sqlite:alterTable',
   'backups:list',
   'backups:meta',
   'backups:objectDdl',

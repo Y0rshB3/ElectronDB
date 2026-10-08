@@ -762,6 +762,59 @@ export interface SqliteCopyResult {
   durationMs: number
 }
 
+/** A trigger or view that the rebuild of a table drops and recreates (its SQL as stored). */
+export interface SqliteTableDependent {
+  type: 'trigger' | 'view'
+  name: string
+  sql: string
+}
+
+/** What the table designer needs to preview a rebuild (sqlite:tableDependents). */
+export interface SqliteTableDependents {
+  dependents: SqliteTableDependent[]
+  /** sqlite_sequence value of the table (AUTOINCREMENT high-water mark), null when none. */
+  sequence: number | null
+  /** PRAGMA foreign_keys of the connection. */
+  foreignKeys: boolean
+}
+
+/**
+ * New definition of a table rebuilt by the designer (the 12-step procedure).
+ * Main adds the temporary name, the dependents and the sequence itself.
+ */
+export interface SqliteRebuildDefinition {
+  /** Everything after the table name in the new CREATE TABLE: `(\n  …\n) STRICT`. */
+  createBody: string
+  /** Columns copied from the old table (new and generated columns are left out). */
+  columnMap: { target: string; source: string }[]
+  /** Copy the rowid too (both tables are rowid tables without INTEGER PRIMARY KEY). */
+  keepRowid: boolean
+  /** CREATE INDEX statements of the final table. */
+  indexes: string[]
+  /** The new table uses AUTOINCREMENT: its high-water mark is restored. */
+  autoincrement: boolean
+}
+
+/** sqlite:alterTable request: create, alter in place, or rebuild a table. */
+export interface SqliteAlterRequest {
+  /** Current table name; null when the statements create a new table. */
+  table: string | null
+  /** Final table name. */
+  newName: string
+  /** In-place statements (or CREATE TABLE/INDEX), run first inside the transaction. */
+  statements: string[]
+  /** Rebuild after the in-place statements, or null. */
+  rebuild: SqliteRebuildDefinition | null
+}
+
+export interface SqliteAlterResult {
+  /** Statements run, in order. */
+  applied: string[]
+  /** Foreign key violations that already existed before the change (they do not block it). */
+  warnings: string[]
+  durationMs: number
+}
+
 /* ---------- Backups (.vqb and .nb3) ---------- */
 
 /**

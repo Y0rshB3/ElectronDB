@@ -2,7 +2,8 @@ import { ENGINES } from '@shared/engines'
 import { sqliteDialect } from '@shared/dialects/sqlite'
 import { vortaqSQLite } from '@renderer/components/common/editor/sqliteCompletion'
 import { sqliteDdlSupport } from '@renderer/components/designer/sqliteDdl'
-import type { EngineUi } from './types'
+import { sqliteTablePlanner } from '@renderer/components/designer/sqlite/planner'
+import type { EngineUi, TablePlanner } from './types'
 
 /**
  * SQLite renderer engine (P3, preview): the shared SQLite dialect and the
@@ -15,7 +16,7 @@ export const sqliteUi: EngineUi = {
   descriptor: ENGINES.sqlite,
   dialect: sqliteDialect,
   editorLanguage: vortaqSQLite,
-  designer: null,
+  designer: sqliteTablePlanner satisfies TablePlanner,
   typeCatalog: { tableEngines: [] },
   ddl: sqliteDdlSupport,
   userSql: null

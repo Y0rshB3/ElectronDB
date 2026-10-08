@@ -41,6 +41,7 @@
     "src/renderer/src/utils/tableDesigner.ts",
     "src/renderer/src/utils/sql.ts",
     "src/renderer/src/components/designer/pg/planner.ts",
-    "src/renderer/src/components/designer/pg/types.ts"
+    "src/renderer/src/components/designer/pg/types.ts",
+    "src/renderer/src/components/designer/sqlite/planner.ts"
   ]
 }
