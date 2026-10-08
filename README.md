@@ -38,6 +38,9 @@ inglés. Antes se llamaba ElectronDB (y, en sus primeras versiones, Navidog).
 
 - **PostgreSQL (vista previa)**: bases de datos y esquemas, consultas con sesión y transacción propias por
   pestaña, cancelación, datos editables, diseñador y DDL ([PostgreSQL (vista previa)](#postgresql-vista-previa)).
+- **SQLite (vista previa)**: abre un archivo `.db` o crea uno nuevo (nunca se crea por error), bases de datos
+  adjuntas, consultas con cancelación, datos editables por `rowid`, diseñador que reconstruye la tabla sin perder
+  datos y copias `.vqb` ([SQLite (vista previa)](#sqlite-vista-previa)).
 - **Conexiones MySQL/MariaDB** con colores, entorno (Local, Staging, Producción, Otro), túnel SSH (contraseña o
   clave privada), SSL, sin contraseña para proxies o certificados, lista de bases de datos personalizada y
   consultas iniciales de sesión.
@@ -106,16 +109,17 @@ Limitaciones conocidas fuera de macOS:
 
 ## Requisitos
 
-| Requisito | Versión                                                           | Notas                                                      |
-| --------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
-| Node.js   | **24 LTS** recomendada (la usada en desarrollo); mínimo **22.12** | Trae `npm`. Con Node 20 Electron no se puede descargar.    |
-| Git       | Cualquiera reciente                                               | Para clonar y actualizar.                                  |
-| Docker    | Opcional                                                          | Solo para el MySQL desechable de los tests de integración. |
+| Requisito | Versión                                            | Notas                                                          |
+| --------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| Node.js   | **24 LTS** (la usada en desarrollo); mínimo **24** | Trae `npm`. Los tests de SQLite usan `node:sqlite` de Node 24. |
+| Git       | Cualquiera reciente                                | Para clonar y actualizar.                                      |
+| Docker    | Opcional                                           | Solo para el MySQL desechable de los tests de integración.     |
 
 Sistemas: macOS 13 (Ventura) o posterior (Apple Silicon o Intel), Windows 10/11 de 64 bits, Linux de escritorio
 de 64 bits (por ejemplo Ubuntu 22.04+, Debian 12+, Fedora 41+).
 
-Después de instalar Node, comprueba la versión con `node -v`: debe ser `v22.12.0` o superior (ideal `v24.x`).
+Después de instalar Node, comprueba la versión con `node -v`: debe ser `v24.x` o superior. (La aplicación
+instalada no usa tu Node: trae el suyo dentro de Electron.)
 El repositorio incluye un `.nvmrc` con `24`, así que con `nvm` basta `nvm install` y `nvm use` dentro de la
 carpeta del proyecto (nvm-windows no lee `.nvmrc`: indica la versión, `nvm install 24`).
 
@@ -189,7 +193,7 @@ sudo apt install -y libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 
 
 En Fedora instala `git` y `curl` con `sudo dnf install -y git curl` y usa los mismos pasos de `nvm`. El paquete
 `nodejs` de Fedora 40 y anteriores es Node 20 y no sirve; si usas el de tu distribución, comprueba que `node -v`
-sea 22.12 o superior.
+sea 24 o superior.
 
 ## Inicio rápido
 
@@ -383,8 +387,62 @@ PostgreSQL ya creadas se abren aunque desactives el ajuste.
   que en MySQL.
 - **Importar**: las conexiones PostgreSQL de DBeaver y de los `.ncx` de Navicat se importan con la vista previa
   activada (Redshift y otras variantes quedan como no soportadas).
-- **Copias de seguridad y automatización** son solo para MySQL: con PostgreSQL esos menús no aparecen y Vortaq
-  rechaza las tareas que apunten a una conexión PostgreSQL.
+- **Copias de seguridad**: en formato `.vqb` (ver [Copias .vqb](#copias-vqb-formato-abierto-con-cifrado-opcional)).
+  La automatización sigue siendo solo para MySQL: Vortaq rechaza las tareas que apunten a una conexión
+  PostgreSQL.
+
+### SQLite (vista previa)
+
+Activa **Ajustes › Motores en vista previa** y **Conexión › Nueva conexión SQLite**. Una conexión SQLite es un
+**archivo**: no hay servidor, usuario, contraseña, SSH ni SSL. Las conexiones SQLite ya creadas se abren aunque
+desactives el ajuste.
+
+- **Abrir o crear**: **Abrir archivo…** elige un archivo existente; **Crear base de datos nueva…** pregunta dónde
+  guardarlo y lo crea. Es la única forma en que Vortaq crea un archivo SQLite: abrir, probar o importar una ruta
+  que no existe (o una ruta de Windows en un Mac) **nunca crea un archivo vacío**, y un `ATTACH` de un archivo
+  que no existe se rechaza. Las rutas importadas de otro equipo quedan marcadas hasta que eliges el archivo.
+- **Opciones**: **Solo lectura** (activada por defecto en Producción; el menú de la conexión tiene **Reabrir en
+  modo escritura…** con confirmación), **Aplicar claves foráneas** (`PRAGMA foreign_keys`: activado en los
+  archivos creados con Vortaq y desactivado en los abiertos o importados, para no cambiar el comportamiento de
+  archivos de otras aplicaciones), **bases de datos adjuntas** (alias + archivo), tiempo de espera si el archivo
+  está ocupado y consultas iniciales (`PRAGMA`…). El modo de diario (`journal_mode`) no se toca. Si el archivo o
+  su carpeta no se pueden escribir, se abre en solo lectura y el panel de información lo dice.
+- **Árbol**: conexión › `main` (y cada base adjunta) › Tablas, Vistas, Índices, Triggers y Consultas. El DDL es el
+  texto original de `sqlite_schema`.
+- **Editor de consultas**: autocompletado de SQLite (tablas, `alias.columna`, `adjunta.tabla`, `PRAGMA`,
+  funciones), los triggers con `BEGIN … END` se ejecutan como una sola sentencia y **Detener** corta cualquier
+  consulta en menos de un segundo: el archivo se vuelve a abrir (se pierden las tablas temporales, los `ATTACH`
+  hechos a mano y la transacción abierta, y el mensaje lo avisa).
+- **Una transacción compartida**: todas las pestañas de un archivo usan la misma conexión. La pestaña que abre
+  una transacción ve **Transacción abierta (compartida con las demás pestañas)** con **Confirmar** y
+  **Deshacer**; las demás muestran **Transacción abierta en otra pestaña**: pueden leer (y ven esos cambios sin
+  confirmar), pero no escribir ni guardar en la cuadrícula hasta que se confirme o se deshaga. Cerrar la pestaña
+  dueña pregunta qué hacer.
+- **Datos**: SQLite guarda cada valor con su propio tipo (entero, real, texto, blob o NULL), así que cada celda
+  lo conserva al editarla; el tooltip lo muestra. Las filas se editan por `rowid` (en tablas `WITHOUT ROWID`,
+  por su clave primaria); el `rowid` y las columnas generadas no se editan. Un resultado de consulta se puede
+  editar si viene de una sola tabla e incluye su clave (`SELECT rowid, * FROM t` en tablas sin `INTEGER PRIMARY
+KEY`). El filtro «contiene» usa `LIKE`, que en SQLite no distingue mayúsculas solo en letras ASCII (`á` y `Á` sí
+  se distinguen).
+- **Diseñador de tablas**: cuando SQLite no puede cambiar algo con `ALTER TABLE` (tipo, nulos, valor por
+  defecto, claves, orden de columnas, `WITHOUT ROWID`/`STRICT`…), Vortaq **reconstruye la tabla** en una sola
+  transacción: conserva los datos, el contador de `AUTOINCREMENT`, los índices, los triggers y las vistas que
+  dependen de ella, y lo que el diseñador no edita (COLLATE, CHECK, columnas generadas). Solo se cancela si el
+  cambio deja **nuevas** filas sin su fila referenciada; las que ya existían se avisan. La vista previa muestra
+  el script entero, con la opción **Copiar el archivo antes**. Editor DDL de vistas y triggers (se eliminan y se
+  vuelven a crear en una transacción: si falla, no cambia nada).
+- **Menús**: vaciar tabla (`DELETE`), **Copiar archivo…** (`VACUUM INTO`, una copia coherente), comprobar
+  integridad y claves foráneas, compactar (`VACUUM`) y **Mostrar en Finder**.
+- **Producción**: además de la confirmación con el nombre, la conexión funciona con `PRAGMA query_only` hasta
+  que confirmas la escritura.
+- **Copias**: `.vqb` de una base de datos (cada valor con su tipo exacto), que se restaura en un **archivo
+  nuevo** (opcionalmente con su conexión) o **reemplazando** la base de datos tras una copia de seguridad previa.
+  La automatización todavía no admite SQLite.
+- **Asistente de IA**: lee solo la estructura (`sqlite_schema` y los `PRAGMA` de lectura).
+- **Importar**: las conexiones SQLite de DBeaver y de los `.ncx` de Navicat se importan con la vista previa
+  activada (los archivos cifrados de Navicat no se pueden abrir).
+- **Límites**: no se abren archivos cifrados (SQLCipher); como mucho 4 archivos SQLite abiertos a la vez (cada
+  uno usa su propio proceso).
 
 ### Importar desde otros gestores
 
@@ -393,19 +451,19 @@ del tour) abre un asistente: eliges el **origen**, luego el **archivo o la carpe
 marcas qué traer. Vortaq solo lee el archivo o la carpeta que eliges (o que confirmas en su ubicación habitual):
 nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almacenes cifrados de otros programas.
 
-| Origen                          | Qué se importa                                                                   | Contraseñas                                |
-| ------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                          | No (no están en esos archivos)             |
-| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL                                           | Sí, si lo exportaste con «Export Password» |
-| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (con túnel SSH)                  | No                                         |
-| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                            | No                                         |
-| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                    | —                                          |
-| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                    | —                                          |
-| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada) | —                                          |
-| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                      | —                                          |
+| Origen                          | Qué se importa                                                                        | Contraseñas                                |
+| ------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| **Navicat — carpeta (macOS)**   | Conexiones, colores, trabajos por lotes y copias `.nb3`                               | No (no están en esos archivos)             |
+| **Navicat — archivo .ncx**      | Conexiones MySQL/MariaDB con SSH y SSL (y PostgreSQL/SQLite en vista previa)          | Sí, si lo exportaste con «Export Password» |
+| **DBeaver**                     | Conexiones MySQL/MariaDB de `data-sources.json` (y PostgreSQL/SQLite en vista previa) | No                                         |
+| **MySQL Workbench**             | Conexiones de `connections.xml` (con túnel SSH y SSL)                                 | No                                         |
+| **Archivo .sql**                | Un volcado `.sql` o `.sql.gz` en una conexión                                         | —                                          |
+| **Carpeta de volcados .sql**    | Un volcado por base de datos, como un paquete                                         | —                                          |
+| **Copia .vqb (Vortaq)**         | Se restaura con el diálogo de **Restaurar** (pide la contraseña si está cifrada)      | —                                          |
+| **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                           | —                                          |
 
-Las conexiones de otros motores (PostgreSQL, SQL Server, SQLite…) aparecen en la vista previa como **no
-soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
+Las conexiones PostgreSQL y SQLite se importan con **Ajustes › Motores en vista previa** activado; las de otros
+motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
 el mismo programa (mismo nombre), sale como **ya importada**: al marcarla se actualizan sus datos y se
 conservan su entorno (Producción nunca se rebaja), su carpeta de copias y sus contraseñas guardadas.
 
@@ -600,6 +658,8 @@ de copia nuevos de la automatización. Su especificación es pública: [docs/vqb
   (`.jsonl.gz`) con tipos exactos (decimales, enteros grandes, binarios, fechas sin cambios de zona horaria,
   JSON, arrays de PostgreSQL). Se puede abrir sin Vortaq con `unzip`, `gunzip` y cualquier lector de JSON; la
   especificación trae un lector de ejemplo en Python.
+- **SQLite**: la copia incluye una base de datos entera (tablas con cada valor y su tipo exacto, índices, vistas,
+  triggers y contadores de `AUTOINCREMENT`) y se restaura en un archivo nuevo o reemplazando la base de datos.
 - **MySQL, MariaDB y PostgreSQL**: en PostgreSQL la copia incluye la base de datos entera (todos sus esquemas,
   extensiones, tipos, secuencias, tablas y datos, funciones, vistas, índices, claves foráneas y triggers). Una
   copia se restaura solo en el mismo motor. En PostgreSQL la restauración es una única transacción: si algo
@@ -920,8 +980,9 @@ ese modelo. El pie indica el modelo que respondió.
 
 Solo se envía la **estructura** de la base de datos seleccionada: nombres de bases de datos, tablas y columnas,
 tipos, claves primarias y únicas, índices, claves foráneas, firmas de vistas y rutinas, estimaciones de filas y
-el entorno de la conexión (Local, Staging, Producción). La estructura se lee **solo de `information_schema`**:
-el lector del asistente rechaza cualquier otra consulta, así que no puede leer filas aunque haya un error.
+el entorno de la conexión (Local, Staging, Producción). La estructura se lee **solo de `information_schema`**
+(en PostgreSQL también `pg_catalog`; en SQLite, `sqlite_schema` y los `PRAGMA` de lectura): el lector del
+asistente rechaza cualquier otra consulta, así que no puede leer filas aunque haya un error.
 
 **Nunca** se envían filas, resultados de consultas, valores de celdas, ni el servidor, usuario o contraseña de
 la conexión (tampoco su nombre).
@@ -1214,7 +1275,7 @@ perfil no se toca al actualizar.
 | Linux: `The SUID sandbox helper binary was found, but is not configured correctly`                      | En Ubuntu 23.10+ ocurre por AppArmor. Desde el código: `sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`. Con la AppImage: `./Vortaq-*.AppImage --no-sandbox`.                                                                     |
 | macOS: "está dañada y no se puede abrir", "no se ha podido verificar" o "desarrollador no identificado" | Ejecuta `xattr -dr com.apple.quarantine "/Applications/Vortaq.app"`. Ver [Aplicación sin firmar](#aplicación-sin-firmar-primer-arranque).                                                                                                                                                                      |
 | macOS: "no se puede usar con esta versión de macOS"                                                     | La app necesita macOS 13 (Ventura) o posterior.                                                                                                                                                                                                                                                                |
-| `npm warn EBADENGINE` durante `npm ci`                                                                  | Tu Node es demasiado antiguo. Instala Node 24 (mínimo 22.12) como en [Requisitos](#requisitos) y repite `npm ci`.                                                                                                                                                                                              |
+| `npm warn EBADENGINE` durante `npm ci`                                                                  | Tu Node es demasiado antiguo. Instala Node 24 como en [Requisitos](#requisitos) y repite `npm ci`.                                                                                                                                                                                                             |
 | Un trabajo programado no se ejecuta en Windows/Linux                                                    | El programador interno solo funciona con la app abierta: déjala abierta o usa el Programador de tareas / cron con `--run-job=<id>` (ver [Automatización](#automatización)).                                                                                                                                    |
 | Windows: "Failed to uninstall old application files" o no se puede desinstalar Vortaq                   | Ver [Windows: reparar una instalación rota](#windows-reparar-una-instalación-rota). Tus datos (`%APPDATA%\Vortaq`) no se tocan.                                                                                                                                                                                |
 

@@ -31,7 +31,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       'ElectronDB ahora se llama Vortaq, con nuevo icono y barra de herramientas reorganizada',
       'Copias .vqb: formato propio, abierto y con cifrado opcional',
       'Importa conexiones y copias desde DBeaver, MySQL Workbench, Navicat y .sql, y exporta copias en .sql',
-      'PostgreSQL (vista previa): actívalo en Ajustes › Motores en vista previa',
+      'PostgreSQL y SQLite (vista previa): actívalos en Ajustes › Motores en vista previa',
       'Mejoras para servidores MariaDB: tablas versionadas, usuarios, valores por defecto y aviso antes de copiar'
     ],
     important: ['Tus datos se trasladan automáticamente a Vortaq'],
@@ -54,7 +54,12 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       {
         target: 'toolbar-backup',
         title: 'Copias .vqb',
-        text: '«Nueva copia» guarda por defecto un .vqb: el formato abierto y documentado de Vortaq, también para PostgreSQL, con «Cifrar con contraseña» opcional. Sigues pudiendo elegir .nb3 (Navicat) o .sql; los pasos de copia de la automatización también tienen «Formato: .vqb | .nb3 | .sql».'
+        text: '«Nueva copia» guarda por defecto un .vqb: el formato abierto y documentado de Vortaq, también para PostgreSQL y SQLite, con «Cifrar con contraseña» opcional. Sigues pudiendo elegir .nb3 (Navicat) o .sql; los pasos de copia de la automatización también tienen «Formato: .vqb | .nb3 | .sql».'
+      },
+      {
+        target: 'toolbar-connection',
+        title: 'SQLite (vista previa)',
+        text: 'Con Ajustes › Motores en vista previa activado, Conexión › Nueva conexión SQLite abre un archivo .db o crea uno nuevo. Las pestañas de consulta de un archivo comparten su transacción: confírmala o deshazla desde la pestaña que la abrió.'
       }
     ]
   },

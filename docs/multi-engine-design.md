@@ -1,6 +1,6 @@
 # Multi-engine architecture (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB)
 
-Status: **design; P1a, P1b, P2a and P2b implemented on branch `v2` (PostgreSQL still behind the preview flag). Revision 3** (2026-10-07): the product is now
+Status: **design; P1a, P1b, P2a, P2b and P3 implemented on branch `v2` (PostgreSQL and SQLite still behind the preview flag). Revision 3** (2026-10-07): the product is now
 called **Vortaq** (formerly ElectronDB, and Navidog before that); revision 3 renames it, removes
 the Navicat Keychain recovery (section 12.3) and limits the sources to the ones in section 19.
 Revision 2 (2026-10-05, at `c147306`) answered two reviews: an adversarial review (guard bypasses,
@@ -1524,6 +1524,11 @@ default_transaction_read_only = off` before that script and restores `on` after 
 > MySQL-only (the gates below still apply to it), restores go to the same engine only, and
 > automation stays MySQL-only (`supportsAutomation`), so PostgreSQL has no job steps, packages or
 > «Restaurar todo» yet.
+>
+> **P3 update (SQLite).** SQLite also has `.vqb` backups (`supportsBackupsVqb: true`) of one database
+> (main or an attachment) with each cell's storage class, restored into a new file or replacing the
+> database after a VACUUM INTO safety copy; «Copia del archivo (VACUUM INTO)» is the fast native copy.
+> Automation stays off for SQLite.
 
 All of these gates are checked in main and mirrored in the UI (coupling §5).
 
@@ -2023,6 +2028,52 @@ Split into PRs, each green and releasable on its own:
   AUTOINCREMENT high-water mark kept, dependent views recreated, and pre-existing FK violations
   reported but not blocking**. The packaged smoke passes on macOS, Windows and Linux. SQLite's
   preview flag is switched off.
+
+#### P3 as implemented (2026-10-07)
+
+What shipped, and where it differs from the text above (each point is deliberate):
+
+- **Worker and cancel.** `src/main/sqlite/`: `core.ts` (pure node:sqlite), `worker.ts` (utilityProcess
+  entry, electron-vite input `sqliteWorker`), `client.ts` (RPC; `kill()` rejects pending calls with the
+  cancel message), `connection.ts` (one worker and one handle per connection behind a lock). Cancel kills
+  the process only when the execution is the one running now, and the file is reopened right away with
+  the configured attachments, initial queries and query_only. Measured: 12–50 ms from cancel to result
+  (in-process tests, a real child process in the integration suite, and the Electron utility process in
+  the smoke run).
+- **Opening never creates.** Besides the path checks, the file is opened through a `file:` URI with
+  `mode=rw`/`ro` (SQLite refuses a missing file), attachments the same way, and **an authorizer denies
+  `ATTACH` of a missing or relative path from SQL** (not in the original design). `VACUUM INTO` stays
+  allowed: it is an explicit request for that copy. `node:sqlite` defaults `enableForeignKeyConstraints`
+  to true, so the option is always passed explicitly.
+- **Shared transaction (5.3.1).** As designed: the owning tab gets `transactionStatus: 'in'` and
+  Confirmar/Deshacer; other tabs get `TabSessionState.transactionElsewhere` and «Transacción abierta en
+  otra pestaña»; their writes, BEGIN/COMMIT/ROLLBACK, grid saves, designer changes, maintenance writes and
+  backups are refused while it lasts. A run without a tab never leaves a transaction open.
+- **Guard.** Main's denylist blocks a PRAGMA that assigns, or that takes `(…)` and is not on the read list
+  (the text above said any `(`, which would have blocked `PRAGMA table_info(t)` that the renderer treats
+  as a read and broken the `isObviousWrite ⇒ analyzeWrites` property). `ANALYZE` and unknown bare
+  PRAGMAs are writes for the renderer only; on guarded connections `query_only` stops them anyway.
+- **Editable results.** `StatementSync.columns()` gives table/column/database. A rowid table is edited by
+  rowid, so a result is editable only when it includes the rowid (or the INTEGER PRIMARY KEY that is its
+  alias); otherwise the reason says «añade rowid a la consulta». The renderer takes the key from the
+  columns the driver marks (`decideEditability(…, { keyFromColumns: true })`) and still requires the FROM
+  target to equal the reported table (views report their base table). The rowid column and generated
+  columns are `QueryColumn.locked` (key only).
+- **Storage classes.** Every result and page carries `storage`; edits send the loaded class back
+  (`RowChange.storage`) so an integer stays an integer and a blob a blob; text is bound as text and SQLite
+  applies the column affinity. Cells over 64 KB are not truncated (as for PostgreSQL in P2b).
+- **Designer.** `components/designer/sqlite/planner.ts` decides in place vs rebuild and builds the new
+  CREATE TABLE from the original column definitions (`shared/sqlite/createTable.ts`); the rebuild script
+  is `shared/sqlite/rebuild.ts`, run by `sqlite:alterTable` with the dependents, sequence and FK baseline
+  read by main. Recreated indexes, triggers and views of an attached database are qualified with its
+  alias (stored SQL never names its database).
+- **Read-only.** «Reabrir en modo escritura» is `sqlite:reopenWritable` (session only, typed confirmation
+  on guarded connections).
+- **Not done in P3:** the preview flag stays on (the user decides when to switch it off); the packaged
+  smoke ran on macOS only (Windows and Linux builds were produced and checked for the worker and for
+  having no native SQLite module, but not run); SQLite recent files and drag-and-drop remain named for
+  later; automation jobs for SQLite backups are off.
+- `package.json` `engines.node` is `>=24` (tests use `columns()` and `setReturnArrays`).
 
 ### P4a. MongoDB: connect, browse, edit, read queries
 
