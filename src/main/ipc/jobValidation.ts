@@ -1,3 +1,4 @@
+import { jobStepEngineProblem } from '@shared/jobEngines'
 import { restoreTaskProblem } from '@shared/restoreTask'
 import type { ConnectionConfig, Environment, JobInput } from '@shared/types'
 import { cronToCalendarIntervals, validateCron } from '../automation/cron'
@@ -12,9 +13,11 @@ const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema'])
  * `lookup` resolves connections for the restore rules (a restore step may
  * never target production, nor an environment in `typedEnvironments`: nobody
  * types the connection name in scheduled or launchd runs). A step whose
- * connection exists but whose engine has no automation (anything but MySQL,
- * docs/multi-engine-design.md section 11) is refused; a missing connection is
- * left to the run, as before.
+ * connection exists but whose engine has no automation (`supportsAutomation`,
+ * see engines.ts) is refused, and so is a step its engine does not offer
+ * (shared/jobEngines.ts: query steps and .nb3/.sql copies are MySQL/MariaDB
+ * only, restores stay within one engine); a missing connection is left to the
+ * run, as before.
  */
 export function validateJobInput(
   input: JobInput,
@@ -47,6 +50,8 @@ export function validateJobInput(
     const connection = lookup(task.connectionId)
     if (connection)
       requireConnectionCapability(connection, 'supportsAutomation', CAPABILITY_MESSAGES.automation)
+    const engineProblem = jobStepEngineProblem(task, input.tasks, lookup, label)
+    if (engineProblem) throw new Error(engineProblem)
     if (task.type === 'restoreschema') {
       const problem = restoreTaskProblem(task, input.tasks, lookup, label, { typedEnvironments })
       if (problem) throw new Error(problem)

@@ -31,6 +31,13 @@ import { nowIso } from '../storage/ids'
 import { backupPathKey, backupRunIndex, restorableTasks } from './backupRuns'
 import { needsTypedConfirm } from '../ipc/productionGuard'
 import type { RunOptions } from './runner'
+import { engineOf, isMysqlFamilyEngine } from '@shared/engines'
+import {
+  backupFamilyName,
+  backupFamilyOf,
+  systemDatabaseRefusal,
+  type BackupFamily
+} from '@shared/jobEngines'
 
 export { restorableTasks } from './backupRuns'
 
@@ -59,13 +66,20 @@ const storedKey = (ctx: RollbackContext, jobId: string | null | undefined): stri
 
 /** Real disk and server access for rollback plans (manifests through the index cache). */
 export function createRollbackInspector(
-  ctx: Pick<AppContext, 'userDataPath'>,
+  ctx: Pick<AppContext, 'userDataPath'> & Partial<AppContext>,
   sessions: () => Promise<SessionFactory> | SessionFactory
 ): RollbackInspector {
   return {
     readMeta: (path, password) => readBackupMeta(ctx.userDataPath, path, password),
     fileSize: async (path) => (await stat(path)).size,
     targetSchemas: async (connectionId) => {
+      // PostgreSQL, SQLite and MongoDB list their databases through their own driver.
+      const target = ctx.connections?.get(connectionId)
+      if (target && !isMysqlFamilyEngine(target.engine))
+        return (await import('./targetDatabases')).listEngineDatabases(
+          ctx as AppContext,
+          connectionId
+        )
       const session = await (await sessions()).acquire(connectionId, null)
       try {
         const rows = await session.query<{ name: unknown }>(
@@ -145,6 +159,8 @@ async function planItem(
   let tables = 0
   let encrypted = false
   let locked = false
+  /** Engine family of the copy (.nb3: MySQL; .vqb: its manifest; null until read). */
+  let sourceFamily: BackupFamily | null = null
   // A .sql output of a backup step («Formato: .sql»): listed, never restored.
   if (!isBackupFileName(c.path)) {
     problem = SQL_COPY_NOT_RESTORABLE
@@ -174,6 +190,8 @@ async function planItem(
       else if (c.expected && meta.schema !== c.expected)
         problem = `El archivo contiene la base de datos «${meta.schema}», no «${c.expected}».`
       schema = meta.schema || schema
+      if (!locked)
+        sourceFamily = backupFamilyOf(meta.format === 'vqb' ? (meta.engine ?? 'mysql') : 'mysql')
       objects = meta.objects.length
       tables = meta.objects.filter((o) => String(o.type).toLowerCase() === 'table').length
       rows = meta.objects.reduce((sum, o) => sum + (typeof o.rows === 'number' ? o.rows : 0), 0)
@@ -182,7 +200,14 @@ async function planItem(
       schema = schema || c.fallbackSchema || ''
     }
   if (!schema && !problem) problem = 'No se sabe qué base de datos contiene el backup.'
-  if (!problem && isSystemSchema(schema)) problem = systemSchemaRefusal(schema)
+  const targetFamily = target ? backupFamilyOf(engineOf(target).id) : null
+  if (!problem && (targetFamily ?? 'mysql') === 'mysql' && isSystemSchema(schema))
+    problem = systemSchemaRefusal(schema)
+  if (!problem && targetFamily && targetFamily !== 'mysql')
+    problem = systemDatabaseRefusal(targetFamily, schema)
+  // A copy only restores into its own engine (MySQL and MariaDB share theirs).
+  if (!problem && targetFamily && sourceFamily && sourceFamily !== targetFamily)
+    problem = `Es una copia de ${backupFamilyName(sourceFamily)} y «${target!.name}» es ${backupFamilyName(targetFamily)}: una copia solo se restaura en una conexión del mismo motor.`
   const where = target ? `«${schema}» en «${target.name}»` : `«${schema}» en el destino`
   const warning = c.structureOnly
     ? `Copia solo de estructura (sin datos): las tablas de ${where} quedarán vacías.`
@@ -467,7 +492,10 @@ export function prepareRollback(
         ? 'Alguna de las copias seleccionadas ya no está disponible.'
         : 'Alguna de las bases de datos seleccionadas ya no está en la ejecución.'
     )
-  const system = items.find((i) => isSystemSchema(i.targetSchema))
+  // MySQL's system schemas (the other engines' system databases are plan problems).
+  const system = isMysqlFamilyEngine(target.engine)
+    ? items.find((i) => isSystemSchema(i.targetSchema))
+    : undefined
   if (system) throw new Error(systemSchemaRefusal(system.targetSchema))
   const blocked = items.find((i) => i.problem)
   if (blocked)

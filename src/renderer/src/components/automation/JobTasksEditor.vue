@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { restoreSourceOf } from '@shared/restoreTask'
+import {
+  backupFamilyName,
+  backupFamilyOf,
+  jobBackupFormats,
+  jobDatabaseLabel,
+  supportsQuerySteps
+} from '@shared/jobEngines'
 import type { JobTask, JobTaskType } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -27,6 +34,41 @@ const schemaLoader = useSchemaLoader()
 const connectionItems = computed(() =>
   automationConnections(connections.sorted).map((c) => ({ title: c.name, value: c.id }))
 )
+/** Query steps run SQL on MySQL and MariaDB connections only. */
+const queryConnectionItems = computed(() =>
+  automationConnections(connections.sorted)
+    .filter((c) => supportsQuerySteps(c))
+    .map((c) => ({ title: c.name, value: c.id }))
+)
+
+const connectionOf = (id: string | null | undefined) => (id ? connections.get(id) : undefined)
+
+/** Step types offered for a step: no query step on PostgreSQL, SQLite or MongoDB. */
+function typeItems(task: JobTask): { value: JobTaskType; title: string; props?: object }[] {
+  const connection = connectionOf(task.connectionId)
+  return TASK_TYPES.map((t) =>
+    t.value === 'runquery' && connection && !supportsQuerySteps(connection)
+      ? { ...t, props: { disabled: true, subtitle: 'Solo MySQL y MariaDB' } }
+      : t
+  )
+}
+
+/** Formats a backup step of this connection can write (.nb3 and .sql: MySQL and MariaDB). */
+function formatsOf(task: JobTask): string[] {
+  const connection = connectionOf(task.connectionId)
+  return connection ? jobBackupFormats(connection) : ['vqb', 'nb3', 'sql']
+}
+
+function databaseLabel(connectionId: string | null | undefined): string {
+  return jobDatabaseLabel(connectionOf(connectionId) ?? null)
+}
+
+/** Engine of the copies a restore step reads (its source connection), when known. */
+function sourceFamily(task: JobTask): ReturnType<typeof backupFamilyOf> | null {
+  const from = restoreSourceOf(task, tasks.value)?.connectionId
+  const connection = connectionOf(from)
+  return connection ? backupFamilyOf(connection.engine) : null
+}
 
 function update(index: number, changes: Partial<JobTask>): void {
   const next = [...tasks.value]
@@ -38,21 +80,32 @@ function update(index: number, changes: Partial<JobTask>): void {
  * Restore targets: connections that need the typed name (production, and the
  * environments chosen in Ajustes › Seguridad) are listed but cannot be chosen.
  */
-const targetItems = computed(() =>
-  automationConnections(connections.sorted).map((c) => {
-    const blocked = settings.needsTypedConfirm(c.environment)
-    return {
-      title: c.name,
-      value: c.id,
-      props: {
-        disabled: blocked,
-        subtitle: blocked
-          ? `${environmentLabel(c.environment)}: pide escribir el nombre, no se puede restaurar desde una tarea`
-          : environmentLabel(c.environment)
+function targetItems(task: JobTask): { title: string; value: string; props: object }[] {
+  // A copy only restores into a connection of its own engine (MySQL and MariaDB share one).
+  const family = sourceFamily(task)
+  return automationConnections(connections.sorted)
+    .filter((c) => !family || backupFamilyOf(c.engine) === family)
+    .map((c) => {
+      const blocked = settings.needsTypedConfirm(c.environment)
+      return {
+        title: c.name,
+        value: c.id,
+        props: {
+          disabled: blocked,
+          subtitle: blocked
+            ? `${environmentLabel(c.environment)}: pide escribir el nombre, no se puede restaurar desde una tarea`
+            : environmentLabel(c.environment)
+        }
       }
-    }
-  })
-)
+    })
+}
+
+function targetHint(task: JobTask): string | undefined {
+  const family = sourceFamily(task)
+  return family && family !== 'mysql'
+    ? `Solo conexiones ${backupFamilyName(family)}: una copia se restaura en el mismo motor.`
+    : undefined
+}
 const blockedHint = computed(() => {
   const names = settings.typedEnvironments.map((e) =>
     e === 'production' ? 'producción' : environmentLabel(e)
@@ -134,7 +187,15 @@ function targetPlaceholder(task: JobTask): string {
 }
 
 function changeConnection(index: number, connectionId: string): void {
-  update(index, { connectionId, schema: '' })
+  const task = tasks.value[index]
+  const changes: Partial<JobTask> = { connectionId, schema: '' }
+  // PostgreSQL, SQLite and MongoDB copies are always .vqb.
+  const connection = connectionOf(connectionId)
+  if (task.type === 'backupschema' && connection) {
+    const allowed = jobBackupFormats(connection)
+    if (!allowed.includes(task.format ?? 'nb3')) changes.format = 'vqb'
+  }
+  update(index, changes)
   void schemaLoader.load(connectionId)
 }
 
@@ -217,7 +278,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
           <div class="task-card__fields">
             <v-select
               :model-value="task.type"
-              :items="TASK_TYPES"
+              :items="typeItems(task)"
               label="Tipo"
               class="task-card__type"
               @update:model-value="changeType(index, $event)"
@@ -261,7 +322,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
                   "
                   :loading="schemaLoader.isLoading(latestOf(task).connectionId)"
                   :disabled="!latestOf(task).connectionId"
-                  label="Esquema de origen"
+                  :label="`${databaseLabel(latestOf(task).connectionId)} de origen`"
                   prepend-inner-icon="mdi-database-outline"
                   @update:menu="onSchemaMenu(latestOf(task).connectionId, $event)"
                   @update:model-value="changeLatest(index, { schema: $event ?? '' })"
@@ -269,10 +330,12 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
               </template>
               <v-select
                 :model-value="task.connectionId || null"
-                :items="targetItems"
+                :items="targetItems(task)"
+                :hint="targetHint(task)"
+                :persistent-hint="!!targetHint(task)"
                 label="Conexión de destino"
                 prepend-inner-icon="mdi-server-network"
-                no-data-text="No hay conexiones"
+                no-data-text="No hay conexiones del mismo motor"
                 data-test="restore-target"
                 @update:model-value="changeConnection(index, $event)"
               />
@@ -293,7 +356,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
             <v-select
               v-else
               :model-value="task.connectionId || null"
-              :items="connectionItems"
+              :items="task.type === 'runquery' ? queryConnectionItems : connectionItems"
               label="Conexión"
               prepend-inner-icon="mdi-server-network"
               no-data-text="No hay conexiones"
@@ -310,7 +373,7 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
                   ? [schemaLoader.errorOf(task.connectionId)!]
                   : []
               "
-              label="Esquema"
+              :label="databaseLabel(task.connectionId)"
               prepend-inner-icon="mdi-database-outline"
               class="task-card__schema"
               @update:menu="onSchemaMenu(task.connectionId, $event)"
@@ -343,8 +406,20 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
                 "
               >
                 <v-btn value="vqb" size="small" data-test="task-format-vqb">.vqb</v-btn>
-                <v-btn value="nb3" size="small" data-test="task-format-nb3">.nb3</v-btn>
-                <v-btn value="sql" size="small" data-test="task-format-sql">.sql</v-btn>
+                <v-btn
+                  v-if="formatsOf(task).includes('nb3')"
+                  value="nb3"
+                  size="small"
+                  data-test="task-format-nb3"
+                  >.nb3</v-btn
+                >
+                <v-btn
+                  v-if="formatsOf(task).includes('sql')"
+                  value="sql"
+                  size="small"
+                  data-test="task-format-sql"
+                  >.sql</v-btn
+                >
               </v-btn-toggle>
               <v-checkbox
                 v-if="task.format === 'vqb'"

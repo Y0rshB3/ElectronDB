@@ -1518,6 +1518,18 @@ default_transaction_read_only = off` before that script and restores `on` after 
 
 ## 11. Backups and automation stay MySQL-only
 
+> **Update (2026-10-08, automation for every engine).** `supportsAutomation` is now true for every
+> engine. PostgreSQL, SQLite and MongoDB jobs have backup steps (`.vqb`, optionally encrypted with the
+> job's password) and restore steps (REPLACE from a `.vqb` of the same engine, with the engine's own
+> safety copy); query steps stay MySQL/MariaDB only (the runner's SQL goes through MySQL sessions).
+> The rules live in `src/shared/jobEngines.ts` and are checked by the job editor, `jobs:save` and the
+> runner; restore steps keep every production/typed-confirmation rule (never from a job, «Restaurar
+> todo» only after typing the name). «Restaurar todo» lists the target's databases per engine
+> (`automation/targetDatabases.ts`) and flags a copy of another engine or a system database
+> (`template0/1`, `admin/local/config`, SQLite `temp`). Navicat batch jobs still resolve only to
+> MySQL/MariaDB connections. Tested end to end per engine in `tests/integration/automationEngines.test.ts`
+> (scratch profile, launchd agent written to a scratch home with a fake `launchctl`, a headless run).
+
 > **Phase 4b update (.vqb).** Backups are no longer MySQL-only: Vortaq's own format `.vqb`
 > (`docs/vqb-format.md`) is the default for new backups and is the only backup format of
 > PostgreSQL (capability `supportsBackupsVqb`; `hasBackups()` = `.nb3` or `.vqb`). `.nb3` stays

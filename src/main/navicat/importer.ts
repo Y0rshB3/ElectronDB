@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { engineAvailabilityError } from '@shared/connectionValidation'
-import { defaultPostgresOptions, engineOf } from '@shared/engines'
+import { defaultPostgresOptions, engineOf, isMysqlFamilyEngine } from '@shared/engines'
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -129,7 +129,8 @@ function findByNavicatName(
 
 /**
  * Resolves a batch-job `Server` to a Vortaq connection: same-request imports first, then Navicat name, then display name.
- * Only connections whose engine has automation (MySQL) are candidates (section 11).
+ * Only MySQL/MariaDB connections are candidates: Navicat batch jobs (.nbatmysql) back up
+ * MySQL schemas into .nb3 files.
  */
 function resolveServer(
   server: string,
@@ -138,7 +139,7 @@ function resolveServer(
 ): ConnectionConfig | null {
   const all = connections.filter((c) => {
     try {
-      return engineOf(c).capabilities.supportsAutomation
+      return isMysqlFamilyEngine(engineOf(c).id)
     } catch {
       return false // a hand-edited, unknown engine is never a job target
     }

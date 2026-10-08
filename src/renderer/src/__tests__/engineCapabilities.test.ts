@@ -287,9 +287,9 @@ describe('backup and job pickers', () => {
 
   it('only offer connections whose engine supports them', () => {
     const all = useConnectionsStore().sorted
-    // PostgreSQL and SQLite have .vqb backups (no .nb3, no automation).
+    // PostgreSQL and SQLite have .vqb backups (no .nb3) and automation.
     expect(backupConnections(all).map((c) => c.id)).toEqual(['my', 'pg', 'lite'])
-    expect(automationConnections(all).map((c) => c.id)).toEqual(['my'])
+    expect(automationConnections(all).map((c) => c.id)).toEqual(['my', 'pg', 'lite'])
     // The default restore target is the first *backup-capable* local connection.
     expect(findLocalConnection(backupConnections(all))?.id).toBe('my')
     expect(findLocalConnection(all)?.id).not.toBe('my')

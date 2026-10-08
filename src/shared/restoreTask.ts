@@ -1,3 +1,5 @@
+import { engineOf } from './engines'
+import { backupFamilyOf, jobStepEngineProblem, systemDatabaseRefusal } from './jobEngines'
 import { environmentName, requiresTypedConfirm } from './typedConfirm'
 import type { ConnectionConfig, Environment, JobTask } from './types'
 
@@ -153,8 +155,13 @@ export function restoreTaskProblem(
     return restoreTypedRefusal(task.referenceName || label, target.name, target.environment)
   const targetSchema = restoreTargetSchema(task, tasks)
   if (!targetSchema) return `El ${label} necesita la base de datos de destino.`
-  if (isSystemSchema(targetSchema))
+  const family = target ? backupFamilyOf(engineOf(target).id) : 'mysql'
+  if (family === 'mysql' && isSystemSchema(targetSchema))
     return `El ${label} no es válido: ${systemSchemaRefusal(targetSchema)}`
+  const systemDb = family === 'mysql' ? null : systemDatabaseRefusal(family, targetSchema)
+  if (systemDb) return `El ${label} no es válido: ${systemDb}`
+  const engineProblem = jobStepEngineProblem(task, tasks, lookup, label)
+  if (engineProblem) return engineProblem
   const from = restoreSourceOf(task, tasks)
   if (
     !options.rollback &&

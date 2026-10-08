@@ -86,10 +86,6 @@ describe('capability gates', () => {
         'Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
       ],
       [
-        () => requireConnectionCapability(pg, 'supportsAutomation', CAPABILITY_MESSAGES.automation),
-        'Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «PG local» es PostgreSQL.'
-      ],
-      [
         () => requireConnectionCapability(pg, 'events', CAPABILITY_MESSAGES.events),
         'Los eventos programados no existen en PostgreSQL («PG local»).'
       ],

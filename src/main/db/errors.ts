@@ -70,7 +70,7 @@ export const CAPABILITY_MESSAGES = {
   backups: (name: string, engine: string): string =>
     `Las copias de seguridad .nb3 solo están disponibles para conexiones MySQL y MariaDB; «${name}» es ${engine}.`,
   automation: (name: string, engine: string): string =>
-    `Las tareas automáticas solo pueden usar conexiones MySQL y MariaDB; «${name}» es ${engine}.`,
+    `Las tareas automáticas no pueden usar «${name}»: su motor (${engine}) no tiene automatización.`,
   events: (name: string, engine: string): string =>
     `Los eventos programados no existen en ${engine} («${name}»).`,
   sequences: (name: string, engine: string): string =>

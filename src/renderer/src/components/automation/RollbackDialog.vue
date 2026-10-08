@@ -16,6 +16,7 @@ import {
   findLocalConnection
 } from '@renderer/components/backups/backupHelpers'
 import { UNDO_REPLACE_HOW } from '@shared/jobLog'
+import { backupFamilyOf } from '@shared/jobEngines'
 import {
   contentText,
   rollbackConfirmation,
@@ -113,9 +114,25 @@ const subtitle = computed(() => {
     : undefined
 })
 
-/** First local connection; never a production one, even when it is the only choice. */
+/** Connection the copies come from (the run's first backup step, or the package's folder owner). */
+function sourceConnectionId(): string | null {
+  const source = effective.value
+  if (source?.kind === 'files') return source.sourceConnectionId
+  return props.run?.tasks.find((t) => t.type === 'backupschema')?.connectionId ?? null
+}
+
+/**
+ * First local connection of the copies' engine (MySQL and MariaDB share one);
+ * never a production one, even when it is the only choice.
+ */
 function defaultTarget(): string | null {
-  return findLocalConnection(connections.sorted)?.id ?? null
+  const from = sourceConnectionId()
+  const source = from ? connections.get(from) : undefined
+  const family = source ? backupFamilyOf(source.engine) : null
+  const candidates = family
+    ? connections.sorted.filter((c) => backupFamilyOf(c.engine) === family)
+    : connections.sorted
+  return findLocalConnection(candidates)?.id ?? null
 }
 
 /** Steps the opener asked to pre-check (a run source with `taskIds`); null = all. */

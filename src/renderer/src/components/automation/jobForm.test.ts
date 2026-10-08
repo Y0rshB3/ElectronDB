@@ -158,3 +158,42 @@ describe('.vqb backup steps and the job password', () => {
     expect('backupPassword' in input).toBe(false)
   })
 })
+
+describe('job steps per engine', () => {
+  const engines: ConnectionConfig[] = [
+    { id: 'my', name: 'MySQL local', environment: 'local', engine: 'mysql' } as ConnectionConfig,
+    { id: 'lite', name: 'Notas', environment: 'local', engine: 'sqlite' } as ConnectionConfig,
+    { id: 'lite2', name: 'Notas copia', environment: 'local', engine: 'sqlite' } as ConnectionConfig,
+    { id: 'mongo', name: 'Mongo', environment: 'staging', engine: 'mongodb' } as ConnectionConfig
+  ]
+  const find = (id: string) => engines.find((c) => c.id === id)
+
+  it('a new restore step of a SQLite copy targets a local SQLite connection', () => {
+    const backup = { ...newTask('backupschema', 'lite', 'main'), id: 'b1' }
+    expect(newRestoreTask([backup], engines).connectionId).toBe('lite')
+  })
+
+  it('accepts .vqb backups of SQLite and MongoDB, refuses query steps there', () => {
+    const draft = {
+      ...emptyDraft(),
+      name: 'Motores',
+      tasks: [
+        { ...newTask('backupschema', 'lite', 'main'), id: 'b1' },
+        { ...newTask('backupschema', 'mongo', 'logs'), id: 'b2', encrypt: true },
+        { ...newTask('runquery', 'mongo', 'logs'), id: 'q1', sql: 'db.x.find()' }
+      ],
+      backupPassword: 'una clave larga',
+      backupPasswordAgain: 'una clave larga'
+    }
+    expect(validateDraft(draft, find)).toEqual([
+      'El paso 3 es una consulta sobre «Mongo» (MongoDB): los pasos de consulta solo están disponibles en conexiones MySQL y MariaDB.'
+    ])
+  })
+
+  it('refuses a restore into another engine', () => {
+    const backup = { ...newTask('backupschema', 'lite', 'main'), id: 'b1' }
+    const restore = { ...newRestoreTask([backup], engines), connectionId: 'my', schema: 'x' }
+    const errors = validateDraft({ ...emptyDraft(), name: 'X', tasks: [backup, restore] }, find)
+    expect(errors.join(' ')).toMatch(/una copia solo se restaura en una conexión del mismo motor/)
+  })
+})

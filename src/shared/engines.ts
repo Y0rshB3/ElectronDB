@@ -228,7 +228,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       supportsBackupsNb3: false,
       // PostgreSQL backups exist only as .vqb.
       supportsBackupsVqb: true,
-      supportsAutomation: false,
+      supportsAutomation: true,
       supportsSsh: true,
       supportsSsl: true,
       needsHost: true,
@@ -275,7 +275,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       supportsBackupsNb3: false,
       // SQLite backups exist only as .vqb (plus the native file copy, VACUUM INTO).
       supportsBackupsVqb: true,
-      supportsAutomation: false,
+      supportsAutomation: true,
       supportsSsh: false,
       supportsSsl: false,
       needsHost: false,
@@ -327,7 +327,7 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
       supportsBackupsNb3: false,
       // MongoDB backups exist only as .vqb (EJSON data, indexes, validators).
       supportsBackupsVqb: true,
-      supportsAutomation: false,
+      supportsAutomation: true,
       supportsSsh: true,
       supportsSsl: true,
       needsHost: true,

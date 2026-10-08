@@ -76,6 +76,23 @@ describe('rollback of a run («Restaurar todo en Local»)', () => {
     return runJob(t.ctx, deps, job.id, 'manual')
   }
 
+  it('flags copies of another engine and that engine’s system databases', async () => {
+    const run = await stagingRun()
+    const mongoId = t.ctx.connections.save({
+      ...connectionInput('Mongo local'),
+      engine: 'mongodb'
+    }).id
+    // A MySQL copy cannot go into MongoDB.
+    const plan = await buildRollbackPlan(t.ctx, run.id, mongoId, {
+      ...inspector,
+      targetSchemas: async () => []
+    })
+    expect(plan.items.map((i) => i.problem)).toEqual([
+      'Es una copia de MySQL/MariaDB y «Mongo local» es MongoDB: una copia solo se restaura en una conexión del mismo motor.',
+      'Es una copia de MySQL/MariaDB y «Mongo local» es MongoDB: una copia solo se restaura en una conexión del mismo motor.'
+    ])
+  })
+
   it('plans one database per backup step, flagging which ones will be replaced', async () => {
     const run = await stagingRun()
     expect(run.tasks[0]).toMatchObject({

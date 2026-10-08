@@ -1,3 +1,4 @@
+import { backupFamilyOf, jobStepEngineProblem } from '@shared/jobEngines'
 import { restoreSourceOf, restoreTaskProblem } from '@shared/restoreTask'
 import type {
   ConnectionConfig,
@@ -86,7 +87,13 @@ export function newRestoreTask(
   )
   const backups = tasks.filter((t) => t.type === 'backupschema')
   const source = [...backups].reverse().find((t) => !used.has(t.id)) ?? backups[backups.length - 1]
-  const local = connections.find((c) => c.environment === 'local' && !blocked(c))
+  // A copy restores into a connection of its own engine (MySQL and MariaDB share one).
+  const from = source ? connections.find((c) => c.id === source.connectionId) : undefined
+  const family = from ? backupFamilyOf(from.engine) : null
+  const local = connections.find(
+    (c) =>
+      c.environment === 'local' && !blocked(c) && (!family || backupFamilyOf(c.engine) === family)
+  )
   const task = newTask('restoreschema', local?.id ?? '', '')
   task.restoreSource = { kind: 'task', taskId: source?.id ?? '' }
   return task
@@ -148,6 +155,11 @@ export function validateDraft(
       errors.push(`Tarea ${n}: selecciona un esquema.`)
     if (task.type === 'runquery' && !task.sql?.trim())
       errors.push(`Tarea ${n}: escribe la consulta SQL a ejecutar.`)
+    // Same per-engine rules as main (restore steps get them through restoreTaskProblem).
+    if (task.type !== 'restoreschema') {
+      const problem = jobStepEngineProblem(task, draft.tasks, lookup, `paso ${n}`)
+      if (problem) errors.push(problem)
+    }
     if (task.type === 'restoreschema' && task.connectionId) {
       // Same rules as main (production targets, targets in the typed-confirmation environments
       // and self-restores are refused).

@@ -39,9 +39,13 @@ import {
   ReplaceIncompleteError,
   incompleteNotice,
   replaceSchemaFromBackup,
+  type ReplaceHooks,
+  type ReplaceRequest,
   type ReplaceResult,
   type SchemaCharset
 } from '../backup/replace'
+import { isMysqlFamilyEngine } from '@shared/engines'
+import { jobStepEngineProblem } from '@shared/jobEngines'
 import type { AppContext } from '../context'
 import { needsTypedConfirm, typedConfirmEnvironments } from '../ipc/productionGuard'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
@@ -217,9 +221,24 @@ function requireConnectionName(ctx: AppContext, task: JobTask): string {
       `La conexión del paso "${task.referenceName}" no existe (id ${task.connectionId}).`
     )
   }
-  // Jobs stay MySQL-only (section 11): a stored job can still point at another engine.
   requireConnectionCapability(conn, 'supportsAutomation', CAPABILITY_MESSAGES.automation)
   return conn.name
+}
+
+/** MySQL and MariaDB connections (sessions, .nb3, .sql); the other engines go through the backup service. */
+function isMysqlFamilyTask(ctx: AppContext, task: JobTask): boolean {
+  return isMysqlFamilyEngine(ctx.connections.get(task.connectionId)?.engine)
+}
+
+/** Per-engine rule of a step (jobs edited by hand or saved before the rule): throws. */
+function requireEngineRules(ctx: AppContext, tasks: JobTask[], task: JobTask): void {
+  const problem = jobStepEngineProblem(
+    task,
+    tasks,
+    (id) => ctx.connections.get(id),
+    `paso «${task.referenceName}»`
+  )
+  if (problem) throw new Error(problem)
 }
 
 type BackupProgress = Omit<ProgressEvent, 'operationId' | 'kind'>
@@ -505,6 +524,7 @@ class RunExecution {
     index: number
   ): Promise<Pick<BackupCreateResult, 'path' | 'objects' | 'rows' | 'sizeBytes'>> {
     requireConnectionName(this.ctx, task)
+    requireEngineRules(this.ctx, this.job.tasks, task)
     let password: string | null = null
     if (task.format === 'vqb' && task.encrypt) {
       password = jobBackupPassword(this.ctx, this.job.id)
@@ -604,6 +624,7 @@ class RunExecution {
     index: number
   ): Promise<ReplaceResult> {
     requireConnectionName(this.ctx, task)
+    requireEngineRules(this.ctx, this.job.tasks, task)
     const problem = restoreTaskProblem(
       task,
       this.job.tasks,
@@ -627,13 +648,24 @@ class RunExecution {
     // An encrypted .vqb: pick the password before anything is touched (never logged).
     const password = await pickBackupPassword(source.path, source.passwords)
     if (password) this.say('  Copia .vqb cifrada: se abre con la contraseña guardada')
-    return replaceSchemaFromBackup(
-      {
-        connections: this.ctx.connections,
-        sessions: this.deps.sessions,
-        backups: this.deps.backups,
-        backupCharset: this.deps.backupCharset
-      },
+    // PostgreSQL, SQLite and MongoDB replace through their own engine (backup service);
+    // MySQL/MariaDB keep the session-based replace (with the injectable charset reader).
+    const replace = isMysqlFamilyTask(this.ctx, task)
+      ? (request: ReplaceRequest, hooks: ReplaceHooks, signal?: AbortSignal) =>
+          replaceSchemaFromBackup(
+            {
+              connections: this.ctx.connections,
+              sessions: this.deps.sessions,
+              backups: this.deps.backups,
+              backupCharset: this.deps.backupCharset
+            },
+            request,
+            hooks,
+            signal
+          )
+      : (request: ReplaceRequest, hooks: ReplaceHooks, signal?: AbortSignal) =>
+          this.deps.backups.replace(request, hooks, signal)
+    return replace(
       {
         backupPath: source.path,
         expectedSchema: source.schema,
@@ -663,6 +695,7 @@ class RunExecution {
 
   private async runQuery(task: JobTask, index: number): Promise<number> {
     requireConnectionName(this.ctx, task)
+    requireEngineRules(this.ctx, this.job.tasks, task)
     let statements = splitStatements(task.sql ?? '')
     if (statements.length === 0) {
       throw new Error(`El paso "${task.referenceName}" no contiene ninguna sentencia SQL.`)

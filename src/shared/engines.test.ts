@@ -121,10 +121,11 @@ describe('engine descriptors', () => {
 
   it('matches the capability table of the design for the other engines', () => {
     const caps = (id: EngineId) => ENGINES[id].capabilities
-    // only the MySQL family keeps .nb3 backups and automation (feature gates follow the configured engine)
+    // only the MySQL family keeps .nb3 backups; every engine has .vqb backups and automation
     for (const id of ['postgresql', 'sqlite', 'mongodb'] as const) {
       expect(caps(id).supportsBackupsNb3).toBe(false)
-      expect(caps(id).supportsAutomation).toBe(false)
+      expect(caps(id).supportsBackupsVqb).toBe(true)
+      expect(caps(id).supportsAutomation).toBe(true)
     }
     expect(caps('mariadb')).toMatchObject({ sequences: true, returning: 'insert-delete' })
     expect(caps('postgresql')).toMatchObject({
