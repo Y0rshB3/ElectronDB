@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AboutPanelOptionsOptions } from 'electron'
 import type { AppLicenses } from '@shared/types'
-import { APP_NAME, UPDATE_REPO } from './brand'
+import { APP_NAME, LEGACY_UPDATE_REPOS, UPDATE_REPO } from './brand'
 
 /**
  * LICENSE and THIRD_PARTY_LICENSES.txt for «Acerca de Vortaq». Packaged builds
@@ -15,6 +15,15 @@ export const THIRD_PARTY_FILE = 'THIRD_PARTY_LICENSES.txt'
 
 /** Public page of the project, opened by «Repositorio en GitHub». */
 export const REPOSITORY_URL = `https://github.com/${UPDATE_REPO.owner}/${UPDATE_REPO.name}`
+
+/**
+ * What «Repositorio en GitHub» actually opens: the repository's earlier name,
+ * which works before the rename to Vortaq and, through GitHub's redirect,
+ * after it. REPOSITORY_URL stays the address shown to the user.
+ */
+export const REPOSITORY_OPEN_URL = LEGACY_UPDATE_REPOS[0]
+  ? `https://github.com/${LEGACY_UPDATE_REPOS[0].owner}/${LEGACY_UPDATE_REPOS[0].name}`
+  : REPOSITORY_URL
 
 export interface LicensePathsInput {
   packaged: boolean

@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, shell } from 'electron'
 import { join } from 'node:path'
 import { LOG_FILE_NAME } from '../brand'
 import type { AppContext } from '../context'
-import { readLicenses, REPOSITORY_URL } from '../licenses'
+import { readLicenses, REPOSITORY_OPEN_URL } from '../licenses'
 import { readEnvSwitches } from '../bootstrap'
 import { dismissStartupNotice, startupNotices } from '../migration'
 import { installedLegacyApps, LEGACY_APP_NOTICE } from '../migration/legacyApp'
@@ -44,7 +44,7 @@ export function registerAppHandlers(ctx: AppContext): void {
       appPath: app.getAppPath()
     })
   )
-  handle('app:openRepository', () => shell.openExternal(REPOSITORY_URL))
+  handle('app:openRepository', () => shell.openExternal(REPOSITORY_OPEN_URL))
   handle('app:pickDirectory', async (title) => {
     const res = await dialog.showOpenDialog({
       title,
