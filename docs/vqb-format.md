@@ -161,12 +161,12 @@ password).
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `format`, `formatVersion`            | Same as the header.                                                                                                                                                                                                    |
 | `app`                                | Program that wrote the file.                                                                                                                                                                                           |
-| `engine`                             | `id`: `mysql` (MySQL and MariaDB) or `postgresql`. `flavor`: `mysql`, `mariadb` or `postgresql`. `serverVersion`: as the server reports it.                                                                            |
+| `engine`                             | `id`: `mysql` (MySQL and MariaDB), `postgresql` or `sqlite`. `flavor`: `mysql`, `mariadb`, `postgresql` or `sqlite`. `serverVersion`: as the server reports it.                                                        |
 | `source.connectionName`              | Name of the connection in the app. Omitted when the user chooses not to record it.                                                                                                                                     |
-| `source.database`                    | MySQL: the schema. PostgreSQL: the database.                                                                                                                                                                           |
+| `source.database`                    | MySQL: the schema. PostgreSQL: the database. SQLite: the attached database alias (`main`).                                                                                                                             |
 | `source.schemas`                     | PostgreSQL only: schemas included (every non-system schema).                                                                                                                                                           |
 | `source.charset`, `source.collation` | MySQL only: the schema defaults, used when the schema is created again.                                                                                                                                                |
-| `source.encoding`                    | PostgreSQL only: `server_encoding` of the database.                                                                                                                                                                    |
+| `source.encoding`                    | PostgreSQL: `server_encoding` of the database. SQLite: `PRAGMA encoding`.                                                                                                                                              |
 | `source.timeZone`                    | MySQL only: session `time_zone` the `TIMESTAMP` values were read in (`+00:00`). A restore must set the same session time zone before inserting them.                                                                   |
 | `createdAt`, `finishedAt`            | ISO 8601, UTC.                                                                                                                                                                                                         |
 | `comment`                            | Optional free text.                                                                                                                                                                                                    |
@@ -175,7 +175,7 @@ password).
 | `objects[]`                          | `id` (folder number), `type`, `name`, `schema` (PostgreSQL), `rows` (tables: rows written; otherwise `null`), `files[]` with `path`, `sha256` (hex) and `bytes` of every entry of the object **as stored in the ZIP**. |
 | `warnings`                           | Optional: what the backup could not include, in the user's language (MariaDB system-versioned tables, PostgreSQL aggregates…).                                                                                         |
 
-Object `type`s: MySQL/MariaDB `table`, `view`, `function`, `procedure`, `event`;
+Object `type`s: MySQL/MariaDB `table`, `view`, `function`, `procedure`, `event`; SQLite `table`, `view`;
 PostgreSQL `extension`, `type`, `sequence`, `table`, `function`, `procedure`, `view`,
 `materialized_view`.
 
@@ -221,8 +221,8 @@ statement and never split it.
 | `columns`                | Tables: columns in the order of the values of every row, with their type in the source dialect. Generated (computed) columns are not stored. `delimiter`: PostgreSQL array element delimiter when it is not `,` (`box[]` uses `;`). |
 | `rows`, `data`           | Tables: rows written, and each data file with its row count.                                                                                                                                                                        |
 | `primaryKey`             | PostgreSQL tables: primary key columns.                                                                                                                                                                                             |
-| `autoIncrement`          | MySQL tables: the `AUTO_INCREMENT` counter (also inside the DDL).                                                                                                                                                                   |
-| `indexes`                | PostgreSQL: `CREATE INDEX` statements of indexes no constraint owns (MySQL keeps them inside the DDL).                                                                                                                              |
+| `autoIncrement`          | MySQL tables: the `AUTO_INCREMENT` counter (also inside the DDL). SQLite: the table's `sqlite_sequence` value.                                                                                                                      |
+| `indexes`                | PostgreSQL and SQLite: `CREATE INDEX` statements of indexes no constraint owns (MySQL keeps them inside the DDL).                                                                                                                   |
 | `foreignKeys`            | PostgreSQL: `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY …` (MySQL keeps them inside the DDL).                                                                                                                                       |
 | `triggers`               | Trigger statements of the table.                                                                                                                                                                                                    |
 | `comments`               | PostgreSQL: `COMMENT ON …` statements.                                                                                                                                                                                              |
@@ -251,7 +251,7 @@ Everything else is tagged:
 | ------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | `$bigint`    | Integer as text, outside the safe range.                                                           | `{"$bigint":"18446744073709551615"}` |
 | `$dec`       | Exact decimal as the server wrote it (also `NaN`/`Infinity` of PostgreSQL `numeric`).              | `{"$dec":"123.4500"}`                |
-| `$float`     | Non-finite float: `NaN`, `Infinity`, `-Infinity`.                                                  | `{"$float":"NaN"}`                   |
+| `$float`     | Non-finite float: `NaN`, `Infinity`, `-Infinity`. SQLite: also an integral `REAL` (`5`, `-0`).     | `{"$float":"NaN"}`                   |
 | `$bin`       | Bytes, standard base64 with padding.                                                               | `{"$bin":"AAEC/w=="}`                |
 | `$dt`        | Date, time or timestamp exactly as the server wrote it; no time-zone conversion.                   | `{"$dt":"2026-10-07 10:00:00.123"}`  |
 | `$json`      | A JSON document **as text** (keeps big numbers, key order and, for PostgreSQL `json`, spacing).    | `{"$json":"{\"a\": 1}"}`             |
@@ -302,6 +302,31 @@ The text forms come from sessions with `DateStyle=ISO,MDY`, `IntervalStyle=postg
 to the column type (`$1::public.mood`); `$bin` as `\x…`, `$arr` as an array literal with
 every element double-quoted.
 
+### SQLite
+
+SQLite is dynamically typed: the value of each **cell** keeps its storage class, whatever the
+column's declared type (`columns[].type` is the declared type as written, `""` when untyped).
+
+| Storage class | Value                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------- |
+| `INTEGER`     | number when safe, `$bigint` otherwise                                                   |
+| `REAL`        | number with a fraction; `$float` when the value is integral (`5.0`, `-0.0`) or infinite |
+| `TEXT`        | string                                                                                  |
+| `BLOB`        | `$bin`                                                                                  |
+| `NULL`        | `null`                                                                                  |
+
+A bare integral JSON number is always an `INTEGER`. Restore: bind `INTEGER` values as 64-bit
+integers, `REAL` as doubles, `$bin` as blobs and strings as text, so `typeof()` of every cell
+comes back unchanged. `ddl.sql` is the `sql` text of `sqlite_schema` verbatim; a table's
+`indexes` and `triggers` and a view's `triggers` (`INSTEAD OF`) hold their `sql` text too.
+Rows are written in rowid order; rowids of tables without an `INTEGER PRIMARY KEY` are not
+kept (they are renumbered on restore).
+
+```jsonl vqb-rows
+[1,{"$bigint":"9007199254740993"},2.5,{"$float":"1"}]
+[{"$float":"-0"},"texto ñ",{"$bin":"AP8Q"},null]
+```
+
 ### Restore order
 
 - MySQL/MariaDB: tables (DDL, rows, triggers, `AUTO_INCREMENT`), functions and procedures,
@@ -313,6 +338,11 @@ every element double-quoted.
   sequences' `postDdl` and `setval` of `sequences`. Vortaq runs it all in one transaction
   with `search_path = pg_catalog` and `check_function_bodies = off`, and does not restore
   owners or privileges.
+- SQLite: tables and their rows, `sqlite_sequence` values (`autoIncrement`), every table's
+  `indexes`, views (archive order is creation order), then the `triggers` of tables and views.
+  Vortaq runs it all in one transaction with `PRAGMA foreign_keys = OFF` (restored afterwards),
+  either into a new file or, when replacing, after dropping every user object of the database
+  (a `VACUUM INTO` copy of the file is taken first).
 
 ## 7. Encryption
 
@@ -429,4 +459,6 @@ for obj in manifest["objects"]:
   (`INHERITS`, restored as independent tables) are not included; extensions are recreated
   with `CREATE EXTENSION`, so the target server must have them installed.
 - MariaDB: system-versioned tables and sequences are left out (listed in `warnings`).
+- SQLite: virtual tables (FTS, R-Tree…) are left out (listed in `warnings`), and so are rowids
+  of tables without an `INTEGER PRIMARY KEY`.
 - Restores go to the same engine only.

@@ -1,6 +1,10 @@
 import type { VqbEngine } from './format'
 
-const LABEL: Record<VqbEngine, string> = { mysql: 'MySQL/MariaDB', postgresql: 'PostgreSQL' }
+const LABEL: Record<VqbEngine, string> = {
+  mysql: 'MySQL/MariaDB',
+  postgresql: 'PostgreSQL',
+  sqlite: 'SQLite'
+}
 
 /** Restores only go to the engine the backup came from. */
 export function engineMismatchMessage(backup: VqbEngine, target: VqbEngine): string {
@@ -11,5 +15,6 @@ export function engineMismatchMessage(backup: VqbEngine, target: VqbEngine): str
 export function vqbEngineOf(engine: string | undefined): VqbEngine | null {
   if (!engine || engine === 'mysql' || engine === 'mariadb') return 'mysql'
   if (engine === 'postgresql') return 'postgresql'
+  if (engine === 'sqlite') return 'sqlite'
   return null
 }

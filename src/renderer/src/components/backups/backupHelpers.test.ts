@@ -30,3 +30,22 @@ describe('sourceChip', () => {
     expect(sourceChip(undefined).label).toBe('Desconocido')
   })
 })
+
+describe('restoreTargets (SQLite)', () => {
+  it('offers a SQLite .vqb only to SQLite connections, and keeps MySQL and PostgreSQL apart', async () => {
+    const { restoreTargets, engineLabel } = await import('./backupHelpers')
+    const { makeConnection } = await import('@renderer/__tests__/shellTestUtils')
+    const list = [
+      makeConnection({ id: 'my' }),
+      makeConnection({ id: 'pg', engine: 'postgresql' }),
+      makeConnection({ id: 'lite', engine: 'sqlite' })
+    ]
+    const ids = (engine: 'mysql' | 'postgresql' | 'sqlite') =>
+      restoreTargets(list, { format: 'vqb', engine, locked: false }).map((c) => c.id)
+    expect(ids('sqlite')).toEqual(['lite'])
+    expect(ids('postgresql')).toEqual(['pg'])
+    expect(ids('mysql')).toEqual(['my'])
+    expect(restoreTargets(list, { format: 'nb3', locked: false }).map((c) => c.id)).toEqual(['my'])
+    expect(engineLabel('sqlite', 'sqlite')).toBe('SQLite')
+  })
+})

@@ -52,8 +52,21 @@ const includeStructure = ref(true)
 const includeData = ref(true)
 const continueOnError = ref(false)
 const typedName = ref('')
-/** «Reemplazar la base de datos completa»: DROP + CREATE, then every object of the copy. */
-const replaceMode = ref(false)
+/**
+ * «Restaurar objetos», «Reemplazar la base de datos completa» (DROP + CREATE, then
+ * every object of the copy) or, for SQLite copies, «En un archivo nuevo».
+ */
+const mode = ref<'objects' | 'replace' | 'file'>('objects')
+const replaceMode = computed({
+  get: () => mode.value === 'replace',
+  set: (value: boolean) => {
+    mode.value = value ? 'replace' : 'objects'
+  }
+})
+/** SQLite «En un archivo nuevo»: where to create it and whether to add a connection. */
+const fileMode = computed(() => mode.value === 'file')
+const newFilePath = ref('')
+const createConnection = ref(true)
 const safetyBackup = ref(true)
 /** Replace «Contenido»: true = «Estructura y datos» (default), false = «Solo estructura». */
 const replaceIncludeData = ref(true)
@@ -90,11 +103,17 @@ const target = computed(() =>
   targetConnectionId.value ? connections.get(targetConnectionId.value) : undefined
 )
 const targetIsPg = computed(() => target.value?.engine === 'postgresql')
+/** A SQLite .vqb (restored into a SQLite connection or a new file). */
+const isSqliteBackup = computed(() => meta.value?.engine === 'sqlite')
 const schemaWord = computed(() =>
-  targetIsPg.value || meta.value?.engine === 'postgresql' ? 'Base de datos' : 'Esquema'
+  targetIsPg.value || meta.value?.engine === 'postgresql' || isSqliteBackup.value
+    ? 'Base de datos'
+    : 'Esquema'
 )
 /** Production, and the environments chosen in Ajustes › Seguridad, need the typed name. */
-const needsTyped = computed(() => settings.needsTypedConfirm(target.value?.environment))
+const needsTyped = computed(
+  () => !fileMode.value && settings.needsTypedConfirm(target.value?.environment)
+)
 const typedTitle = computed(() =>
   target.value?.environment === 'production'
     ? 'Destino de PRODUCCIÓN'
@@ -111,15 +130,16 @@ const objectItems = computed(() =>
   }))
 )
 const safetyCopy = computed(() => isSafetyCopy(backup.value))
-const canRestore = computed(
-  () =>
-    !!backup.value &&
-    !!target.value &&
-    !locked.value &&
-    !!targetSchema.value.trim() &&
-    (replaceMode.value || includeStructure.value || includeData.value) &&
-    productionConfirmed.value &&
-    !running.value
+const canRestore = computed(() =>
+  fileMode.value
+    ? !!backup.value && !locked.value && !!newFilePath.value && !running.value
+    : !!backup.value &&
+      !!target.value &&
+      !locked.value &&
+      !!targetSchema.value.trim() &&
+      (replaceMode.value || includeStructure.value || includeData.value) &&
+      productionConfirmed.value &&
+      !running.value
 )
 
 function defaultTarget(): string | null {
@@ -150,6 +170,10 @@ async function loadMeta(): Promise<void> {
 function afterMeta(): void {
   if (!meta.value) return
   if (!targetSchema.value && meta.value.schema) targetSchema.value = meta.value.schema
+  // A SQLite copy with no SQLite connection to restore into: a new file is the only way.
+  if (isSqliteBackup.value && mode.value === 'objects' && candidates.value.length === 0)
+    mode.value = 'file'
+  if (!isSqliteBackup.value && mode.value === 'file') mode.value = 'objects'
   if (targetConnectionId.value && !candidates.value.some((c) => c.id === targetConnectionId.value))
     onTargetChange(defaultTarget())
   else if (!targetConnectionId.value) onTargetChange(defaultTarget())
@@ -163,6 +187,8 @@ function onUnlocked(unlocked: BackupMeta): void {
 
 function reset(): void {
   objects.value = []
+  newFilePath.value = ''
+  createConnection.value = true
   targetConnectionId.value = defaultTarget()
   targetSchema.value = backup.value?.schema ?? ''
   createSchema.value = true
@@ -197,7 +223,50 @@ function onTargetChange(id: string | null): void {
   if (id) void schemaLoader.load(id)
 }
 
+/** «Elegir archivo…» of «En un archivo nuevo» (the save dialog creates nothing). */
+async function pickNewFile(): Promise<void> {
+  const base = (backup.value?.fileName ?? 'restaurada').replace(/\.vqb$/i, '')
+  const path = await api.app.pickSaveFile('Archivo SQLite restaurado', `${base}.db`, [
+    { name: 'Base de datos SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }
+  ])
+  if (path) newFilePath.value = path
+}
+
+async function restoreToFile(): Promise<void> {
+  if (!backup.value || !newFilePath.value) return
+  const opId = newOperationId('restore')
+  operationId.value = opId
+  running.value = true
+  error.value = ''
+  result.value = null
+  try {
+    result.value = await api.invokeSilent('backups:restore', opId, {
+      backupPath: backup.value.path,
+      connectionId: '',
+      targetSchema: 'main',
+      createSchema: false,
+      dropObjectsFirst: false,
+      includeStructure: true,
+      includeData: includeData.value,
+      continueOnError: continueOnError.value,
+      newFilePath: newFilePath.value,
+      createConnection: createConnection.value,
+      ...(encrypted.value && backups.passwordOf(backup.value.path)
+        ? { password: backups.passwordOf(backup.value.path) }
+        : {})
+    })
+    if (result.value.newConnectionId) await connections.load().catch(() => undefined)
+    notify.success(`Copia restaurada en ${newFilePath.value}`)
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    running.value = false
+    cancelling.value = false
+  }
+}
+
 async function restore(): Promise<void> {
+  if (fileMode.value) return restoreToFile()
   if (!canRestore.value || !backup.value || !target.value) return
   // Guarded targets already asked for the typed name inline; anything else confirms the DROP here.
   if (replaceMode.value && !needsTyped.value) {
@@ -305,7 +374,11 @@ async function cancel(): Promise<void> {
             </div>
             <div class="restore-dialog__file-meta">
               <span
-                >{{ meta?.engine === 'postgresql' ? 'Base de datos' : 'Esquema' }}
+                >{{
+                  meta?.engine === 'postgresql' || meta?.engine === 'sqlite'
+                    ? 'Base de datos'
+                    : 'Esquema'
+                }}
                 <span class="nd-mono">{{ meta?.schema || backup.schema || '—' }}</span></span
               >
               <span class="restore-dialog__sep">·</span>
@@ -351,7 +424,7 @@ async function cancel(): Promise<void> {
             datos completa» sobre la misma base de datos: quedará exactamente como estaba.
           </v-alert>
           <v-btn-toggle
-            v-model="replaceMode"
+            v-model="mode"
             mandatory
             divided
             density="compact"
@@ -361,20 +434,72 @@ async function cancel(): Promise<void> {
             data-test="restore-mode"
           >
             <v-btn
-              :value="false"
+              value="objects"
               prepend-icon="mdi-format-list-checks"
               data-test="restore-mode-objects"
               >Restaurar objetos</v-btn
             >
             <v-btn
-              :value="true"
+              value="replace"
               prepend-icon="mdi-database-sync-outline"
               data-test="restore-mode-replace"
               >Reemplazar la base de datos completa</v-btn
             >
+            <v-btn
+              v-if="isSqliteBackup"
+              value="file"
+              prepend-icon="mdi-file-plus-outline"
+              data-test="restore-mode-file"
+              >En un archivo nuevo</v-btn
+            >
           </v-btn-toggle>
+          <div v-if="fileMode" class="mb-3" data-test="restore-file-options">
+            <div class="d-flex align-center ga-2">
+              <v-text-field
+                :model-value="newFilePath"
+                label="Archivo SQLite nuevo"
+                prepend-inner-icon="mdi-database-plus-outline"
+                readonly
+                hide-details
+                placeholder="Elige dónde crearlo"
+                :disabled="running"
+                data-test="restore-new-file"
+              />
+              <v-btn :disabled="running" data-test="restore-pick-file" @click="pickNewFile"
+                >Elegir…</v-btn
+              >
+            </div>
+            <div class="restore-dialog__options mt-2">
+              <v-checkbox
+                v-model="createConnection"
+                label="Crear una conexión para el archivo restaurado"
+                density="compact"
+                hide-details
+                :disabled="running"
+                data-test="restore-create-connection"
+              />
+              <v-checkbox
+                v-model="includeData"
+                label="Datos"
+                density="compact"
+                hide-details
+                :disabled="running"
+              />
+              <v-checkbox
+                v-model="continueOnError"
+                label="Continuar en caso de error"
+                density="compact"
+                hide-details
+                :disabled="running"
+              />
+            </div>
+            <p class="text-caption mt-1">
+              Se crea un archivo nuevo (nunca se sobrescribe uno existente) con la estructura y los
+              datos de la copia; si la restauración falla, el archivo se borra.
+            </p>
+          </div>
           <v-autocomplete
-            v-if="!replaceMode"
+            v-if="mode === 'objects'"
             v-model="objects"
             :items="objectItems"
             :loading="metaLoading"
@@ -389,7 +514,7 @@ async function cancel(): Promise<void> {
             class="mb-3"
             no-data-text="Sin objetos"
           />
-          <v-row dense>
+          <v-row v-if="!fileMode" dense>
             <v-col cols="12" sm="6">
               <v-select
                 :model-value="targetConnectionId"
@@ -419,7 +544,9 @@ async function cancel(): Promise<void> {
               />
             </v-col>
           </v-row>
-          <div class="nd-section-title restore-dialog__options-title">Opciones</div>
+          <div v-if="!fileMode" class="nd-section-title restore-dialog__options-title">
+            Opciones
+          </div>
           <ReplaceContentToggle
             v-if="replaceMode"
             v-model="replaceIncludeData"
@@ -466,8 +593,9 @@ async function cancel(): Promise<void> {
                 : 'Sin copia previa, los datos actuales se perderán.'
             }}
           </v-alert>
-          <div v-else class="restore-dialog__options">
+          <div v-else-if="!fileMode" class="restore-dialog__options">
             <v-checkbox
+              v-if="!isSqliteBackup"
               v-model="createSchema"
               label="Crear si no existe"
               density="compact"
@@ -504,7 +632,7 @@ async function cancel(): Promise<void> {
             />
           </div>
           <v-alert
-            v-if="!replaceMode && !includeStructure && !includeData"
+            v-if="mode === 'objects' && !includeStructure && !includeData"
             type="warning"
             variant="tonal"
             density="compact"
@@ -542,7 +670,11 @@ async function cancel(): Promise<void> {
             v-if="running"
             class="mt-4"
             :operation-id="operationId"
-            :label="`Restaurando en ${target?.name ?? ''} · ${targetSchema}…`"
+            :label="
+              fileMode
+                ? `Restaurando en ${newFilePath}…`
+                : `Restaurando en ${target?.name ?? ''} · ${targetSchema}…`
+            "
             :cancelling="cancelling"
             @cancel="cancel"
           />
@@ -571,13 +703,28 @@ async function cancel(): Promise<void> {
               · <span class="nd-mono">{{ formatDuration(result.durationMs) }}</span>
             </div>
             <div
+              v-if="result.restoredFilePath"
+              class="text-caption"
+              :title="result.restoredFilePath"
+              data-test="restore-result-file"
+            >
+              Archivo: {{ result.restoredFilePath
+              }}{{ result.newConnectionId ? ' · conexión creada en el árbol' : '' }}
+            </div>
+            <div
               v-if="result.safetyBackupPath"
               class="text-caption"
               :title="result.safetyBackupPath"
               data-test="restore-result-safety"
             >
-              Copia previa: {{ fileNameOf(result.safetyBackupPath) }} (para volver atrás, restáurala
-              con «Reemplazar la base de datos completa»)
+              <template v-if="isSqliteBackup"
+                >Copia previa del archivo: {{ fileNameOf(result.safetyBackupPath) }} (para volver
+                atrás, ábrela como conexión SQLite o copia ese archivo sobre el original)</template
+              >
+              <template v-else
+                >Copia previa: {{ fileNameOf(result.safetyBackupPath) }} (para volver atrás,
+                restáurala con «Reemplazar la base de datos completa»)</template
+              >
             </div>
           </v-alert>
           <v-table

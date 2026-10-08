@@ -77,7 +77,9 @@ export async function replacePgDatabase(
       request.password
     )
     if (meta.format !== 'vqb' || meta.engine !== 'postgresql')
-      throw new Error(engineMismatchMessage('mysql', 'postgresql'))
+      throw new Error(
+        engineMismatchMessage(meta.engine === 'sqlite' ? 'sqlite' : 'mysql', 'postgresql')
+      )
   } catch (err) {
     throw new Error(`${sentence(describeError(err))} ${keep}`)
   }

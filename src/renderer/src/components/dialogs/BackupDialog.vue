@@ -33,8 +33,11 @@ const objects = ref<string[]>([])
 const objectItems = ref<{ title: string; value: string; subtitle: string }[]>([])
 const objectsLoading = ref(false)
 const includeData = ref(true)
-/** .vqb (Vortaq's open format, default), .nb3 (Navicat) or plain .sql for other managers. */
-const format = ref<BackupFormat>('vqb')
+/**
+ * .vqb (Vortaq's open format, default), .nb3 (Navicat) or plain .sql for other managers.
+ * SQLite: .vqb or 'file', a copy of the database file itself (VACUUM INTO).
+ */
+const format = ref<BackupFormat | 'file'>('vqb')
 /** «Cifrar con contraseña» (.vqb only). */
 const encrypt = ref(false)
 const password = ref('')
@@ -60,6 +63,8 @@ const result = ref<Pick<
 > | null>(null)
 const isSql = computed(() => format.value === 'sql')
 const isVqb = computed(() => format.value === 'vqb')
+/** SQLite «Copia del archivo» (VACUUM INTO). */
+const isFile = computed(() => format.value === 'file')
 
 const open = computed({
   get: () => ui.backupDialog.open,
@@ -77,6 +82,10 @@ const connection = computed(() =>
 )
 /** PostgreSQL: whole-database .vqb backups only. */
 const isPg = computed(() => connection.value?.engine === 'postgresql')
+/** SQLite: whole-database .vqb backups, or a copy of the file (VACUUM INTO). */
+const isSqlite = computed(() => connection.value?.engine === 'sqlite')
+/** No object picker: the copy always holds the whole database. */
+const wholeDatabase = computed(() => isPg.value || isSqlite.value)
 const passwordProblem = computed(() => {
   if (!isVqb.value || !encrypt.value) return ''
   if (password.value.length < MIN_PASSWORD)
@@ -89,29 +98,36 @@ const canStart = computed(
     !!connectionId.value &&
     !!schema.value &&
     !running.value &&
+    (!isFile.value || schema.value === 'main') &&
     (!isSql.value || includeStructure.value || includeData.value) &&
     !passwordProblem.value
 )
 const subtitle = computed(() =>
-  isSql.value
-    ? 'Archivo .sql que el cliente mysql y otros gestores pueden importar'
-    : isVqb.value
-      ? 'Archivo .vqb: formato abierto de Vortaq, con cifrado opcional'
-      : 'Archivo .nb3 compatible con Navicat'
+  isFile.value
+    ? 'Copia exacta del archivo SQLite (VACUUM INTO), lista para abrir'
+    : isSql.value
+      ? 'Archivo .sql que el cliente mysql y otros gestores pueden importar'
+      : isVqb.value
+        ? 'Archivo .vqb: formato abierto de Vortaq, con cifrado opcional'
+        : 'Archivo .nb3 compatible con Navicat'
 )
 const formatHint = computed(() =>
-  isSql.value
-    ? 'Para llevar la copia a otros gestores; Vortaq la importa con «Importar…».'
-    : isVqb.value
-      ? isPg.value
-        ? 'Las copias de PostgreSQL son siempre .vqb e incluyen la base de datos completa.'
-        : 'Formato abierto y documentado; restaurable desde Copias de seguridad y tareas.'
-      : 'Copia restaurable desde Copias de seguridad y tareas, legible por Navicat.'
+  isFile.value
+    ? 'La forma más rápida: un archivo .db consistente (incluye lo pendiente del WAL). Solo la base de datos principal.'
+    : isSql.value
+      ? 'Para llevar la copia a otros gestores; Vortaq la importa con «Importar…».'
+      : isVqb.value
+        ? isPg.value
+          ? 'Las copias de PostgreSQL son siempre .vqb e incluyen la base de datos completa.'
+          : isSqlite.value
+            ? 'Copia .vqb de la base de datos completa, con el tipo de cada celda; restaurable en un archivo nuevo o sobre la conexión.'
+            : 'Formato abierto y documentado; restaurable desde Copias de seguridad y tareas.'
+        : 'Copia restaurable desde Copias de seguridad y tareas, legible por Navicat.'
 )
 
 /** Format the dialog opens with: the one asked for, else Ajustes' default (PostgreSQL: .vqb). */
 function initialFormat(): BackupFormat {
-  if (isPg.value) return 'vqb'
+  if (isPg.value || isSqlite.value) return 'vqb'
   const asked = ui.backupDialog.format ?? settings.settings.defaultBackupFormat ?? 'vqb'
   return asked === 'sql' || asked === 'nb3' ? asked : 'vqb'
 }
@@ -174,8 +190,8 @@ async function loadObjects(): Promise<void> {
   objects.value = []
   const cid = connectionId.value
   const db = schema.value
-  // PostgreSQL copies the whole database: no object picker.
-  if (!cid || !db || isPg.value) {
+  // PostgreSQL and SQLite copy the whole database: no object picker.
+  if (!cid || !db || wholeDatabase.value) {
     objectsLoading.value = false
     return
   }
@@ -206,6 +222,10 @@ async function start(): Promise<void> {
   error.value = ''
   result.value = null
   try {
+    if (isFile.value) {
+      await copyFile(cid)
+      return
+    }
     if (isSql.value) {
       const exported = await api.backups.exportSql(opId, {
         connectionId: cid,
@@ -230,7 +250,7 @@ async function start(): Promise<void> {
       connectionId: cid,
       schema: schema.value,
       includeData: includeData.value,
-      objects: !isPg.value && objects.value.length ? [...objects.value] : undefined,
+      objects: !wholeDatabase.value && objects.value.length ? [...objects.value] : undefined,
       label: label.value.trim() || undefined,
       comment: comment.value.trim() || undefined,
       targetDir: targetDir.value.trim() || undefined,
@@ -257,6 +277,36 @@ async function start(): Promise<void> {
   }
 }
 
+/** «Copia del archivo»: VACUUM INTO a .db the user names (proposed in the backup folder). */
+async function copyFile(cid: string): Promise<void> {
+  const dir = targetDir.value.trim() || connection.value?.backupDir || ''
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+  const base = (label.value.trim() || connection.value?.name || 'copia').replace(
+    /[\\/:*?"<>|]/g,
+    '_'
+  )
+  const sep = dir.includes('\\') ? '\\' : '/'
+  const name = `${base}-${stamp}.db`
+  const path = await api.app.pickSaveFile(
+    'Guardar la copia del archivo SQLite',
+    dir ? `${dir.replace(/[\\/]$/, '')}${sep}${name}` : name,
+    [{ name: 'Base de datos SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }]
+  )
+  if (!path) return
+  const copied = await api.invokeSilent('sqlite:copyFile', cid, path)
+  result.value = {
+    path: copied.path,
+    sizeBytes: copied.sizeBytes,
+    objects: 0,
+    rows: 0,
+    durationMs: copied.durationMs
+  }
+  notify.success(`Copia del archivo creada en ${copied.path}`, {
+    label: 'Mostrar en Finder',
+    handler: () => revealInFinder(copied.path)
+  })
+}
+
 async function cancel(): Promise<void> {
   if (!operationId.value) return
   cancelling.value = true
@@ -281,7 +331,8 @@ watch(
 
 function onConnectionChange(id: string | null): void {
   connectionId.value = id
-  if (isPg.value) format.value = 'vqb'
+  if (isPg.value || (isSqlite.value && format.value !== 'file')) format.value = 'vqb'
+  else if (format.value === 'file' && !isSqlite.value) format.value = 'vqb'
   schema.value = null
   objectItems.value = []
   objects.value = []
@@ -318,11 +369,14 @@ function onSchemaChange(value: string | null): void {
               data-test="backup-format"
             >
               <v-btn value="vqb" size="small" data-test="backup-format-vqb">.vqb</v-btn>
-              <v-btn v-if="!isPg" value="nb3" size="small" data-test="backup-format-nb3"
+              <v-btn v-if="!wholeDatabase" value="nb3" size="small" data-test="backup-format-nb3"
                 >.nb3</v-btn
               >
-              <v-btn v-if="!isPg" value="sql" size="small" data-test="backup-format-sql"
+              <v-btn v-if="!wholeDatabase" value="sql" size="small" data-test="backup-format-sql"
                 >.sql</v-btn
+              >
+              <v-btn v-if="isSqlite" value="file" size="small" data-test="backup-format-file"
+                >Copia del archivo (VACUUM INTO)</v-btn
               >
             </v-btn-toggle>
             <span class="backup-dialog__format-hint">{{ formatHint }}</span>
@@ -347,7 +401,7 @@ function onSchemaChange(value: string | null): void {
                 :error-messages="
                   schemaLoader.errorOf(connectionId) ? [schemaLoader.errorOf(connectionId)!] : []
                 "
-                :label="isPg ? 'Base de datos' : 'Esquema'"
+                :label="wholeDatabase ? 'Base de datos' : 'Esquema'"
                 prepend-inner-icon="mdi-database-outline"
                 :disabled="!connectionId || running"
                 no-data-text="Sin esquemas"
@@ -355,7 +409,7 @@ function onSchemaChange(value: string | null): void {
                 @update:model-value="onSchemaChange"
               />
             </v-col>
-            <v-col v-if="!isPg" cols="12">
+            <v-col v-if="!wholeDatabase" cols="12">
               <v-autocomplete
                 v-model="objects"
                 :items="objectItems"
@@ -382,7 +436,12 @@ function onSchemaChange(value: string | null): void {
                 persistent-hint
               />
             </v-col>
-            <v-col cols="12" sm="6" class="d-flex align-center">
+            <v-col v-if="isFile && schema && schema !== 'main'" cols="12">
+              <p class="backup-dialog__warn" data-test="backup-file-main-only">
+                La copia del archivo solo se hace de la base de datos principal (main).
+              </p>
+            </v-col>
+            <v-col v-if="!isFile" cols="12" sm="6" class="d-flex align-center">
               <v-checkbox
                 v-model="includeData"
                 label="Incluir datos"
@@ -501,7 +560,7 @@ function onSchemaChange(value: string | null): void {
                 >{{ skippedWarning }}</v-alert
               >
             </v-col>
-            <v-col v-if="!isSql" cols="12">
+            <v-col v-if="!isSql && !isFile" cols="12">
               <v-textarea
                 v-model="comment"
                 label="Comentario"
@@ -548,11 +607,13 @@ function onSchemaChange(value: string | null): void {
           >
             <div class="font-weight-medium">
               {{
-                isSql
-                  ? 'Exportación creada correctamente'
-                  : encrypt
-                    ? 'Copia cifrada creada correctamente'
-                    : 'Copia creada correctamente'
+                isFile
+                  ? 'Copia del archivo creada correctamente'
+                  : isSql
+                    ? 'Exportación creada correctamente'
+                    : encrypt
+                      ? 'Copia cifrada creada correctamente'
+                      : 'Copia creada correctamente'
               }}
             </div>
             <div class="backup-dialog__path nd-mono nd-ellipsis" :title="result.path">
@@ -562,12 +623,14 @@ function onSchemaChange(value: string | null): void {
               <span
                 ><strong class="nd-mono">{{ formatBytes(result.sizeBytes) }}</strong></span
               >
-              <span
-                ><strong class="nd-mono">{{ formatNumber(result.objects) }}</strong> objetos</span
-              >
-              <span
-                ><strong class="nd-mono">{{ formatNumber(result.rows) }}</strong> filas</span
-              >
+              <template v-if="!isFile">
+                <span
+                  ><strong class="nd-mono">{{ formatNumber(result.objects) }}</strong> objetos</span
+                >
+                <span
+                  ><strong class="nd-mono">{{ formatNumber(result.rows) }}</strong> filas</span
+                >
+              </template>
               <span
                 ><strong class="nd-mono">{{ formatDuration(result.durationMs) }}</strong></span
               >
@@ -606,7 +669,7 @@ function onSchemaChange(value: string | null): void {
           data-test="backup-start"
           @click="start"
         >
-          {{ isSql ? 'Exportar' : 'Iniciar copia' }}
+          {{ isSql ? 'Exportar' : isFile ? 'Copiar archivo…' : 'Iniciar copia' }}
         </v-btn>
       </v-card-actions>
     </v-card>

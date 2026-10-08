@@ -32,7 +32,17 @@ export type VqbValue =
 
 /** How the writer reads a column's driver values. */
 export type ValueCodec =
-  'int' | 'decimal' | 'float' | 'datetime' | 'binary' | 'json' | 'array' | 'bool' | 'text'
+  | 'int'
+  | 'decimal'
+  | 'float'
+  | 'datetime'
+  | 'binary'
+  | 'json'
+  | 'array'
+  | 'bool'
+  | 'text'
+  /** Already a .vqb value (SQLite: tagged per cell from its storage class). */
+  | 'raw'
 
 const INT_RE = /^[+-]?\d+$/
 const NUMERIC_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
@@ -56,6 +66,7 @@ function hexToBytes(text: string): Buffer | null {
 /** Encodes one driver value of a column whose codec is `codec`. */
 export function encodeValue(raw: unknown, codec: ValueCodec): VqbValue {
   if (raw === null || raw === undefined) return null
+  if (codec === 'raw') return checkValue(raw)
   if (Buffer.isBuffer(raw) || raw instanceof Uint8Array)
     return { $bin: Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString('base64') }
   switch (typeof raw) {

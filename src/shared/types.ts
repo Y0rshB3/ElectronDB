@@ -983,6 +983,14 @@ export interface RestoreOptions {
   skipAutoIncrement?: boolean
   /** Password of an encrypted .vqb. */
   password?: string | null
+  /**
+   * SQLite: restore into a NEW database file at this absolute path (created
+   * by the restore, refused when it exists) instead of a connection; then
+   * `connectionId` may be ''.
+   */
+  newFilePath?: string
+  /** SQLite with `newFilePath`: also save a connection for the restored file. */
+  createConnection?: boolean
 }
 
 export interface RestoreResult {
@@ -994,6 +1002,10 @@ export interface RestoreResult {
   safetyBackupPath?: string | null
   /** replaceSchema with `includeData: false`: objects created, no rows inserted. */
   structureOnly?: boolean
+  /** SQLite `newFilePath`: the file restored into. */
+  restoredFilePath?: string | null
+  /** SQLite `createConnection`: id of the connection created for the restored file. */
+  newConnectionId?: string | null
 }
 
 /* ---------- Automation ---------- */

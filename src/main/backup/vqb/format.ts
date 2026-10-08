@@ -17,7 +17,7 @@ export const MANIFEST_PATH = 'manifest.json'
 export const DATA_CHUNK_BYTES = 5 * 1024 * 1024
 export const VQB_ALGORITHM = 'AES-256-GCM'
 
-export type VqbEngine = 'mysql' | 'postgresql'
+export type VqbEngine = 'mysql' | 'postgresql' | 'sqlite'
 
 export interface VqbHeader {
   format: typeof VQB_FORMAT
@@ -87,7 +87,7 @@ export interface VqbManifest {
   source: {
     /** Omitted when the user chose not to record it. */
     connectionName?: string
-    /** MySQL: the schema (database). PostgreSQL: the database. */
+    /** MySQL: the schema (database). PostgreSQL: the database. SQLite: the attached alias ('main'). */
     database: string
     /** PostgreSQL: schemas included. */
     schemas?: string[]
@@ -150,9 +150,9 @@ export interface VqbObjectMeta {
   columns?: VqbColumn[]
   primaryKey?: string[]
   rows?: number
-  /** MySQL: AUTO_INCREMENT counter of the table. */
+  /** MySQL: AUTO_INCREMENT counter of the table. SQLite: its sqlite_sequence value. */
   autoIncrement?: string | null
-  /** PostgreSQL: index DDL to run after the data (not backing a constraint). */
+  /** PostgreSQL / SQLite: index DDL to run after the data (not backing a constraint). */
   indexes?: string[]
   /** PostgreSQL: ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY, run after every table's data. */
   foreignKeys?: string[]
@@ -243,7 +243,10 @@ export function validateManifest(raw: unknown): VqbManifest {
   if (!isObj(raw)) return bad('manifiesto')
   checkVersion(raw)
   const engine = raw.engine
-  if (!isObj(engine) || (engine.id !== 'mysql' && engine.id !== 'postgresql'))
+  if (
+    !isObj(engine) ||
+    (engine.id !== 'mysql' && engine.id !== 'postgresql' && engine.id !== 'sqlite')
+  )
     bad('motor de base de datos')
   const source = raw.source
   if (!isObj(source)) bad('origen')

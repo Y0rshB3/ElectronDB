@@ -68,8 +68,12 @@ export function restoreTargets(
   const all = backupConnections(list)
   if (format === 'nb3') return all.filter((c) => can(c, 'supportsBackupsNb3'))
   if (!meta || meta.locked || !meta.engine) return all
-  const isPg = meta.engine === 'postgresql'
-  return all.filter((c) => (c.engine === 'postgresql') === isPg)
+  return all.filter((c) => vqbEngineOfConnection(c) === meta.engine)
+}
+
+/** .vqb engine of a connection: MySQL and MariaDB servers both write 'mysql'. */
+export function vqbEngineOfConnection(c: { engine?: ConnectionConfig['engine'] }): string {
+  return c.engine === 'postgresql' || c.engine === 'sqlite' ? c.engine : 'mysql'
 }
 
 /** «.vqb» / «.nb3 (Navicat)». */
@@ -80,6 +84,7 @@ export function backupFormatLabel(format: BackupFileFormat | undefined): string 
 /** «MySQL», «MariaDB», «PostgreSQL». */
 export function engineLabel(engine: string | undefined, flavor?: string): string {
   if (engine === 'postgresql') return 'PostgreSQL'
+  if (engine === 'sqlite') return 'SQLite'
   return flavor === 'mariadb' ? 'MariaDB' : 'MySQL'
 }
 

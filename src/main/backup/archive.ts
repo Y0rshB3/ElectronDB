@@ -86,7 +86,12 @@ export function lockedVqbMeta(header: VqbHeader): BackupMeta {
 export function vqbManifestMeta(manifest: VqbManifest): BackupMeta {
   return {
     metaVersion: `vqb-${manifest.formatVersion}`,
-    databaseType: manifest.engine.id === 'postgresql' ? 'POSTGRESQL' : 'MYSQL',
+    databaseType:
+      manifest.engine.id === 'postgresql'
+        ? 'POSTGRESQL'
+        : manifest.engine.id === 'sqlite'
+          ? 'SQLITE'
+          : 'MYSQL',
     schema: manifest.source.database,
     startTime: manifest.createdAt,
     endTime: manifest.finishedAt,

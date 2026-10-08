@@ -26,7 +26,8 @@ import {
   NAVICAT_DELETE_TOOLTIP,
   backupConnections,
   canDeleteBackup,
-  findLocalConnection
+  findLocalConnection,
+  vqbEngineOfConnection
 } from '@renderer/components/backups/backupHelpers'
 
 const props = defineProps<{ tab: WorkspaceTab }>()
@@ -66,11 +67,18 @@ const schemaOptions = computed(() => {
 const selected = computed<BackupFile | null>(
   () => files.value.find((f) => f.path === selectedPath.value) ?? null
 )
-/** PostgreSQL: .vqb only, no .sql export and no packages (automation is MySQL-only). */
-const isPg = computed(() => connection.value?.engine === 'postgresql')
+/**
+ * PostgreSQL and SQLite: .vqb only, no .sql export and no packages (automation is
+ * MySQL-only). `isPg` keeps its name: it means «not a MySQL connection» here.
+ */
+const isPg = computed(
+  () => connection.value?.engine === 'postgresql' || connection.value?.engine === 'sqlite'
+)
 const localConnection = computed(() =>
   findLocalConnection(
-    backupConnections(connections.sorted).filter((c) => (c.engine === 'postgresql') === isPg.value)
+    backupConnections(connections.sorted).filter(
+      (c) => vqbEngineOfConnection(c) === vqbEngineOfConnection(connection.value ?? {})
+    )
   )
 )
 

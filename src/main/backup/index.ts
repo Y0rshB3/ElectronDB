@@ -29,6 +29,11 @@ import { createPgBackup, type PgSessionProvider } from './vqb/pgBackup'
 import type { ScryptParams } from './vqb/crypto'
 import { replacePgDatabase } from './vqb/pgReplace'
 import { restorePgBackup } from './vqb/pgRestore'
+import { createSqliteBackup, type SqliteConnectionProvider } from './vqb/sqliteBackup'
+import { replaceSqliteDatabase } from './vqb/sqliteReplace'
+import { restoreSqliteBackup, restoredConnectionName } from './vqb/sqliteRestore'
+import type { ProcessSpawner } from '../sqlite/spawner'
+import { defaultSqliteOptions } from '@shared/engines'
 
 export type ProgressReporter = (event: Omit<ProgressEvent, 'operationId' | 'kind'>) => void
 
@@ -111,9 +116,28 @@ export function pgSessionProvider(ctx: AppContext): PgSessionProvider {
   }
 }
 
+/** Open SQLite connections through the connection manager (loaded on first use). */
+export function sqliteConnectionProvider(ctx: AppContext): SqliteConnectionProvider {
+  return {
+    async connection(connectionId) {
+      const [{ getConnectionManager }, { isSqliteConnection }] = await Promise.all([
+        import('../db/manager'),
+        import('../sqlite/connection')
+      ])
+      const connection = await getConnectionManager(ctx).connection(connectionId)
+      if (!isSqliteConnection(connection)) throw new Error('La conexión no es SQLite.')
+      return connection
+    }
+  }
+}
+
 export interface BackupServiceOptions {
   /** PostgreSQL sessions (tests); the connection manager otherwise. */
   pg?: PgSessionProvider
+  /** SQLite connections (tests); the connection manager otherwise. */
+  sqlite?: SqliteConnectionProvider
+  /** Spawner of the temporary SQLite worker of «restaurar en un archivo nuevo» (tests). */
+  sqliteSpawner?: () => ProcessSpawner
   /** scrypt cost of new encrypted .vqb backups (tests use a cheap one). */
   scrypt?: ScryptParams
 }
@@ -126,6 +150,41 @@ export function createBackupService(
   const pg = serviceOptions.pg ?? pgSessionProvider(ctx)
   const isPg = (connectionId: string | undefined): boolean =>
     !!connectionId && ctx.connections.get(connectionId)?.engine === 'postgresql'
+  const isSqlite = (connectionId: string | undefined): boolean =>
+    !!connectionId && ctx.connections.get(connectionId)?.engine === 'sqlite'
+  const sqliteDeps = {
+    connections: ctx.connections,
+    sqlite: serviceOptions.sqlite ?? sqliteConnectionProvider(ctx),
+    spawner: serviceOptions.sqliteSpawner,
+    scrypt: serviceOptions.scrypt,
+    // «Crear una conexión para el archivo restaurado»: foreign keys on (a file made here).
+    createConnection: (filePath: string): string =>
+      ctx.connections.save({
+        name: restoredConnectionName(filePath),
+        color: null,
+        environment: 'local',
+        host: '',
+        port: 0,
+        username: '',
+        authMode: 'none',
+        savePassword: false,
+        customDatabases: [],
+        initialQueries: '',
+        ssh: {
+          enabled: false,
+          host: '',
+          port: 22,
+          username: '',
+          authType: 'password',
+          savePassword: false
+        },
+        ssl: { enabled: false, verifyServer: false },
+        backupDir: '',
+        extraBackupDirs: [],
+        engine: 'sqlite',
+        sqlite: { ...defaultSqliteOptions(false), filePath, foreignKeys: true }
+      }).id
+  }
   const guarded = (connectionId: string): boolean =>
     !!ctx.settings && needsTypedConfirm(ctx, ctx.connections.get(connectionId))
   const service: BackupService = {
@@ -141,40 +200,51 @@ export function createBackupService(
     },
     readMeta: (path, password) => readBackupMeta(ctx.userDataPath, path, password),
     create: (options, progress, signal) =>
-      isPg(options?.connectionId)
-        ? createPgBackup(
-            { connections: ctx.connections, pg, scrypt: serviceOptions.scrypt },
-            options,
-            progress,
-            signal
-          )
-        : createBackup(
-            { connections: ctx.connections, sessions, scrypt: serviceOptions.scrypt },
-            options,
-            progress,
-            signal
-          ),
+      isSqlite(options?.connectionId)
+        ? createSqliteBackup(sqliteDeps, options, progress, signal)
+        : isPg(options?.connectionId)
+          ? createPgBackup(
+              { connections: ctx.connections, pg, scrypt: serviceOptions.scrypt },
+              options,
+              progress,
+              signal
+            )
+          : createBackup(
+              { connections: ctx.connections, sessions, scrypt: serviceOptions.scrypt },
+              options,
+              progress,
+              signal
+            ),
     exportSql: (options, progress, signal) =>
       exportSchemaToSql({ connections: ctx.connections, sessions }, options, progress, signal),
     restore: (options, progress, signal) =>
-      isPg(options?.connectionId)
-        ? restorePgBackup({ connections: ctx.connections, pg, guarded }, options, progress, signal)
-        : restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
+      options?.newFilePath || isSqlite(options?.connectionId)
+        ? restoreSqliteBackup(sqliteDeps, options, progress, signal)
+        : isPg(options?.connectionId)
+          ? restorePgBackup(
+              { connections: ctx.connections, pg, guarded },
+              options,
+              progress,
+              signal
+            )
+          : restoreBackup({ connections: ctx.connections, sessions }, options, progress, signal),
     verify: (path, signal, password) => verifyArchive(path, signal, password),
     replace: (request, hooks, signal) =>
-      isPg(request?.connectionId)
-        ? replacePgDatabase(
-            { connections: ctx.connections, pg, guarded, backups: service },
-            request,
-            hooks,
-            signal
-          )
-        : replaceSchemaFromBackup(
-            { connections: ctx.connections, sessions, backups: service },
-            request,
-            hooks,
-            signal
-          )
+      isSqlite(request?.connectionId)
+        ? replaceSqliteDatabase({ ...sqliteDeps, backups: service }, request, hooks, signal)
+        : isPg(request?.connectionId)
+          ? replacePgDatabase(
+              { connections: ctx.connections, pg, guarded, backups: service },
+              request,
+              hooks,
+              signal
+            )
+          : replaceSchemaFromBackup(
+              { connections: ctx.connections, sessions, backups: service },
+              request,
+              hooks,
+              signal
+            )
   }
   return service
 }
