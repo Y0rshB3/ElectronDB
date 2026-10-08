@@ -331,10 +331,36 @@ contraseña»); si la rechaza verás «No hay contraseña guardada para la conex
 marca «Sin contraseña»». Las conexiones importadas de Navicat quedan en modo **Contraseña**, porque Navicat no
 guarda si hace falta.
 
-### Servidores MariaDB
+### MariaDB
 
-Una conexión MySQL puede apuntar a un servidor MariaDB: Vortaq lo detecta al conectar (por `VERSION()`) y
-aplica estos ajustes solo a ese servidor; con MySQL nada cambia.
+**Conexión › Nueva conexión MariaDB** crea una conexión MariaDB: el mismo formulario que MySQL (puerto 3306,
+SSH, SSL, consultas iniciales, carpeta de copias) y admite también las cuentas **ed25519** y **parsec** además de
+`mysql_native_password`. Tiene todo lo de MySQL (usuarios, copias `.vqb`, `.nb3` y `.sql`, automatización) y
+además:
+
+- **Secuencias** en el árbol (grupo Secuencias): abrir muestra su `CREATE SEQUENCE` en una pestaña de consulta;
+  el menú tiene **Ver estado**, **Fijar siguiente valor…** (`SETVAL`, en una pestaña), **Nueva secuencia**,
+  DDL y eliminar.
+- **Diseñador**: los tipos `uuid`, `inet4` e `inet6`, `json` (MariaDB lo guarda como `LONGTEXT` con
+  `json_valid`, y Vortaq lo sigue mostrando como `json`) y, en **Opciones**, **Versionado de sistema (WITH SYSTEM
+  VERSIONING)**: crear la tabla versionada, añadirlo o quitarlo (quitarlo borra el historial y lo avisa). Al
+  modificar una tabla versionada se mantiene el historial (`system_versioning_alter_history = KEEP`).
+- **Editor**: resaltado y autocompletado de MariaDB (secuencias, `RETURNING`, `FOR SYSTEM_TIME`, tipos
+  propios); los comentarios `/*M! … */` se ejecutan como sentencias.
+- **Producción**: además de lo de MySQL, cuentan como escritura `NEXTVAL`/`SETVAL`/`NEXT VALUE FOR`, el contenido
+  de `/*M! … */` y la sentencia de `SET STATEMENT … FOR`.
+- **Asistente de IA**: sabe que es MariaDB (secuencias, `RETURNING`, tablas versionadas, JSON como alias).
+
+**Tus conexiones MySQL a MariaDB** siguen funcionando: las importadas de una entrada MariaDB (Navicat `.ncx`
+o la sección MariaDB de su carpeta) pasan a ser MariaDB al arrancar, y una conexión MySQL cuyo servidor
+resulta ser MariaDB se guarda como MariaDB la primera vez que la abres, con su id, contraseñas, copias, tareas
+y consultas guardadas. **Probar conexión** avisa si el tipo elegido no coincide con el servidor.
+
+#### Servidores MariaDB en conexiones MySQL
+
+Mientras una conexión siga siendo MySQL (por ejemplo, la que usa una tarea programada antes de abrirla en la
+app), Vortaq detecta MariaDB al conectar (por `VERSION()`) y aplica estos ajustes solo a ese servidor; con
+MySQL nada cambia.
 
 - Las **tablas versionadas** (`WITH SYSTEM VERSIONING`) aparecen con las demás tablas y se editan igual (el
   historial lo guarda el servidor).
@@ -360,7 +386,9 @@ PostgreSQL ya creadas se abren aunque desactives el ajuste.
   las credenciales que le das: nunca `PGPASSWORD`, `~/.pgpass`, `PGUSER` ni otras variables de entorno.
 - **Árbol**: conexión › base de datos › esquema › Tablas, Vistas, Vistas materializadas, Funciones (con sus
   sobrecargas), Secuencias, Tipos (enumerados, dominios, compuestos) y Consultas. Cada base de datos abre su
-  propio grupo de conexiones al desplegarla.
+  propio grupo de conexiones al desplegarla (su icono se rellena) y **Cerrar base de datos** lo cierra (no la
+  inicial, ni mientras una pestaña suya tenga una transacción abierta). Las **particiones** cuelgan de su tabla
+  particionada (también las subparticiones y las de otros esquemas), con su rango en la descripción.
 - **Editor de consultas**: dos selectores, base de datos y esquema; el esquema elegido va primero en el
   `search_path` y se mantiene el resto (las extensiones de `public` siguen visibles). Cada pestaña tiene su
   propia sesión: `BEGIN`, `SET` y las tablas temporales se conservan entre ejecuciones, con los botones
@@ -389,8 +417,9 @@ PostgreSQL ya creadas se abren aunque desactives el ajuste.
   una transacción tuya a medias.
 - **Asistente de IA**: lee solo la estructura (catálogo `pg_catalog`/`information_schema`) con la misma regla
   que en MySQL.
-- **Importar**: las conexiones PostgreSQL de DBeaver y de los `.ncx` de Navicat se importan con la vista previa
-  activada (Redshift y otras variantes quedan como no soportadas).
+- **Importar**: las conexiones PostgreSQL de DBeaver, de los `.ncx` de Navicat y de la sección PostgreSQL de la
+  carpeta de Navicat se importan con la vista previa activada (Redshift y otras variantes quedan como no
+  soportadas; con varios servidores solo se usa el primero, con un aviso).
 - **Copias de seguridad**: en formato `.vqb` (ver [Copias .vqb](#copias-vqb-formato-abierto-con-cifrado-opcional)).
   La automatización sigue siendo solo para MySQL: Vortaq rechaza las tareas que apunten a una conexión
   PostgreSQL.
@@ -537,7 +566,7 @@ nunca lee el Llavero, el Administrador de credenciales, el Registro ni los almac
 | **Copia .nb3 (Navicat/Vortaq)** | Se restaura con el diálogo de **Restaurar**                                                   | —                                          |
 
 Las conexiones PostgreSQL, SQLite y MongoDB se importan con **Ajustes › Motores en vista previa** activado; las de otros
-motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se importa como conexión MySQL. Si una conexión ya se importó antes desde
+motores (SQL Server, Oracle…) aparecen como **no soportadas** y no se importan. MariaDB se importa como conexión MariaDB. Si una conexión ya se importó antes desde
 el mismo programa (mismo nombre), sale como **ya importada**: al marcarla se actualizan sus datos y se
 conservan su entorno (Producción nunca se rebaja), su carpeta de copias y sus contraseñas guardadas.
 
@@ -1079,6 +1108,12 @@ tampoco lee filas).
 ### Funciones
 
 - **Chat** con el contexto de la conexión y base de datos de la pestaña activa (o de la selección del árbol).
+  El nombre de la base de datos del panel es un menú: **Solo <base de datos>** (las demás se nombran y el
+  asistente puede pedir su estructura) o **Toda la conexión** (la estructura de todas las bases de datos de
+  usuario, con las tablas como `base.tabla`, para preguntas que las cruzan; con más de 40 se incluyen 40 y el
+  resto por nombre). En PostgreSQL «Toda la conexión» son todos los esquemas de la base de datos de la pestaña;
+  en SQLite, `main` y sus bases de datos adjuntas; en MongoDB, todas las bases de datos (sin valores). La
+  elección se recuerda; sin base de datos seleccionada siempre es toda la conexión.
   Respuestas en markdown; cada bloque SQL tiene **Insertar en el editor** y **Copiar**. Enter envía, Mayús+Enter
   añade una línea, **Detener** corta la respuesta.
 - **Generar SQL con IA** (barra del editor de consultas): describe lo que necesitas y el SQL se inserta en el
@@ -1554,7 +1589,7 @@ ejecución, y su carpeta debe llamarse `profile`.
 | `VORTAQ_DEBUG=1`                | Registro a nivel `debug`, copiado también en la consola.                                                                                                                                                  |
 | `VORTAQ_TEST_MYSQL_URL`         | MySQL 8.4 desechable para `npm run test:integration[:required]`.                                                                                                                                          |
 | `VORTAQ_TEST_MYSQL57_URL`       | MySQL 5.7 desechable para `npm run test:integration[:required]` (incluye la restauración 5.7 → 8.4).                                                                                                      |
-| `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                                    |
+| `VORTAQ_TEST_MARIADB_URL`       | MariaDB 11 desechable (`mysql://…:33311/…`) para el motor MariaDB y las correcciones de MariaDB en `npm run test:integration[:required]`.                                                                 |
 | `VORTAQ_TEST_PG_URL`            | PostgreSQL 17 desechable (`postgres://…:55432/…`) para `npm run test:integration[:required]`.                                                                                                             |
 | `VORTAQ_TEST_MONGO_URL`         | MongoDB 8.2 independiente desechable (`mongodb://root:…@127.0.0.1:57017/?authSource=admin`) para `npm run test:integration[:required]`; también activa el paso de MongoDB de `VORTAQ_SMOKE`.              |
 | `VORTAQ_TEST_MONGO_RS_URL`      | Conjunto de réplicas MongoDB 8.2 de un miembro (`mongodb://127.0.0.1:57018/?replicaSet=rs0`) para las transacciones en `npm run test:integration[:required]`.                                             |

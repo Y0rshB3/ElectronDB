@@ -1,6 +1,6 @@
 # Multi-engine architecture (MySQL, MariaDB, PostgreSQL, SQLite, MongoDB)
 
-Status: **design; P1a, P1b, P2a, P2b, P3 and P4a/P4b implemented on branch `v2` (PostgreSQL, SQLite and MongoDB still behind the preview flag). Revision 3** (2026-10-07): the product is now
+Status: **design; P1a, P1b, P2a, P2b, P3, P4a/P4b and P5 implemented on branch `v2` (MariaDB is a regular engine; PostgreSQL, SQLite and MongoDB still behind the preview flag), shipping as **Vortaq 2.0.0**. Revision 3** (2026-10-07): the product is now
 called **Vortaq** (formerly ElectronDB, and Navidog before that); revision 3 renames it, removes
 the Navicat Keychain recovery (section 12.3) and limits the sources to the ones in section 19.
 Revision 2 (2026-10-05, at `c147306`) answered two reviews: an adversarial review (guard bypasses,
@@ -392,8 +392,8 @@ export function assertCapability(
 | family / hierarchy                     | sql / database | sql / database | sql / database>schema     | sql / attached            | document / database>collection |
 | hasSchemas                             | –              | –              | **yes**                   | –                         | –                              |
 | hasUsers                               | yes            | yes            | no (v1)                   | no                        | no (v1)                        |
-| supportsBackupsNb3                     | **yes**        | no             | no                        | no                        | no                             |
-| supportsAutomation                     | **yes**        | no             | no                        | no                        | no                             |
+| supportsBackupsNb3                     | **yes**        | **yes** (P5)   | no                        | no                        | no                             |
+| supportsAutomation                     | **yes**        | **yes** (P5)   | no                        | no                        | no                             |
 | supportsSsh / supportsSsl              | yes / yes      | yes / yes      | yes / yes                 | no / no                   | yes / yes                      |
 | initialQueries                         | yes            | yes            | yes                       | yes                       | no                             |
 | createDatabase                         | charset        | charset        | pg                        | false                     | mongo                          |
@@ -404,7 +404,7 @@ export function assertCapability(
 | transactionalDdl                       | n              | n              | **y**                     | **y**                     | –                              |
 | tabSessions                            | n (v1)         | n (v1)         | **y**                     | **y** (shared, see 5.3.1) | **y**                          |
 | truncate options                       | plain          | plain          | restart identity, cascade | – (`DELETE FROM`)         | – (`deleteMany({})`)           |
-| preview (until its phase is done)      | n              | y              | y                         | y                         | y                              |
+| preview (until its phase is done)      | n              | n (P5)         | y                         | y                         | y                              |
 | resultAliasMetadata                    | y              | y              | **n**                     | **n**                     | –                              |
 | returning                              | none           | insert-delete  | all                       | all                       | –                              |
 | cancel                                 | kill-query     | kill-query     | pg-cancel                 | kill-process              | kill-op                        |
@@ -413,7 +413,7 @@ export function assertCapability(
 **Groups:**
 
 - mysql: `tables, views, functions, events, queries, backups`
-- mariadb: `tables, views, functions, events, sequences, queries`
+- mariadb: `tables, views, functions, events, sequences, queries, backups` (P5: backups added, see P5 as implemented)
 - postgresql: `tables, views, materializedViews, functions, sequences, types, queries`, plus an
   `extensions` group at the **database** level (read-only list from `pg_extension`)
 - sqlite: `tables, views, indexes, triggers, queries`
@@ -1649,7 +1649,7 @@ value becomes the default plus a warning.
   connection updates only its secrets (`passwordsOnly`) unless the user picks "reemplazar". This
   is how a user brings Mac passwords across: import the plist for metadata and colours, then
   import the `.ncx` for passwords.
-- **Renderer.** _Done in v0.2.0 as the «Importar…» wizard_ (`components/import/ImportWizard.vue`, sources in
+- **Renderer.** _Done in v2.0.0 as the «Importar…» wizard_ (`components/import/ImportWizard.vue`, sources in
   `src/main/importers/registry.ts`): the `.ncx` is one source next to the Navicat folder (which keeps
   `ImportNavicatDialog.vue`), DBeaver, MySQL Workbench, `.sql` dumps, dump folders and `.nb3`. The original
   plan was: `ImportNavicatDialog.vue` with source tabs "Navicat de este Mac" and "Archivo .ncx".
@@ -1659,7 +1659,7 @@ value becomes the default plus a warning.
 
 ### 12.3 No keychain access; Windows and Linux
 
-- **Removed in v0.2.0.** The earlier "recover passwords from the Keychain" button and its
+- **Removed in v2.0.0.** The earlier "recover passwords from the Keychain" button and its
   `navicat:recoverPasswords` channel are gone. Vortaq never lists or reads another application's
   keychain items; after an import the user types each password, or imports an `.ncx` exported
   with Export Password.
@@ -1673,7 +1673,7 @@ value becomes the default plus a warning.
 
 - `usecustomdblist` is an int.
 - The extra MySQL keys are listed.
-- The keychain row is removed (done in v0.2.0).
+- The keychain row is removed (done in v2.0.0).
 - `.ncx` format notes are added, from files the user exports.
 - Unverified keys are marked as such.
 
@@ -1867,7 +1867,7 @@ prerelease that touches P3 or later code. It is manual until CI exists (open que
 > - All multi-engine work (every phase P1a…P5) stays on `feature/multi-engine` (and phase branches
 >   cut from it). It is NOT merged into `main` and never published as "Latest". Test builds, if the
 >   user asks for them, are GitHub pre-releases only.
-> - The multi-engine line becomes a new version (e.g. 0.2.0) and is merged/released only when the
+> - The multi-engine line becomes a new version (decided: **Vortaq 2.0.0**; ElectronDB ends at 0.1.9) and is merged/released only when the
 >   user explicitly approves it. The "each phase merges into main behind the preview flag" rule
 >   below is superseded: phases merge into `feature/multi-engine` instead.
 
@@ -2183,6 +2183,123 @@ What shipped, and where it differs from the text above (each point is deliberate
   for it; existing `mysql` connections to MariaDB servers are unchanged. MariaDB's preview flag
   is switched off.
 
+#### P5 as implemented (2026-10-07)
+
+What shipped, and where it differs from the text above (each point is deliberate; the user's brief for
+P5 overrides the "backup and automation entries are absent" and "existing `mysql` connections are
+unchanged" lines):
+
+- **Engine.** `engines.ts`: `mariadb` is `available` and **not a preview**; its capabilities are MySQL's
+  plus `sequences` and `returning: 'insert-delete'`, **including** `supportsBackupsNb3`,
+  `supportsBackupsVqb` and `supportsAutomation`. Reason: a connection that was `mysql` before P5 (with
+  `.nb3`/`.vqb` backups, jobs, saved queries) must keep everything when it becomes `mariadb`. `.vqb`
+  manifests keep `engine.id: 'mysql'` with `flavor: 'mariadb'` (format unchanged), so a MariaDB backup
+  restores into a MySQL-family connection as before. The registry serves `mariadb` with the mysql2
+  driver; its connections carry `mariadbDialect`, which `db:execute` also uses to split.
+- **Dialect** (`shared/dialects/mariadb.ts`). The MySQL functions are reused untouched. The splitter keeps
+  a `/*M! … */` statement as code (the MySQL splitter runs over a copy where `/*M!` reads `/*!M`, same
+  length, and statements are cut from the original text). Both guards read `/*M!` content, treat
+  `NEXTVAL(`/`SETVAL(`/`NEXT VALUE FOR` as writes, and main's denylist also looks inside
+  `SET STATEMENT … FOR <stmt>` and leading parentheses. `isObviousWrite ⇒ analyzeWrites` is tested over
+  the MySQL golden corpus, MariaDB cases and generated variants. The renderer guard in `QueryView.vue`
+  uses it for MariaDB connections.
+- **Auth plugins** (`mysql/authPlugins.ts`, open question 4): `client_ed25519` (RFC 8032 signing with
+  SHA-512 of the password bytes as the expanded key; unit-tested against `ed25519.sign` with a 32-byte
+  password, where both definitions coincide) and `parsec` (empty first answer, salt packet `P` + factor +
+  salt, PBKDF2-HMAC-SHA512 with `1024 << factor` rounds, factor capped at 8, then client scramble +
+  signature of server‖client scramble). Offered to every MySQL-family pool (a MySQL server never asks for
+  them). `@noble/curves`/`@noble/hashes` 2.4 (MIT, ESM-only) are inlined in the CommonJS main bundle
+  (`externalizeDepsPlugin` exclude, like `plist`), so no `require(esm)` is involved in the packaged app.
+  Verified against MariaDB 11.8 with throwaway users (integration suite creates and drops them; the test
+  server gets `INSTALL SONAME 'auth_ed25519'`/`'auth_parsec'` when missing).
+- **Keeping existing connections (migration).** `ConnectionsRepo.save` allows exactly one engine change:
+  `mysql` → `mariadb` (and a `mariadb` record saved as `mysql`, by an importer or a stale form, stays
+  `mariadb`); every other change is still refused. `promoteToMariaDb(id)` changes only `engine` and
+  `updatedAt` (idempotent). Two triggers: at startup (`migration/mariadbEngine.ts`,
+  interactive runs only) records imported from a MariaDB entry (`source.navicatType` `MariaDB`) are
+  promoted; and `ConnectionManager.doOpen` promotes a `mysql` connection whose server reports MariaDB,
+  closes the first pool and reopens it with the MariaDB dialect (never in a headless job, which must not
+  rewrite `connections.json`). Credentials, backups folder, jobs and saved queries stay keyed by the same
+  id. «Probar conexión» says when the chosen engine and the server differ.
+- **Sequences.** `db:objects` type `sequence` (from `information_schema.SEQUENCES`, falling back to
+  `TABLES` with `TABLE_TYPE='SEQUENCE'` on servers without it; aliases avoid the `MINVALUE`/`MAXVALUE`/
+  `INCREMENT`/`CYCLE` keywords), `db:showCreate` (`SHOW CREATE SEQUENCE`) and `db:dropObject`
+  (`DROP SEQUENCE`), all gated on the `sequences` capability. The tree's Secuencias group opens the DDL in
+  a query tab; menus: Ver estado (a `SELECT` of the sequence), Fijar siguiente valor… (`SETVAL` in a
+  query tab, so the guard applies), Nueva secuencia, DDL, Eliminar.
+- **Types and designer.** `introspect.listColumns` reports a MariaDB `LONGTEXT` column whose only column
+  check is `json_valid(\`col\`)`as`json`(type and data type), so the designer round-trips the alias.`components/designer/mariadb/planner.ts`: the MySQL planner plus `uuid`, `inet4`, `inet6`in the type
+list, MariaDB storage engines, an empty initial collation (filled from the database), and`options.systemVersioning`: `CREATE … WITH SYSTEM VERSIONING`, `ADD`/`DROP SYSTEM VERSIONING`(drop is a
+risk: history is deleted), and`SET @@SESSION.system_versioning_alter_history = KEEP`before any ALTER of
+a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and needs no designer support.
+- **Editor.** `vortaqMariaSQL` (CodeMirror `MariaSQL` + backslash escapes + sequence, versioning and type
+  keywords and builtins) for highlighting and keyword completion.
+- **Import.** `.ncx` `MARIADB`, DBeaver `mariadb` and the Navicat folder's `MariaDB` section create
+  `mariadb` connections (the "MariaDB se importa como conexión MySQL" warning is gone).
+- **AI.** MariaDB connections get a MariaDB note in the context, their sequences are named (without
+  their internal columns) and the version shows as «MariaDB x.y.z».
+- **Not done in P5:** sequences and system-versioned tables are still left out of `.nb3` **and `.vqb`**
+  backups (with the pre-backup warning naming them, as in P1b); completion does not list sequence
+  names; `/*M!` handling in the automation runner's own splitter (`automation/runner.ts`) is unchanged.
+
+#### PostgreSQL follow-ups (2026-10-07)
+
+- **Close a database** (section 4.1): new channel `db:closeDatabase` → `closeDatabaseFromTree`: closes
+  the database's pool and its idle query-tab sessions; refused for the initial database (connection-level
+  reads use it) and while a tab of that database has an open transaction (it is never rolled back behind
+  the user). The tree drops the database's caches and shows it closed again; the menu offers «Abrir base
+  de datos» on a closed one.
+- **Partitions nested** (section 3.1): `TableInfo.partitions` (recursive `pg_inherits`, partitions of
+  other schemas included, `pg_get_expr(relpartbound)` as the bound) on partitioned tables; the tree nests
+  them under their parent (sub-partitions too). A partition node is a regular table node of its own schema
+  (same id as it would have in a flat list), so it opens, designs and has the table menus.
+- **Navicat folder mapping** (section 12.1): `conn.plist` is read per section (`MySQL`, `MariaDB`,
+  `PostgreSQL`) with `(section, name)` identity and section keys in the preview; the PostgreSQL mapping is
+  the one listed in 12.1 (`initialdatabase`, `ssl_param.mode` any spelling, `rootcert`, integer
+  `usecustomdblist`, first host of `hostportlist` with a warning, forks refused). Tested only with a
+  synthetic multi-type file: the MariaDB/PostgreSQL keys are still unverified against real Navicat Premium
+  files (open question 1). SQLite and MongoDB folder rows are still not read.
+- **Safety copies follow the chosen format.** Replacing a database from a `.sql` dump (and dump folders)
+  takes its `previo-importacion` copy in Ajustes › Copias' format (`.vqb` by default, `.nb3` when chosen; a
+  `.sql` default means `.vqb`, since «Deshacer» cannot restore a `.sql`). Restore/rollback copies keep the
+  format of the backup being restored (unchanged), and PostgreSQL/MongoDB only have `.vqb`.
+- **Fix:** a failed sign-in (pg refusing an empty password client-side) used to leave the socket open, so
+  the server backend waited in authentication until `authentication_timeout` (60 s) and, among other
+  things, made `DROP DATABASE` wait. `connectOrClose` ends the client on any connect failure.
+
+#### AI assistant scope and per-engine AI capability (2026-10-07)
+
+- `EngineCapabilities.ai` (new, non-boolean): `reader` (`information_schema` | `pg_catalog` |
+  `sqlite_schema` | `mongo_sample`), `explain` (`explain` | `explain-query-plan` | false), `scope`
+  (`databases` | `schemas` | `attached`) and `language` (`sql` | `mongo-shell`). The renderer words the
+  scope menu from it; main keeps choosing the reader with the engine checks it already had.
+- Ported from the stable line: `AiScope = 'database' | 'connection'` on `AiTarget`, the panel's
+  «Solo <bd>» / «Toda la conexión» menu (localStorage `electrondb.ai.scope`), whole-connection contexts with
+  `namespace.table` names, qualified cross-namespace FKs, per-namespace notes, prioritisation (open table,
+  mentioned tables, FK neighbours, selected namespace, rest), at most 40 namespaces with structure and the
+  rest by name; «Solo <bd>» lists the others by name for `get_table_structure`. Per engine: MySQL/MariaDB
+  and MongoDB databases (system ones excluded: `mysql`, `sys`, `information_schema`, `performance_schema`;
+  `admin`, `local`, `config`), PostgreSQL the schemas of the current database (the panel and the context
+  header say «todos los esquemas de la base de datos X; PostgreSQL no consulta las demás bases de datos»),
+  SQLite main and its attachments (not `temp`). MongoDB shares a 120-collection sampling budget across
+  databases. «Ver contexto enviado» now also sends the PostgreSQL database and the scope.
+
+#### Version 2.0.0 and the update feed (2026-10-07)
+
+- `package.json` is **2.0.0** (ElectronDB ended at 0.1.9; no 0.2.0 is released). The update check and
+  electron-builder's `publish` use `Y0rshB3/Vortaq` (`UPDATE_REPO`); `isAllowedReleaseUrl` accepts
+  release pages and downloads of `Y0rshB3/Vortaq` and of the earlier name `Y0rshB3/ElectronDB`
+  (`LEGACY_UPDATE_REPOS`).
+- **appId is unchanged** (`dev.y0rshb3.electrondb`, pinned by `scripts/release-lib.test.ts`). electron-builder
+  derives the NSIS GUID from it when `nsis.guid` is not set (it is not), so the 2.0.0 installer has the same
+  GUID as 0.1.9 and upgrades that installation in place (same uninstall key and install folder); on macOS it
+  is the same bundle id.
+- **Release risk (not code):** ElectronDB 0.1.9 accepts only `/Y0rshB3/ElectronDB/releases/` URLs. If the
+  repository is renamed before 2.0.0 is published, GitHub's API answers the old URL with the new
+  `html_url` (`/Y0rshB3/Vortaq/…`) and 0.1.9 would not offer the update. Publishing 2.0.0 while the
+  repository still has the ElectronDB name (then renaming it), or a 0.1.x bridge release that accepts the
+  new name, avoids that.
+
 ---
 
 ## 17. Cross-cutting risks
@@ -2215,9 +2332,9 @@ What shipped, and where it differs from the text above (each point is deliberate
    Windows and Linux artifacts be built from `v0.1.0` and attached to the release?
 3. Does an `.ncx` exported from your Mac with "Export Password" ticked include the passwords?
    One manual export answers it and lets PN be accepted with real data.
-4. MariaDB `ed25519`/`parsec` users: ship the verified mysql2 auth plugins (+ `@noble/curves`)
-   in P5? Recommended yes.
-5. **Resolved (v0.2.0).** The Navicat Keychain recovery was removed; `.ncx` is the password
+4. **Resolved (P5).** MariaDB `ed25519`/`parsec` users: the mysql2 auth plugins ship with
+   `@noble/curves` (inlined in the main bundle).
+5. **Resolved (v2.0.0).** The Navicat Keychain recovery was removed; `.ncx` is the password
    route.
 6. PostgreSQL tables without a primary key: read-only with a warning (proposed for v1), or
    editing via `ctid` with a refresh after each save?
@@ -2427,3 +2544,10 @@ Invariant 1 allows only these, each additive and named in release notes:
 - P1a: `SettingsDialog` shows the "Motores en vista previa" switch (off by default, so nothing
   else changes). From the first engine phase, the "Nueva conexión" entry becomes an engine
   picker when previews are on, and always once an engine leaves preview.
+- P5: MariaDB leaves preview, so the toolbar's Conexión menu gains «Nueva conexión MariaDB…» and the
+  connection dialog always shows the MySQL/MariaDB picker (the two MySQL toolbar snapshots were edited by hand for this entry only). A `mysql` connection whose server is MariaDB becomes a `mariadb` connection when it
+  opens; MySQL-family pools offer the ed25519/parsec plugins (a MySQL server never asks for them).
+- Safety copies of a `.sql` import that replaces a database follow Ajustes › Copias (`.vqb` by default
+  instead of always `.nb3`).
+- The AI assistant without a selected database (or with «Toda la conexión») sends the structure of every
+  user database instead of only their names; the update feed is `Y0rshB3/Vortaq`.
