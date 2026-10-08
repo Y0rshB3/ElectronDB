@@ -1,6 +1,8 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import type { AppSettings } from '@shared/types'
+import { parseMongoUri } from '@shared/mongo/uri'
+import { envVar } from './env'
 import { windowChromeOptions, windowIconPath } from './windowOptions'
 
 export interface MainWindowOptions {
@@ -102,6 +104,84 @@ const SQLITE_SMOKE = `async () => {
 }`
 
 /**
+ * Renderer-side MongoDB check of the smoke run (only with VORTAQ_SMOKE_MONGO_URL,
+ * or VORTAQ_TEST_MONGO_URL, pointing at a throwaway server): save and open a
+ * connection, run shell commands through the bundled parser (Int64 kept),
+ * cancel a runaway $where query with killOp, drop the scratch database.
+ */
+function mongoSmoke(input: string, password: string | null): string {
+  return `async () => {
+  const out = {}
+  const invoke = window.vortaq.invoke
+  let conn = null
+  const db = 'vortaq_smoke_' + Date.now()
+  try {
+    conn = await invoke('connections:save', ${input})
+    ${password === null ? '' : `await invoke('connections:setPassword', conn.id, ${JSON.stringify(password)})`}
+    out.version = (await invoke('connections:open', conn.id)).version
+    const opts = { database: db, sessionKey: 'smoke' }
+    const write = await invoke('mongo:execute', conn.id, "db.smoke.insertMany([{ n: NumberLong('9007199254740993') }, { n: 2 }]); " + Array.from({ length: 30 }, (_, i) => 'db.slow.insertOne({ i: ' + i + ' })').join('; '), opts)
+    out.inserted = write[0] && write[0].write ? write[0].write.inserted : null
+    const read = await invoke('mongo:execute', conn.id, "db.smoke.find({ n: { $gt: NumberLong('9007199254740992') } })", opts)
+    out.int64 = !!(read[0] && read[0].page && read[0].page.docs[0] && read[0].page.docs[0].includes('9007199254740993'))
+    const running = invoke('mongo:execute', conn.id, "db.slow.find({ $where: 'sleep(200) || true' })", { ...opts, executionId: 'smoke-mongo-cancel' })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    const started = performance.now()
+    out.cancelled = await invoke('db:cancel', conn.id, 'smoke-mongo-cancel')
+    const cancelled = await running
+    out.cancelMs = Math.round(performance.now() - started)
+    out.cancelError = cancelled[0] ? cancelled[0].error : null
+    out.ok = out.inserted === 2 && out.int64 === true && out.cancelled === true && out.cancelMs < 3000 && /cancelada/.test(out.cancelError || '')
+  } catch (e) {
+    out.error = String(e && e.message)
+    out.ok = false
+  } finally {
+    if (conn) {
+      try { await invoke('mongo:execute', conn.id, 'db.dropDatabase()', { database: db }) } catch (e) { /* best effort */ }
+      try { await invoke('connections:close', conn.id) } catch (e) { /* best effort */ }
+      try { await invoke('connections:delete', conn.id) } catch (e) { /* best effort */ }
+    }
+  }
+  return out
+}`
+}
+
+/** ConnectionInput JSON and password of the smoke's MongoDB server, or null when none is set. */
+function mongoSmokeTarget(): { input: string; password: string | null } | null {
+  const url = envVar('SMOKE_MONGO_URL') ?? envVar('TEST_MONGO_URL')
+  if (!url) return null
+  const p = parseMongoUri(url)
+  return {
+    password: p.password,
+    input: JSON.stringify({
+      name: 'Smoke MongoDB',
+      color: null,
+      environment: 'local',
+      host: p.host,
+      port: p.port,
+      username: p.username,
+      authMode: p.password === null ? 'none' : 'password',
+      savePassword: true,
+      customDatabases: [],
+      initialQueries: '',
+      ssh: {
+        enabled: false,
+        host: '',
+        port: 22,
+        username: '',
+        authType: 'password',
+        savePassword: false
+      },
+      ssl: { enabled: p.ssl.enabled, verifyServer: p.ssl.verifyServer },
+      backupDir: '',
+      extraBackupDirs: [],
+      engine: 'mongodb',
+      mongo: p.mongo
+    })
+  }
+}
+
+/**
  * VORTAQ_SMOKE=1: records renderer console warnings/errors and load failures,
  * waits for the renderer to finish loading and mount, runs the SQLite check
  * (SQLITE_SMOKE), prints one
@@ -117,6 +197,8 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
       if (status !== 'ok') problems.push(`ipc ${channel}: ${short(status)}`)
     const sqlite = result.sqlite as { ok?: boolean } | undefined
     if (sqlite && sqlite.ok !== true) problems.push(`sqlite: ${short(JSON.stringify(sqlite))}`)
+    const mongo = result.mongo as { ok?: boolean } | null | undefined
+    if (mongo && mongo.ok !== true) problems.push(`mongo: ${short(JSON.stringify(mongo))}`)
     const ok = problems.length === 0 && result.mounted === true && result.bridge === true
     console.log(`[smoke] ${JSON.stringify({ ok, ...result, problems })}`)
     app.exit(ok ? 0 : 1)
@@ -136,6 +218,7 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
   contents.on('render-process-gone', (_e, details) =>
     problems.push(`render-process-gone ${details.reason}`)
   )
+  const mongo = mongoSmokeTarget()
   contents.once('did-finish-load', () => {
     setTimeout(() => {
       contents
@@ -145,7 +228,7 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
             for (const channel of ['app:info', 'app:startupNotices', 'settings:get', 'connections:list', 'jobs:list', 'jobs:runs', 'updates:check', 'ai:providers']) {
               try { await window.vortaq.invoke(channel); ipc[channel] = 'ok' } catch (e) { ipc[channel] = String(e && e.message) }
             }
-            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.vortaq?.invoke === 'function', title: document.title, ipc, sqlite: await (${SQLITE_SMOKE})() }
+            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.vortaq?.invoke === 'function', title: document.title, ipc, sqlite: await (${SQLITE_SMOKE})(), mongo: ${mongo ? `await (${mongoSmoke(mongo.input, mongo.password)})()` : 'null'} }
           })()`
         )
         .then((info: Record<string, unknown>) => finish(info))
