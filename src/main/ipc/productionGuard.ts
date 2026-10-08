@@ -7,6 +7,7 @@ import {
 import type { ConnectionConfig, Environment, Job, JobInput, WriteOptions } from '@shared/types'
 import type { AppContext } from '../context'
 import { dialectForEngine } from '@shared/dialects'
+import { isObviousMongoWrite } from '@shared/mongo/classify'
 import { MysqlUserError } from '../mysql/errors'
 import { splitStatements } from '../mysql/sqlSplit'
 
@@ -67,11 +68,13 @@ export function assertScriptAllowed(
 
 /**
  * Main's denylist per engine: MySQL keeps the v0.1.0 splitter and
- * isObviousWrite; other engines use their dialect's (section 10).
+ * isObviousWrite; other engines use their dialect's (section 10), MongoDB its
+ * shell classifier (mongo:execute also re-checks the parsed pipelines).
  */
 function scriptHasObviousWrite(ctx: GuardContext, connectionId: string, script: string): boolean {
   const engine = ctx.connections.get(connectionId)?.engine ?? 'mysql'
   if (engine === 'mysql') return splitStatements(script).some((s) => isObviousWrite(s.sql))
+  if (engine === 'mongodb') return isObviousMongoWrite(script)
   const dialect = dialectForEngine(engine)
   if (!dialect) return false
   return dialect.splitStatements(script).some((s) => dialect.isObviousWrite(s.sql))

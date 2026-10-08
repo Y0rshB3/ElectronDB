@@ -3,9 +3,9 @@
  * section 3). Pure data plus small helpers: no driver, Node or browser imports,
  * so main and renderer read the same flags.
  *
- * `mysql` and `postgresql` ship drivers (`available`); PostgreSQL stays
- * `preview` (offered only with Ajustes › Motores en vista previa). The other
- * engines are declared so the model is complete and are never offered.
+ * `mysql`, `postgresql`, `sqlite` and `mongodb` ship drivers (`available`);
+ * the last three stay `preview` (offered only with Ajustes › Motores en vista
+ * previa). MariaDB is declared so the model is complete and is never offered.
  */
 import type {
   ConnectionConfig,
@@ -281,15 +281,16 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     icon: 'mdi-leaf',
     defaultPort: 27017,
     defaultUser: '',
-    groups: ['collections', 'views', 'queries'],
-    available: false,
+    groups: ['collections', 'views', 'indexes', 'queries'],
+    available: true,
     capabilities: {
       family: 'document',
       hierarchy: 'database>collection',
       hasSchemas: false,
       hasUsers: false,
       supportsBackupsNb3: false,
-      supportsBackupsVqb: false,
+      // MongoDB backups exist only as .vqb (EJSON data, indexes, validators).
+      supportsBackupsVqb: true,
       supportsAutomation: false,
       supportsSsh: true,
       supportsSsl: true,

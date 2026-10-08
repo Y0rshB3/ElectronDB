@@ -62,7 +62,19 @@ import type {
   WhatsNewInfo,
   UserInfo,
   ViewInfo,
-  WriteOptions
+  WriteOptions,
+  MongoApplyResult,
+  MongoCollectionDetails,
+  MongoCollectionInfo,
+  MongoCommandResult,
+  MongoCreateCollectionOptions,
+  MongoDocumentChange,
+  MongoDocumentPage,
+  MongoDocumentQuery,
+  MongoExecuteOptions,
+  MongoFieldStat,
+  MongoIndexSpec,
+  MongoValidatorInput
 } from './types'
 import type {
   AiChatRequest,
@@ -343,6 +355,128 @@ export interface IpcInvokeMap {
     result: SqliteAlterResult
   }
 
+  /*
+   * MongoDB (docs/multi-engine-design.md, 7.2). Documents and values travel as
+   * canonical EJSON text; filters, sorts, projections and editor scripts use
+   * shell syntax and are parsed in main (never eval'd). Every write takes
+   * WriteOptions and goes through the production guard.
+   */
+  /** Collections, views and time-series collections of a database, with $collStats columns. */
+  'mongo:collections': {
+    args: [connectionId: string, database: string]
+    result: MongoCollectionInfo[]
+  }
+  /** Indexes, validator and options of a collection (read-only). */
+  'mongo:collectionDetails': {
+    args: [connectionId: string, database: string, collection: string]
+    result: MongoCollectionDetails
+  }
+  /** Collection browser page (filter/sort/projection, skip/limit). */
+  'mongo:find': {
+    args: [connectionId: string, query: MongoDocumentQuery]
+    result: MongoDocumentPage
+  }
+  /** «Cargar más»: next documents of an open cursor (find, aggregate or query tab result). */
+  'mongo:getMore': {
+    args: [connectionId: string, resultId: string, count: number]
+    result: MongoDocumentPage
+  }
+  /** Closes an open cursor the view no longer needs. */
+  'mongo:closeCursor': { args: [connectionId: string, resultId: string]; result: void }
+  /** One whole document by `_id` (canonical EJSON of the id), or null when it is gone. */
+  'mongo:document': {
+    args: [connectionId: string, database: string, collection: string, id: string]
+    result: string | null
+  }
+  /** Inline and editor changes by `_id` (replace only of documents fetched whole). */
+  'mongo:applyChanges': {
+    args: [
+      connectionId: string,
+      database: string,
+      collection: string,
+      changes: MongoDocumentChange[],
+      options?: WriteOptions
+    ]
+    result: MongoApplyResult
+  }
+  /** Field paths and BSON types of a $sample of the collection (no values). */
+  'mongo:sampleFields': {
+    args: [connectionId: string, database: string, collection: string, size?: number]
+    result: MongoFieldStat[]
+  }
+  /** Query tab: runs a shell-syntax script (whitelisted grammar) statement by statement. */
+  'mongo:execute': {
+    args: [connectionId: string, script: string, options: MongoExecuteOptions]
+    result: MongoCommandResult[]
+  }
+  /** Starts a transaction on the tab's session (replica sets and sharded clusters). */
+  'mongo:beginTransaction': {
+    args: [connectionId: string, sessionKey: string]
+    result: TabSessionState
+  }
+  'mongo:createCollection': {
+    args: [
+      connectionId: string,
+      database: string,
+      name: string,
+      options: MongoCreateCollectionOptions,
+      writeOptions?: WriteOptions
+    ]
+    result: void
+  }
+  'mongo:renameCollection': {
+    args: [
+      connectionId: string,
+      database: string,
+      from: string,
+      to: string,
+      writeOptions?: WriteOptions
+    ]
+    result: void
+  }
+  /** «Vaciar»: deleteMany({}); resolves the number of documents deleted. */
+  'mongo:clearCollection': {
+    args: [connectionId: string, database: string, collection: string, writeOptions?: WriteOptions]
+    result: number
+  }
+  /** «Contar exacto»: countDocuments({}). */
+  'mongo:countDocuments': {
+    args: [connectionId: string, database: string, collection: string]
+    result: number
+  }
+  /** Creates an index; resolves its name. */
+  'mongo:createIndex': {
+    args: [
+      connectionId: string,
+      database: string,
+      collection: string,
+      spec: MongoIndexSpec,
+      writeOptions?: WriteOptions
+    ]
+    result: string
+  }
+  'mongo:dropIndex': {
+    args: [
+      connectionId: string,
+      database: string,
+      collection: string,
+      name: string,
+      writeOptions?: WriteOptions
+    ]
+    result: void
+  }
+  /** Validator ($jsonSchema or query operators), level and action (collMod). */
+  'mongo:setValidator': {
+    args: [
+      connectionId: string,
+      database: string,
+      collection: string,
+      input: MongoValidatorInput,
+      writeOptions?: WriteOptions
+    ]
+    result: void
+  }
+
   'backups:list': { args: [connectionId: string, schema?: string | null]; result: BackupFile[] }
   /** An encrypted .vqb without `password` answers its locked header meta; a wrong password throws. */
   'backups:meta': { args: [path: string, password?: string | null]; result: BackupMeta }
@@ -582,6 +716,23 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'sqlite:maintenance',
   'sqlite:tableDependents',
   'sqlite:alterTable',
+  'mongo:collections',
+  'mongo:collectionDetails',
+  'mongo:find',
+  'mongo:getMore',
+  'mongo:closeCursor',
+  'mongo:document',
+  'mongo:applyChanges',
+  'mongo:sampleFields',
+  'mongo:execute',
+  'mongo:beginTransaction',
+  'mongo:createCollection',
+  'mongo:renameCollection',
+  'mongo:clearCollection',
+  'mongo:countDocuments',
+  'mongo:createIndex',
+  'mongo:dropIndex',
+  'mongo:setValidator',
   'backups:list',
   'backups:meta',
   'backups:objectDdl',

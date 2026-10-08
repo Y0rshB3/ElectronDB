@@ -12,9 +12,15 @@
 #   docker compose -f tests/docker-compose.yml up -d --wait mysql57
 #
 # MariaDB (33311) and PostgreSQL (55432, plus a throwaway SSH server on 52222 for the tunnel
-# test) are here since 0.2.0; MongoDB (57017/57018) joins in its own phase
-# (docs/multi-engine-design.md, section 15.3). Start only some services by naming them:
+# test) are here since 0.2.0, and MongoDB 8.2 (57017 standalone with authentication, 57018 a
+# single-node replica set for transactions). Start only some services by naming them:
 #   docker compose -f tests/docker-compose.yml up -d --wait mariadb11 postgres17 sshd
+#   docker compose -f tests/docker-compose.yml up -d --wait mongo82 mongo82rs
+# The replica set needs one `rs.initiate` after its first start (idempotent):
+#   docker compose -f tests/docker-compose.yml exec mongo82rs mongosh --port 57018 --quiet \
+#     --eval 'try { rs.status() } catch (e) { rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:57018" }] }) }'
+# (The stand-alone containers vortaq-test-mongo / vortaq-test-mongo-rs started with `docker run`
+# use the same ports; run either those or these services.)
 name: electrondb-test
 
 services:
@@ -104,3 +110,35 @@ services:
       timeout: 5s
       retries: 90
       start_period: 10s
+
+  # VORTAQ_TEST_MONGO_URL=mongodb://root:navidog@127.0.0.1:57017/?authSource=admin
+  # Pinned to 8.2: mongo:8 (8.3.x) refuses to start on Docker Desktop kernels >= 6.19.
+  mongo82:
+    image: mongo:8.2
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: navidog
+    ports:
+      - '127.0.0.1:57017:27017'
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ ping: 1 }).ok']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 5s
+
+  # VORTAQ_TEST_MONGO_RS_URL=mongodb://127.0.0.1:57018/?replicaSet=rs0
+  # Single-node replica set without authentication (a keyFile would be needed with it). mongod
+  # listens on 57018 inside the container too, so the member address 127.0.0.1:57018 that
+  # rs.initiate stores is reachable from the host and from inside.
+  mongo82rs:
+    image: mongo:8.2
+    command: ['mongod', '--replSet', 'rs0', '--port', '57018', '--bind_ip_all']
+    ports:
+      - '127.0.0.1:57018:57018'
+    healthcheck:
+      test: ['CMD', 'mongosh', '--port', '57018', '--quiet', '--eval', 'db.adminCommand({ ping: 1 }).ok']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 5s

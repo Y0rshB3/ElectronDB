@@ -100,9 +100,8 @@ describe('engine availability', () => {
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
       'SQLite: selecciona el archivo de la base de datos.'
     )
-    expect(connectionFormErrors(input({ engine: 'mongodb' }))).toEqual([
-      'MongoDB todavía no está disponible en esta versión de Vortaq.'
-    ])
+    // MongoDB ships a driver (preview) since 0.2.0: its own block rules apply.
+    expect(engineAvailabilityError({ engine: 'mongodb' })).toBeNull()
   })
 })
 

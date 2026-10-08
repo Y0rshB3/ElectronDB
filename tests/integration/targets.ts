@@ -140,3 +140,17 @@ export function describeServer(spec: ServerSpec, name: string, body: (url: strin
     })
   }
 }
+
+/** MongoDB 8.2 standalone (P4a/P4b), with authentication. */
+export const MONGO_TARGET: ServerSpec = {
+  label: 'MongoDB 8.2',
+  envName: 'TEST_MONGO_URL',
+  example: 'mongodb://root:navidog@127.0.0.1:57017/?authSource=admin'
+}
+
+/** MongoDB 8.2 single-node replica set (transactions), without authentication. */
+export const MONGO_RS_TARGET: ServerSpec = {
+  label: 'MongoDB 8.2 replica set',
+  envName: 'TEST_MONGO_RS_URL',
+  example: 'mongodb://127.0.0.1:57018/?replicaSet=rs0'
+}

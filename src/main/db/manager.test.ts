@@ -281,18 +281,18 @@ describe('ConnectionManager with the real registry', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('refuses to open or test a MongoDB connection in this build', async () => {
-    const { id } = ctx.connections.save(input('Mongo', 'mongodb'))
+  it('refuses to open or test a MariaDB connection in this build', async () => {
+    const { id } = ctx.connections.save(input('Maria', 'mariadb'))
     ctx.credentials.set('mysql', id, 'pw')
     const manager = getConnectionManager(ctx)
     await expect(manager.open(id)).rejects.toThrow(
-      'MongoDB todavía no está disponible en esta versión de Vortaq.'
+      'MariaDB todavía no está disponible en esta versión de Vortaq.'
     )
     expect(manager.isOpen(id)).toBe(false)
-    const res = await manager.test(input('Mongo', 'mongodb'), 'pw', null)
+    const res = await manager.test(input('Maria', 'mariadb'), 'pw', null)
     expect(res).toMatchObject({
       ok: false,
-      error: 'MongoDB todavía no está disponible en esta versión de Vortaq.'
+      error: 'MariaDB todavía no está disponible en esta versión de Vortaq.'
     })
   })
 

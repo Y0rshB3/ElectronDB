@@ -45,9 +45,9 @@ describe('engine descriptors', () => {
     for (const id of ENGINE_IDS) expect(ENGINES[id].id).toBe(id)
   })
 
-  it('ships the MySQL, PostgreSQL and SQLite drivers; every engine but MySQL is a preview', () => {
+  it('ships the MySQL, PostgreSQL, SQLite and MongoDB drivers; every engine but MySQL is a preview', () => {
     const available = ENGINE_IDS.filter((id) => ENGINES[id].available)
-    expect(available).toEqual(['mysql', 'postgresql', 'sqlite'])
+    expect(available).toEqual(['mysql', 'postgresql', 'sqlite', 'mongodb'])
     expect(ENGINES.mysql.capabilities.preview).toBe(false)
     for (const id of ENGINE_IDS.filter((e) => e !== 'mysql')) {
       expect(ENGINES[id].capabilities.preview).toBe(true)
@@ -129,7 +129,8 @@ describe('engine descriptors', () => {
       designer: 'collection'
     })
     expect(ENGINES.postgresql.groups).toContain('materializedViews')
-    expect(ENGINES.mongodb.groups).toEqual(['collections', 'views', 'queries'])
+    expect(ENGINES.mongodb.groups).toEqual(['collections', 'views', 'indexes', 'queries'])
+    expect(caps('mongodb').supportsBackupsVqb).toBe(true)
   })
 })
 
@@ -153,9 +154,14 @@ describe('engine helpers', () => {
     ).toThrow('Sin copias .nb3')
   })
 
-  it('offers PostgreSQL and SQLite in the pickers only with previews on', () => {
+  it('offers PostgreSQL, SQLite and MongoDB in the pickers only with previews on', () => {
     expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql'])
-    expect(pickableEngines(true).map((e) => e.id)).toEqual(['mysql', 'postgresql', 'sqlite'])
+    expect(pickableEngines(true).map((e) => e.id)).toEqual([
+      'mysql',
+      'postgresql',
+      'sqlite',
+      'mongodb'
+    ])
   })
 })
 

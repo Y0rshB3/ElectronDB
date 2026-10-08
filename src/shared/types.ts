@@ -226,6 +226,8 @@ export interface ServerRuntime {
   topology?: MongoTopology
   /** SQLite: the file is open read-only (configured, or not writable). */
   readOnly?: boolean
+  /** MongoDB: role of the member Vortaq is connected to ('primary', 'secondary', 'mongos', …). */
+  memberRole?: string
 }
 
 export interface DatabaseInfo {
@@ -813,6 +815,211 @@ export interface SqliteAlterResult {
   /** Foreign key violations that already existed before the change (they do not block it). */
   warnings: string[]
   durationMs: number
+}
+
+/* ---------- MongoDB (documents) ---------- */
+
+/*
+ * Document values travel as canonical Extended JSON text (EJSON relaxed:false)
+ * in both directions, so an Int64, a Decimal128 or an ObjectId never becomes a
+ * JS number or string on the way (docs/multi-engine-design.md, D8 and 2.2).
+ */
+
+/** Top-level (or dotted) field of sampled documents, with how often each BSON type was seen. */
+export interface MongoFieldStat {
+  path: string
+  /** Documents that have the field. */
+  count: number
+  /** BSON type name (shared/mongo/shellFormat `bsonTypeOf`) → documents with that type. */
+  types: Record<string, number>
+}
+
+/** A collection, view or time-series collection of a database (mongo:collections). */
+export interface MongoCollectionInfo {
+  name: string
+  type: 'collection' | 'view' | 'timeseries'
+  /** Why documents cannot be edited here (view, capped, time-series, GridFS chunks…), or null. */
+  readOnlyReason: string | null
+  /** Document count from $collStats (null for views or without privileges). */
+  count: number | null
+  sizeBytes: number | null
+  storageSizeBytes: number | null
+  indexCount: number | null
+  avgObjSizeBytes: number | null
+  capped: boolean
+  /** Views: source collection. */
+  viewOn?: string
+}
+
+export interface MongoIndexInfo {
+  name: string
+  /** Canonical EJSON of the key document (`{"a":{"$numberInt":"1"}}`). */
+  keys: string
+  unique: boolean
+  sparse: boolean
+  hidden: boolean
+  /** TTL in seconds, or null. */
+  expireAfterSeconds: number | null
+  /** Canonical EJSON of partialFilterExpression, or null. */
+  partialFilter: string | null
+  /** Canonical EJSON of the collation, or null. */
+  collation: string | null
+  /** Other options (2dsphere version, weights, …) as canonical EJSON, or null. */
+  extra: string | null
+}
+
+export interface MongoCollectionDetails {
+  info: MongoCollectionInfo
+  indexes: MongoIndexInfo[]
+  /** Canonical EJSON of the validator document, or null. */
+  validator: string | null
+  validationLevel: string | null
+  validationAction: string | null
+  /** Canonical EJSON of the listCollections options (capped, size, timeseries, viewOn, pipeline…). */
+  options: string
+}
+
+/** Collection browser request (mongo:find). Filter, sort and projection use shell syntax. */
+export interface MongoDocumentQuery {
+  database: string
+  collection: string
+  filter: string
+  sort: string
+  projection: string
+  skip: number
+  limit: number
+  executionId?: string
+}
+
+export interface MongoDocumentPage {
+  /** Canonical EJSON, one per document. */
+  docs: string[]
+  /** Per document: fetched whole (no projection, no inclusion $project, not size-truncated). */
+  whole: boolean[]
+  fields: MongoFieldStat[]
+  /** Total documents matching the filter, null when unknown (count timed out). */
+  total: number | null
+  /** countDocuments (true) or estimatedDocumentCount / no count (false). */
+  totalExact: boolean
+  /** More documents are available through `resultId` («Cargar más»). */
+  truncated: boolean
+  /** Open server cursor for mongo:getMore; null when exhausted. */
+  resultId: string | null
+  durationMs: number
+}
+
+export type MongoDocumentChange =
+  /** Shell syntax or canonical EJSON; `_id` is generated when absent. */
+  | { kind: 'insert'; doc: string }
+  | {
+      kind: 'update'
+      /** Canonical EJSON of `_id`. */
+      id: string
+      /** Dotted path → canonical EJSON of the new value (typed by the cell editor). */
+      set: Record<string, string>
+      /** Dotted paths to remove (never an array element: arrays are always $set whole). */
+      unset: string[]
+      /** Original value of each edited path, canonical EJSON (optimistic check). */
+      expected: Record<string, string>
+    }
+  | {
+      kind: 'replace'
+      id: string
+      /** The whole new document (shell syntax or canonical EJSON). */
+      doc: string
+      /** Main refuses a replace of a document that was not fetched whole. */
+      fetchedWhole: true
+      /** Canonical EJSON of the document as loaded: a changed document is not overwritten. */
+      original?: string
+    }
+  | { kind: 'delete'; id: string }
+
+export interface MongoApplyResult {
+  /** Changes applied (all of them, or those before the first failure). */
+  applied: number
+  /** All-or-nothing in a transaction (replica set / sharded cluster). */
+  atomic: boolean
+  /** Canonical EJSON `_id` of each insert, aligned with the request (null for other kinds). */
+  insertedIds: (string | null)[]
+  /** Standalone servers: the change that failed (0-based) and why; later changes were not sent. */
+  failure: { index: number; message: string } | null
+}
+
+/** One statement of a MongoDB query tab and its outcome (mongo:execute). */
+export interface MongoCommandResult {
+  /** Source text of the statement. */
+  statement: string
+  durationMs: number
+  kind: 'documents' | 'write' | 'value' | 'error'
+  /** Database the statement ran in. */
+  database: string | null
+  collection?: string
+  /** kind 'documents'. */
+  page?: MongoDocumentPage
+  /**
+   * kind 'documents': null when the documents can be edited in place (by `_id`),
+   * otherwise why not («resultado de aggregate con $group», «vista»…).
+   */
+  readOnlyReason?: string | null
+  /** kind 'write'. */
+  write?: {
+    acknowledged: boolean
+    matched: number | null
+    modified: number | null
+    inserted: number | null
+    deleted: number | null
+    upserted: number | null
+    /** Canonical EJSON of the inserted/upserted ids (at most 100). */
+    ids: string[]
+  }
+  /** kind 'value': canonical EJSON (or plain text for show/use). */
+  value?: string
+  error?: string
+  /** Tab session state after the statement. */
+  transactionStatus?: TransactionStatus
+  /** Current database of the tab after the statement (`use`). */
+  currentDatabase?: string | null
+}
+
+export interface MongoExecuteOptions extends WriteOptions {
+  /** Current database of the tab (`use <db>` changes it for later runs). */
+  database: string | null
+  /** Max documents per result (the rest stay behind «Cargar más»). */
+  maxDocs?: number
+  executionId?: string
+  /** Query tab id: the tab's own session (database, transaction). */
+  sessionKey?: string
+}
+
+export interface MongoCreateCollectionOptions {
+  capped?: boolean
+  /** Capped: maximum size in bytes. */
+  size?: number
+  /** Capped: maximum documents. */
+  max?: number
+  /** Shell syntax of a validator document, '' for none. */
+  validator?: string
+}
+
+export interface MongoIndexSpec {
+  /** Shell syntax of the key document, e.g. `{ email: 1, createdAt: -1 }`. */
+  keys: string
+  name?: string
+  unique?: boolean
+  sparse?: boolean
+  hidden?: boolean
+  expireAfterSeconds?: number | null
+  /** Shell syntax, '' for none. */
+  partialFilter?: string
+  /** Shell syntax, '' for none. */
+  collation?: string
+}
+
+export interface MongoValidatorInput {
+  /** Shell syntax of the validator document; '' removes it. */
+  validator: string
+  level: 'off' | 'strict' | 'moderate'
+  action: 'error' | 'warn'
 }
 
 /* ---------- Backups (.vqb and .nb3) ---------- */

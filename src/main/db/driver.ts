@@ -113,7 +113,15 @@ export interface SqlDriverConnection<
   acquire(scope: Scope | null): Promise<S>
 }
 
-export type DriverConnection = SqlDriverConnection<SqlSession>
+/**
+ * A document engine (MongoDB): no SQL sessions; its own mongo:* handlers work
+ * on the concrete connection class (src/main/mongo/connection.ts).
+ */
+export interface DocumentDriverConnection extends DriverConnectionBase {
+  readonly family: 'document'
+}
+
+export type DriverConnection = SqlDriverConnection<SqlSession> | DocumentDriverConnection
 
 /**
  * Connections whose sessions are today's MysqlSession-based PooledSession.
