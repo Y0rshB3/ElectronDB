@@ -539,7 +539,7 @@ async function start(): Promise<void> {
 .rollback-dialog__password {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
   margin: 6px 0 10px;
   padding: 10px 12px;
   border: 1px solid var(--nd-border);

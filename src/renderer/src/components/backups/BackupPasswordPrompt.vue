@@ -82,7 +82,7 @@ async function submit(): Promise<void> {
 .backup-password {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--nd-border);
   border-radius: var(--nd-radius-control);

@@ -1052,6 +1052,73 @@ const STEPS: Step[] = [
   }
 ]
 
+/**
+ * .vqb copies (VORTAQ_SHOTS_ONLY=50): «Nueva copia» with format and encryption,
+ * a locked .vqb in the list (it is created here, encrypted, in Local Test's
+ * folder) and the password prompt of «Restaurar».
+ */
+const VQB_PASSWORD = 'clave de ejemplo'
+const VQB_STEPS: Step[] = [
+  {
+    name: '50a-backup-dialog-vqb-encrypt',
+    script: `
+      const c = H.local(S)
+      S.ui.openBackupDialog(c.id, '${SCHEMA}')
+      await H.waitFor('[data-test="backup-dialog"]', 5000)
+      await H.click('[data-test="backup-format-vqb"]', 5000)
+      await H.click('[data-test="backup-encrypt"] input', 5000)
+      const set = async (sel, value) => {
+        const input = await H.waitFor(sel, 5000)
+        input.value = value
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      await set('[data-test="backup-password"] input', ${JSON.stringify(VQB_PASSWORD)})
+      await set('[data-test="backup-password-again"] input', ${JSON.stringify(VQB_PASSWORD)})
+      const label = await H.waitFor('[data-test="backup-dialog"] input[placeholder="p. ej. antes-migracion"]', 5000)
+      label.value = 'cifrada'
+      label.dispatchEvent(new Event('input', { bubbles: true }))
+      await H.waitFor('[data-test="backup-password-warning"]', 5000)
+      await H.settle(S, 900)`,
+    cleanup: `S.ui.backupDialog = { ...S.ui.backupDialog, open: false }`
+  },
+  {
+    name: '50b-backups-locked-vqb',
+    script: `
+      const c = H.local(S)
+      // An encrypted .vqb of the test schema, made through the real backup channel.
+      const made = await S.api.backups.create('shot-vqb-' + Date.now(), {
+        connectionId: c.id,
+        schema: '${SCHEMA}',
+        includeData: true,
+        format: 'vqb',
+        password: ${JSON.stringify(VQB_PASSWORD)},
+        label: 'cifrada'
+      })
+      window.__ndShotVqb = made.path
+      S.workspace.openBackups(c.id, null)
+      await H.click('[data-test="backups-refresh"]', 10000)
+      const name = made.path.split('/').pop()
+      const row = await H.until(() =>
+        [...document.querySelectorAll('[data-test="backup-row"]')].find((r) => r.textContent.includes(name)), 10000)
+      row.click()
+      await H.waitFor('[data-test="backup-password"]', 8000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '50c-restore-password-prompt',
+    script: `
+      const c = H.local(S)
+      const files = await S.api.backups.list(c.id, null)
+      const file = files.find((f) => f.path === window.__ndShotVqb) || files.find((f) => f.encrypted)
+      if (!file) throw new Error('no encrypted .vqb listed (run 50b first)')
+      S.ui.openRestoreDialog(file, c.id)
+      await H.waitFor('[data-test="restore-dialog"] [data-test="backup-password"]', 8000)
+      await H.settle(S, 1000)`,
+    cleanup: `S.ui.restoreDialog = { open: false, backup: null, connectionId: null }`
+  }
+]
+STEPS.push(...VQB_STEPS)
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
