@@ -114,6 +114,9 @@ export function versionLabel(serverVersion: string): string {
   if (!serverVersion) return ''
   const maria = /^(?:5\.5\.5-)?(\d+\.\d+\.\d+)[^\s]*-MariaDB/i.exec(serverVersion)
   if (maria) return ` (MariaDB ${maria[1]})`
+  // PostgreSQL's version() also names the build ("… on aarch64-unknown-linux-gnu, compiled by …").
+  const pg = /^PostgreSQL \S+/.exec(serverVersion)
+  if (pg) return ` (${pg[0]})`
   return ` (${/^\d/.test(serverVersion) ? 'MySQL ' : ''}${serverVersion})`
 }
 

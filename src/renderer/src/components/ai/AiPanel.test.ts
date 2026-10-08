@@ -182,7 +182,10 @@ describe('AiPanel', () => {
     installDomPolyfills()
     wrapper = mountWith(AiPanel, pinia)
     await settle()
-    expect(wrapper.find('[data-test="ai-scope"]').text()).toContain('tienda · todos los esquemas')
+    expect(wrapper.find('[data-test="ai-scope"]').text()).toContain('todos los esquemas')
+    expect(wrapper.find('[data-test="ai-scope"]').attributes('title')).toBe(
+      'El asistente ve todos los esquemas de la base de datos tienda'
+    )
     await wrapper.get('[data-test="ai-scope"]').trigger('click')
     await settle()
     const item = document.querySelector('[data-test="ai-scope-connection"]')

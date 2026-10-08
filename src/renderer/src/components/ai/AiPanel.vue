@@ -67,7 +67,7 @@ const scopeWords = computed(() => {
       single: `Solo el esquema ${schema}`,
       singleHint: 'Los demás esquemas se nombran y el asistente puede pedir su estructura',
       wholeHint: `En PostgreSQL: todos los esquemas de la base de datos ${db} (las demás bases de datos de la conexión no se incluyen)`,
-      wholeLabel: `${db} · todos los esquemas`,
+      wholeLabel: 'todos los esquemas',
       wholeTitle: `El asistente ve todos los esquemas de la base de datos ${db}`
     }
   }

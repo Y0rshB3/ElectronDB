@@ -112,7 +112,23 @@ export class PgMetadataQueryable implements Queryable {
 
 type Row = Record<string, unknown>
 const str = (v: unknown): string => (v === null || v === undefined ? '' : String(v))
-const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x)) : [])
+/**
+ * A json_agg column: the PostgreSQL driver keeps json as the server's text
+ * (values.ts), so it arrives as '["a","b"]'; an already parsed array is
+ * accepted too.
+ */
+const list = (v: unknown): string[] => {
+  if (Array.isArray(v)) return v.map((x) => String(x))
+  if (typeof v === 'string' && v.trimStart().startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(v)
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x))
+    } catch {
+      /* not JSON: no columns */
+    }
+  }
+  return []
+}
 
 /** Structure of one PostgreSQL schema (all tables, or only `only`). */
 export async function readPgSchemaSnapshot(

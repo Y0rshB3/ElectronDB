@@ -389,6 +389,11 @@ describe('schema context', () => {
     expect(versionLabel('5.5.5-10.11.6-MariaDB-log')).toBe(' (MariaDB 10.11.6)')
     expect(versionLabel('8.4.3')).toBe(' (MySQL 8.4.3)')
     expect(versionLabel('SQLite 3.53.4')).toBe(' (SQLite 3.53.4)')
+    expect(
+      versionLabel(
+        'PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc'
+      )
+    ).toBe(' (PostgreSQL 17.11)')
     expect(versionLabel('')).toBe('')
   })
 

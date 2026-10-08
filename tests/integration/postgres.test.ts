@@ -766,6 +766,11 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
         type: 'integer'
       })
       expect(items.indexes.map((i) => i.name)).toContain('items_name_idx')
+      // json_agg columns arrive as JSON text: index and key columns must still be read.
+      expect(items.indexes.find((i) => i.name === 'items_pkey')?.columns).toEqual(['id'])
+      expect(items.indexes.find((i) => i.name === 'items_name_idx')?.columns).toEqual([
+        'lower(name)'
+      ])
       expect(snap.tables.find((t) => t.name === 'v_items')?.kind).toBe('view')
       expect(snap.routines.map((r) => r.name)).toEqual([
         'add',
