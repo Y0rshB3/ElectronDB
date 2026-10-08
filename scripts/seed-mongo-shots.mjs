@@ -162,6 +162,41 @@ const b64 = (s) => Buffer.from(s, 'utf8').toString('base64')
 const write = (name, data) =>
   writeFileSync(join(PROFILE, name), JSON.stringify(data, null, 2), { mode: 0o600 })
 write('connections.json', { version: 1, items: [connection] })
+write('jobs.json', {
+  version: 1,
+  items: [
+    {
+      id: 'shot-job-mongo',
+      name: 'Tienda MongoDB cada noche',
+      continueOnError: true,
+      tasks: [
+        {
+          id: 'b1',
+          type: 'backupschema',
+          connectionId: 'shot-mongo',
+          schema: DB,
+          referenceName: `Backup ${DB}`,
+          includeData: true,
+          format: 'vqb'
+        },
+        {
+          id: 'r1',
+          type: 'restoreschema',
+          connectionId: 'shot-mongo',
+          schema: `${DB}_pruebas`,
+          referenceName: 'Refrescar pruebas',
+          restoreSource: { kind: 'task', taskId: 'b1' },
+          safetyBackup: true,
+          includeData: true
+        }
+      ],
+      schedule: { enabled: true, cron: '0 3 * * *', launchAgent: false },
+      createdAt: iso,
+      updatedAt: iso,
+      lastRunAt: null
+    }
+  ]
+})
 write('credentials.json', {
   version: 1,
   codec: 'plain',

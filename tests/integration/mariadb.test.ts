@@ -288,7 +288,7 @@ describeServer(MARIADB_TARGET, 'MariaDB fixes on a mysql connection (integration
     const sessions = getSessionFactory(ctx)
     const warning = await skippedObjectsWarning(sessions, id, SCHEMA)
     expect(warning).toBe(
-      'La copia .nb3 no incluye la secuencia seq_orders y de la tabla versionada sv guarda solo las filas actuales, sin historial (MariaDB). Elige el formato .vqb para copiarlo todo.'
+      'La copia .nb3 (MariaDB) no incluye la secuencia seq_orders y guarda solo las filas actuales de la tabla versionada sv, sin historial. Elige el formato .vqb para copiarlo todo.'
     )
     // A .vqb (and a .sql) holds both: no warning.
     expect(await skippedObjectsWarning(sessions, id, SCHEMA, 'vqb')).toBeNull()

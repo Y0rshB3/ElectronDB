@@ -1,4 +1,4 @@
-/* global process, console */
+/* global process, console, Buffer */
 /**
  * Seeds a scratch profile with SQLite files for the SQLite screenshots (steps 42*
  * of src/main/screenshots.ts). No server needed: the databases are files in the
@@ -97,6 +97,10 @@ create(
 `
 )
 
+// An empty file the job below restores into (created like «Crear base de datos nueva…»).
+const COPIA = join(FILES, 'tienda-copia.db')
+create(COPIA, 'CREATE TABLE vieja (x)')
+
 const iso = new Date().toISOString()
 const base = {
   color: null,
@@ -152,11 +156,65 @@ const connections = [
       busyTimeoutMs: 5000
     },
     source: { app: 'dbeaver', name: 'Inventario', importedAt: iso, format: 'json' }
+  },
+  {
+    ...base,
+    id: 'shot-lite-copy',
+    name: 'Tienda copia (SQLite)',
+    color: '#60a5fa',
+    environment: 'local',
+    sqlite: {
+      filePath: COPIA,
+      readOnly: false,
+      foreignKeys: true,
+      attached: [],
+      busyTimeoutMs: 5000
+    }
   }
 ]
+const jobs = [
+  {
+    id: 'shot-job-lite',
+    name: 'Tienda SQLite a copia local',
+    continueOnError: false,
+    tasks: [
+      {
+        id: 'b1',
+        type: 'backupschema',
+        connectionId: 'shot-lite',
+        schema: 'main',
+        referenceName: 'Backup tienda',
+        includeData: true,
+        format: 'vqb',
+        encrypt: true
+      },
+      {
+        id: 'r1',
+        type: 'restoreschema',
+        connectionId: 'shot-lite-copy',
+        schema: 'main',
+        referenceName: 'Restaurar en la copia',
+        restoreSource: { kind: 'task', taskId: 'b1' },
+        safetyBackup: true,
+        includeData: true
+      }
+    ],
+    schedule: { enabled: true, cron: '30 2 * * *', launchAgent: false },
+    createdAt: iso,
+    updatedAt: iso,
+    lastRunAt: null
+  }
+]
+
 const write = (name, data) =>
   writeFileSync(join(PROFILE, name), JSON.stringify(data, null, 2), { mode: 0o600 })
 write('connections.json', { version: 1, items: connections })
-write('credentials.json', { version: 1, codec: 'plain', items: {} })
+write('jobs.json', { version: 1, items: jobs })
+// The job's backup password (synthetic), so the editor shows «contraseña guardada».
+write('credentials.json', {
+  version: 1,
+  codec: 'plain',
+  items: { 'backupKey:shot-job-lite': Buffer.from('clave de ejemplo 2026', 'utf8').toString('base64') }
+})
 write('settings.json', { theme: 'dark', checkUpdatesOnStartup: false })
 console.log(`Seeded ${PROFILE} (SQLite files in ${FILES})`)

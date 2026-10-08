@@ -520,7 +520,7 @@ const STEPS: Step[] = [
       field.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
       field.click()
       const option = await H.until(() =>
-        [...document.querySelectorAll('.v-overlay--active .v-list-item')].find((el) =>
+        [...document.querySelectorAll('.v-list-item')].find((el) =>
           el.textContent.includes('Sin contraseña')
         ), 5000)
       option.click()
@@ -1352,7 +1352,7 @@ const ENGINE_STEPS: Step[] = [
       if (!row) throw new Error('database node not rendered')
       const r = row.getBoundingClientRect()
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 120, clientY: r.top + 14 }))
-      await H.until(() => [...document.querySelectorAll('.v-overlay--active .v-list-item')].some((i) => /Cerrar base de datos/.test(i.textContent)), 5000)
+      await H.until(() => [...document.querySelectorAll('.v-list-item')].some((i) => /Cerrar base de datos/.test(i.textContent)), 5000)
       await H.sleep(500)`,
     cleanup: `
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -1440,7 +1440,7 @@ const ENGINE_STEPS: Step[] = [
         list.scrollTop += 240
         await H.sleep(120)
       }
-      await H.until(() => [...document.querySelectorAll('.v-overlay--active .v-list-item')].some((i) => /inet6/.test(i.textContent)), 5000)
+      await H.until(() => [...document.querySelectorAll('.v-list-item')].some((i) => /inet6/.test(i.textContent)), 5000)
       await H.sleep(500)`,
     cleanup: `
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -1458,9 +1458,57 @@ const ENGINE_STEPS: Step[] = [
       tab.click()
       await H.waitFor('[data-test="mariadb-system-versioning"]', 5000)
       await H.sleep(600)`
+  },
+  {
+    // .vqb backup of a MariaDB database: its sequences can be picked like tables and views.
+    name: '41f-mariadb-backup-sequences',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.ui.openBackupDialog('${MARIA_ID}', 'shots_maria', { format: 'vqb' })
+      await H.waitFor('[data-test="backup-objects"]', 8000)
+      await H.sleep(1200)
+      const field = await H.waitFor('[data-test="backup-objects"] .v-field', 5000)
+      field.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await H.until(() => [...document.querySelectorAll('.v-list-item')].some((i) => /seq_/.test(i.textContent)), 8000)
+      await H.sleep(600)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); S.ui.backupDialog = { ...S.ui.backupDialog, open: false }`
+  },
+  {
+    // The same database as .nb3: the dialog says what that format cannot hold.
+    name: '41g-mariadb-backup-nb3-warning',
+    script: `
+      S.ui.openBackupDialog('${MARIA_ID}', 'shots_maria', { format: 'nb3' })
+      await H.waitFor('[data-test="backup-skipped-warning"]', 10000)
+      await H.sleep(800)`,
+    cleanup: `S.ui.backupDialog = { ...S.ui.backupDialog, open: false }`
   }
 ]
 STEPS.push(...ENGINE_STEPS)
+
+/**
+ * 2.0.0 screens that need no particular server (VORTAQ_SHOTS_ONLY=44): the
+ * «Conexión» menu with every engine and the engine picker of a new connection.
+ */
+const V2_STEPS: Step[] = [
+  {
+    name: '44a-new-connection-menu',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await H.click('[data-tour="toolbar-connection"] .app-toolbar__caret', 8000)
+      await H.until(() => [...document.querySelectorAll('.v-list-item')].some((i) => /MongoDB/.test(i.textContent)), 5000)
+      await H.sleep(500)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    name: '44b-new-connection-engines',
+    script: `
+      S.ui.openConnectionDialog(null)
+      await H.waitFor('[data-test="conn-engine-picker"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  }
+]
+STEPS.push(...V2_STEPS)
 
 /**
  * SQLite (preview) screens (VORTAQ_SHOTS_ONLY=42): need the profile and files of
@@ -1549,6 +1597,32 @@ const SQLITE_STEPS: Step[] = [
       S.workspace.openTableData('${LITE_ID}', 'main', 'clientes')
       await H.waitFor('.v-window-item--active table tbody tr, table tbody tr', 15000).catch(() => null)
       await H.settle(S, 1600)`
+  },
+  {
+    // A SQLite job: encrypted .vqb backup of main, then a restore into another SQLite file.
+    name: '42i-sqlite-job-editor',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.sorted.find((j) => j.id === 'shot-job-lite')
+      if (!job) throw new Error('SQLite job not seeded (run scripts/seed-sqlite-shots.mjs)')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="job-task-1"]', 10000)
+      await H.settle(S, 1200)`
+  },
+  {
+    // «Recientes» in a new SQLite connection: files opened or created before.
+    name: '42j-sqlite-recent-files',
+    script: `
+      localStorage.setItem('electrondb.sqlite.recentFiles', JSON.stringify([
+        S.connections.get('${LITE_ID}').sqlite.filePath,
+        S.connections.get('shot-lite-copy').sqlite.filePath
+      ]))
+      S.ui.openConnectionDialog(null, 'sqlite')
+      await H.click('[data-test="sqlite-recent"]', 8000)
+      await H.until(() => document.querySelector('.v-menu .v-list-item, .v-overlay .v-list-item'), 5000)
+      await H.sleep(600)`,
+    cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }; localStorage.removeItem('electrondb.sqlite.recentFiles')`
   }
 ]
 STEPS.push(...SQLITE_STEPS)
@@ -1671,6 +1745,28 @@ const MONGO_STEPS: Step[] = [
       await H.waitFor('[data-test="backup-dialog"], .v-overlay--active .v-card', 8000)
       await H.sleep(1200)`,
     cleanup: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  },
+  {
+    // A MongoDB job: backup of the database, then a restore into a test database.
+    name: '43l-mongo-job-editor',
+    script: `
+      S.ui.backupDialog = { ...S.ui.backupDialog, open: false }
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.sorted.find((j) => j.id === 'shot-job-mongo')
+      if (!job) throw new Error('MongoDB job not seeded (run scripts/seed-mongo-shots.mjs)')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="job-task-1"]', 10000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '43m-mongo-duplicate-collection',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.ui.openDuplicateCollection('${MONGO_ID}', '${MONGO_DB}', 'clientes')
+      await H.waitFor('[data-test="duplicate-name"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.duplicateCollectionDialog = { ...S.ui.duplicateCollectionDialog, open: false }`
   }
 ]
 STEPS.push(...MONGO_STEPS)

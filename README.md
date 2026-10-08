@@ -1593,6 +1593,12 @@ VORTAQ_SHOTS_ONLY=05,06 npm run screenshots
 VORTAQ_SHOTS_ONLY=21 VORTAQ_WHATS_NEW_FROM=0.1.5 VORTAQ_WHATS_NEW_VERSION=0.1.7 npm run screenshots
 ```
 
+Los motores tienen sus propios scripts de semillas (perfil de prueba y servidores desechables):
+`scripts/seed-engine-shots.mjs` (PostgreSQL y MariaDB, pasos `40*`/`41*`, también la copia de MariaDB con
+secuencias), `scripts/seed-sqlite-shots.mjs` (pasos `42*`, con una tarea SQLite y «Recientes») y
+`scripts/seed-mongo-shots.mjs` (pasos `43*`, con una tarea MongoDB y «Duplicar colección»); los pasos `44*`
+(menú Conexión con todos los motores) sirven con cualquiera de ellos. Cada script explica cómo lanzarlo.
+
 El asistente **Importar…** (pasos `30*`) usa un archivo de DBeaver y un volcado `.sql` sintéticos que el script
 de semillas crea junto al perfil (`import-home/`, `import/`); `VORTAQ_IMPORT_HOME` y `VORTAQ_IMPORT_PICK` (solo
 con un perfil de prueba) apuntan a ellos. Si cambias `VORTAQ_SHOTS_PROFILE`, pásalas también:

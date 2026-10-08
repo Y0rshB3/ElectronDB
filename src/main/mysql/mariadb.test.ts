@@ -57,10 +57,10 @@ describe('.nb3 warning for MariaDB objects', () => {
       { kind: 'sequence', name: 'seq_b' }
     ])
     expect(describeNb3MariaDbLimits(skipped)).toBe(
-      'La copia .nb3 no incluye las 2 secuencias seq_a, seq_b y de la tabla versionada history guarda solo las filas actuales, sin historial (MariaDB). Elige el formato .vqb para copiarlo todo.'
+      'La copia .nb3 (MariaDB) no incluye las 2 secuencias seq_a, seq_b y guarda solo las filas actuales de la tabla versionada history, sin historial. Elige el formato .vqb para copiarlo todo.'
     )
     expect(describeNb3MariaDbLimits([{ kind: 'sequence', name: 's' }])).toBe(
-      'La copia .nb3 no incluye la secuencia s (MariaDB). Elige el formato .vqb para copiarlo todo.'
+      'La copia .nb3 (MariaDB) no incluye la secuencia s. Elige el formato .vqb para copiarlo todo.'
     )
     expect(describeNb3MariaDbLimits([])).toBeNull()
   })
@@ -69,7 +69,9 @@ describe('.nb3 warning for MariaDB objects', () => {
 describe('system-versioned tables and sequences in backups', () => {
   it('finds the period columns (explicit or hidden)', () => {
     expect(
-      systemVersioningColumns('CREATE TABLE `t` (\n  `id` int) ENGINE=InnoDB WITH SYSTEM VERSIONING')
+      systemVersioningColumns(
+        'CREATE TABLE `t` (\n  `id` int) ENGINE=InnoDB WITH SYSTEM VERSIONING'
+      )
     ).toEqual({ start: 'row_start', end: 'row_end', explicit: false })
     expect(
       systemVersioningColumns(

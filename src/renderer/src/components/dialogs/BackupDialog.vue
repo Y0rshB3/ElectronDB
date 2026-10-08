@@ -193,6 +193,10 @@ async function loadSkippedWarning(): Promise<void> {
   }
 }
 
+/** Each object's kind (Tabla, Vista, Secuencia, Colección…) under its name in the picker. */
+const objectItemProps = (item: { subtitle?: string }): { subtitle?: string } =>
+  item.subtitle ? { subtitle: item.subtitle } : {}
+
 async function loadObjects(): Promise<void> {
   const request = ++objectsRequest
   objectItems.value = []
@@ -439,6 +443,7 @@ function onSchemaChange(value: string | null): void {
               <v-autocomplete
                 v-model="objects"
                 :items="objectItems"
+                :item-props="objectItemProps"
                 :loading="objectsLoading"
                 :disabled="!schema || running"
                 label="Objetos"
@@ -453,6 +458,7 @@ function onSchemaChange(value: string | null): void {
                 closable-chips
                 clearable
                 no-data-text="Sin objetos"
+                data-test="backup-objects"
               />
             </v-col>
             <v-col cols="12" sm="6">

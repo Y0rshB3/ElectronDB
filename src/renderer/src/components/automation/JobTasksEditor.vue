@@ -103,7 +103,7 @@ function targetItems(task: JobTask): { title: string; value: string; props: obje
 function targetHint(task: JobTask): string | undefined {
   const family = sourceFamily(task)
   return family && family !== 'mysql'
-    ? `Solo conexiones ${backupFamilyName(family)}: una copia se restaura en el mismo motor.`
+    ? `Solo conexiones ${backupFamilyName(family)} (el motor de la copia).`
     : undefined
 }
 const blockedHint = computed(() => {
@@ -206,7 +206,16 @@ function add(type: JobTaskType): void {
       ? newRestoreTask(tasks.value, automationConnections(connections.sorted), (c) =>
           settings.needsTypedConfirm(c.environment)
         )
-      : newTask(type, last?.connectionId ?? '', '')
+      : type === 'runquery'
+        ? // Query steps only run on MySQL/MariaDB: keep the last connection only if it is one.
+          newTask(
+            type,
+            last && supportsQuerySteps(connectionOf(last.connectionId) ?? {})
+              ? last.connectionId
+              : (queryConnectionItems.value[0]?.value ?? ''),
+            ''
+          )
+        : newTask(type, last?.connectionId ?? '', '')
   tasks.value = [...tasks.value, task]
 }
 
@@ -516,7 +525,12 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
         @click="add('backupschema')"
         >Añadir copia de seguridad</v-btn
       >
-      <v-btn prepend-icon="mdi-database-search-outline" variant="tonal" @click="add('runquery')"
+      <v-btn
+        v-if="queryConnectionItems.length"
+        prepend-icon="mdi-database-search-outline"
+        variant="tonal"
+        data-test="add-query-task"
+        @click="add('runquery')"
         >Añadir consulta</v-btn
       >
       <v-btn
@@ -592,6 +606,8 @@ function onSchemaMenu(connectionId: string, opened: boolean): void {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px 10px;
+  /* A hint under one field must not stretch the field next to it. */
+  align-items: start;
 }
 .task-card__actions {
   display: flex;

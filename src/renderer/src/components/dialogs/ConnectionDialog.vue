@@ -132,7 +132,12 @@ const recentLiteFiles = ref<string[]>([])
 const recentLiteItems = computed(() =>
   recentLiteFiles.value
     .filter((p) => p !== liteOptions.value.filePath)
-    .map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p }))
+    .map((p) => ({
+      path: p,
+      name: p.split(/[\\/]/).pop() ?? p,
+      // The end of a long path says more than its start (/Users/… is the same for all).
+      shown: p.length > 56 ? `…${p.slice(-55)}` : p
+    }))
 )
 function refreshRecentLiteFiles(): void {
   recentLiteFiles.value = recentSqliteFiles()
@@ -536,9 +541,9 @@ async function save(): Promise<void> {
           </button>
         </div>
         <div v-else-if="editing && (isPg || isSqlite || isMongo || isMariaDb)" class="mb-2">
-          <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip"
-            >{{ engineLabel }}</v-chip
-          >
+          <v-chip size="small" :prepend-icon="ENGINES[engine].icon" data-test="conn-engine-chip">{{
+            engineLabel
+          }}</v-chip>
         </div>
         <v-window v-model="tab">
           <v-window-item value="general">
@@ -618,7 +623,7 @@ async function save(): Promise<void> {
               </v-col>
               <template v-if="isSqlite">
                 <v-col cols="12">
-                  <div class="nd-section-title mb-1">Archivo de la base de datos</div>
+                  <div class="nd-section-title mb-3">Archivo de la base de datos</div>
                   <v-text-field
                     v-path-tail="liteOptions.filePath"
                     :model-value="liteOptions.filePath"
@@ -665,7 +670,7 @@ async function save(): Promise<void> {
                           v-for="item in recentLiteItems"
                           :key="item.path"
                           :title="item.name"
-                          :subtitle="item.path"
+                          :subtitle="item.shown"
                           prepend-icon="mdi-database-outline"
                           :data-test="`sqlite-recent-${item.name}`"
                           @click="useLiteFile(item.path)"

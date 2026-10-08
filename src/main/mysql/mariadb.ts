@@ -236,7 +236,8 @@ export interface SystemVersioningColumns {
   explicit: boolean
 }
 
-const PERIOD_RE = /\bPERIOD\s+FOR\s+SYSTEM_TIME\s*\(\s*`((?:[^`]|``)+)`\s*,\s*`((?:[^`]|``)+)`\s*\)/i
+const PERIOD_RE =
+  /\bPERIOD\s+FOR\s+SYSTEM_TIME\s*\(\s*`((?:[^`]|``)+)`\s*,\s*`((?:[^`]|``)+)`\s*\)/i
 
 /**
  * Period columns of a system-versioned table: the explicit ones named in
@@ -284,7 +285,7 @@ export function describeNb3MariaDbLimits(objects: SkippedBackupObject[]): string
     )
   if (versioned.length)
     parts.push(
-      `de ${versioned.length === 1 ? 'la tabla versionada' : `las ${versioned.length} tablas versionadas`} ${versioned.join(', ')} guarda solo las filas actuales, sin historial`
+      `guarda solo las filas actuales de ${versioned.length === 1 ? 'la tabla versionada' : `las ${versioned.length} tablas versionadas`} ${versioned.join(', ')}, sin historial`
     )
-  return `La copia .nb3 ${parts.join(' y ')} (MariaDB). Elige el formato .vqb para copiarlo todo.`
+  return `La copia .nb3 (MariaDB) ${parts.join(' y ')}. Elige el formato .vqb para copiarlo todo.`
 }
