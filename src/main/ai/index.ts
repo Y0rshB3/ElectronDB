@@ -53,6 +53,14 @@ export function getAiService(ctx: AppContext): AiService {
       session.usage.userSql = true
       return session
     },
+    isSqlite: (id) => ctx.connections.get(id)?.engine === 'sqlite',
+    acquireSqlite: async (connectionId) => {
+      const { isSqliteConnection } = await import('../sqlite/connection')
+      const connection = await manager.connection(connectionId)
+      if (!isSqliteConnection(connection)) throw new Error('La conexión no es SQLite.')
+      // Each query takes the connection lock on its own (behind any running script).
+      return connection.acquire(null)
+    },
     emit: (channel, payload) => ctx.emit(channel, payload),
     log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
     fetch: electronFetch,

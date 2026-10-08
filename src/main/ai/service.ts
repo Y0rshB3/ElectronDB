@@ -27,6 +27,13 @@ import {
   readPgSchemaSnapshot
 } from './pgMetadata'
 import {
+  SqliteMetadataQueryable,
+  explainSqliteSelect,
+  isSingleSqliteSelect,
+  readSqliteDatabaseNames,
+  readSqliteSchemaSnapshot
+} from './sqliteMetadata'
+import {
   MetadataQueryable,
   readSchemaSnapshot,
   type Queryable,
@@ -59,6 +66,10 @@ export interface AiServiceDeps {
   isPostgres?(connectionId: string): boolean
   /** A pooled PostgreSQL session of `database` (null = the initial database). */
   acquirePg?(connectionId: string, database: string | null): Promise<BorrowedSession>
+  /** True for SQLite connections (structure comes from sqlite_schema, see sqliteMetadata.ts). */
+  isSqlite?(connectionId: string): boolean
+  /** A session on the SQLite connection's shared handle. */
+  acquireSqlite?(connectionId: string): Promise<BorrowedSession>
   emit<E extends IpcEventChannel>(channel: E, payload: IpcEventMap[E]): void
   log: AiLogger
   fetch?: FetchFn
@@ -196,6 +207,23 @@ export class AiService {
     return this.deps.isPostgres?.(connectionId) === true && !!this.deps.acquirePg
   }
 
+  private isLite(connectionId: string): boolean {
+    return this.deps.isSqlite?.(connectionId) === true && !!this.deps.acquireSqlite
+  }
+
+  /** SQLite: the same structure-only rule over sqlite_schema (SqliteMetadataQueryable). */
+  private async withSqliteMetadata<T>(
+    connectionId: string,
+    fn: (q: SqliteMetadataQueryable) => Promise<T>
+  ): Promise<T> {
+    const session = await this.deps.acquireSqlite!(connectionId)
+    try {
+      return await fn(new SqliteMetadataQueryable(session))
+    } finally {
+      await session.release().catch(() => undefined)
+    }
+  }
+
   /** PostgreSQL: the same structure-only rule over pg_catalog (PgMetadataQueryable). */
   private async withPgMetadata<T>(
     connectionId: string,
@@ -235,7 +263,9 @@ export class AiService {
     if (!fresh && hit && Date.now() - hit.at < ttl) return hit.snap
     const snap = this.isPg(connectionId)
       ? await this.withPgMetadata(connectionId, database, (q) => readPgSchemaSnapshot(q, schema))
-      : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
+      : this.isLite(connectionId)
+        ? await this.withSqliteMetadata(connectionId, (q) => readSqliteSchemaSnapshot(q, schema))
+        : await this.withMetadata(connectionId, (q) => readSchemaSnapshot(q, schema))
     this.snapshots.set(key, { at: Date.now(), snap })
     return snap
   }
@@ -270,7 +300,12 @@ export class AiService {
       tableCount = built.tableCount
       parts.push(built.text)
     } else {
-      if (this.isPg(connectionId)) {
+      if (this.isLite(connectionId)) {
+        const names = await this.withSqliteMetadata(connectionId, (q) => readSqliteDatabaseNames(q))
+        parts.push(
+          `No hay ninguna base de datos seleccionada (SQLite). Bases de datos adjuntas: ${names.join(', ') || '(ninguna)'}.`
+        )
+      } else if (this.isPg(connectionId)) {
         const names = await this.withPgMetadata(connectionId, database, (q) => readPgSchemaNames(q))
         parts.push(
           `No hay ningún esquema seleccionado (PostgreSQL${database ? `, base de datos ${database}` : ''}). Esquemas: ${names.join(', ') || '(ninguno)'}.`
@@ -305,9 +340,13 @@ export class AiService {
         ? await this.withPgMetadata(connectionId, database, (q) =>
             readPgSchemaSnapshot(q, input.schema, input.tables)
           )
-        : await this.withMetadata(connectionId, (q) =>
-            readSchemaSnapshot(q, input.schema, input.tables)
-          )
+        : this.isLite(connectionId)
+          ? await this.withSqliteMetadata(connectionId, (q) =>
+              readSqliteSchemaSnapshot(q, input.schema, input.tables)
+            )
+          : await this.withMetadata(connectionId, (q) =>
+              readSchemaSnapshot(q, input.schema, input.tables)
+            )
       const found = new Set(snap.tables.map((t) => t.name))
       const lines = snap.tables.map((t) => formatTable(t, input.schema))
       const missing = input.tables.filter((t) => !found.has(t))
@@ -421,6 +460,20 @@ export class AiService {
                 `"${request.schema.replace(/"/g, '""')}", public`
               ])
             plan = await explainPgSelect(session, request.sql ?? '')
+          } finally {
+            await session.release().catch(() => undefined)
+          }
+        }
+      } else if (this.isLite(request.connectionId)) {
+        if (request.mode === 'explain' && isSingleSqliteSelect(request.sql)) {
+          // EXPLAIN QUERY PLAN (never plain EXPLAIN) of one read-only SELECT; nothing else runs.
+          this.deps.emit('event:aiStatus', {
+            requestId,
+            status: 'Obteniendo el plan (EXPLAIN QUERY PLAN)…'
+          })
+          const session = await this.deps.acquireSqlite!(request.connectionId)
+          try {
+            plan = await explainSqliteSelect(session, request.sql ?? '')
           } finally {
             await session.release().catch(() => undefined)
           }
