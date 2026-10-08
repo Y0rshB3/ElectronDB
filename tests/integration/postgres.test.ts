@@ -254,6 +254,77 @@ describeServer(POSTGRES_TARGET, 'PostgreSQL driver (integration)', (url) => {
     )
   })
 
+  it('nests partitions under their partitioned table (sub-partitions and other schemas too)', async () => {
+    ok(
+      await exec(`
+        CREATE TABLE ${SCHEMA}.events (id int, at date, region text) PARTITION BY RANGE (at);
+        CREATE TABLE ${SCHEMA}.events_2025 PARTITION OF ${SCHEMA}.events
+          FOR VALUES FROM ('2025-01-01') TO ('2026-01-01') PARTITION BY LIST (region);
+        CREATE TABLE ${SCHEMA}.events_2025_eu PARTITION OF ${SCHEMA}.events_2025 FOR VALUES IN ('eu');
+        CREATE TABLE ${OTHER}.events_2026 PARTITION OF ${SCHEMA}.events
+          FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+        CREATE TABLE ${SCHEMA}.events_rest PARTITION OF ${SCHEMA}.events DEFAULT;
+      `)
+    )
+    try {
+      const tables = await pg.tables(id, ref)
+      // Partitions are not tables of the list; the parent carries them.
+      expect(tables.map((t) => t.name)).not.toContain('events_2025')
+      const events = tables.find((t) => t.name === 'events')!
+      expect(events.engine).toBe('particionada')
+      expect(events.partitions).toEqual([
+        {
+          name: 'events_2025',
+          schema: SCHEMA,
+          bound: "FOR VALUES FROM ('2025-01-01') TO ('2026-01-01')",
+          partitions: [{ name: 'events_2025_eu', schema: SCHEMA, bound: "FOR VALUES IN ('eu')" }]
+        },
+        {
+          name: 'events_2026',
+          schema: OTHER,
+          bound: "FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')"
+        },
+        { name: 'events_rest', schema: SCHEMA, bound: 'DEFAULT' }
+      ])
+      expect(tables.find((t) => t.name === 'items')?.partitions).toBeUndefined()
+    } finally {
+      ok(await exec(`DROP TABLE ${SCHEMA}.events CASCADE`))
+    }
+  })
+
+  it('closes a database pool from the tree, never the initial one or a tab in a transaction', async () => {
+    const extra = `vortaq_close_${process.pid}`
+    const admin = { schema: { database: db, schema: '' } }
+    ok(await pg.execute(id, `DROP DATABASE IF EXISTS ${extra}`, admin))
+    ok(await pg.execute(id, `CREATE DATABASE ${extra}`, admin))
+    const connection = await manager.connection(id)
+    if (!isPgConnection(connection)) throw new Error('not a PostgreSQL connection')
+    try {
+      await pg.schemas(id, extra)
+      expect(connection.openDatabases()).toContain(extra)
+      await expect(pg.closeDatabase(id, db)).rejects.toThrow(/base de datos inicial/)
+      // An open transaction in a tab of that database keeps it open.
+      const tab = 'query:close-db'
+      ok(
+        await pg.execute(id, 'BEGIN; SELECT 1', {
+          schema: { database: extra, schema: 'public' },
+          sessionKey: tab
+        })
+      )
+      await expect(pg.closeDatabase(id, extra)).rejects.toThrow(/transacción abierta/)
+      await pg.rollback(id, tab)
+      await pg.closeDatabase(id, extra)
+      expect(connection.openDatabases()).not.toContain(extra)
+      expect(connection.openDatabases()).toContain(db)
+      // The next use opens it again.
+      expect((await pg.schemas(id, extra)).map((s) => s.name)).toContain('public')
+      await pg.closeDatabase(id, extra)
+    } finally {
+      // Fast: no backend is left waiting in authentication (connectOrClose).
+      ok(await pg.execute(id, `DROP DATABASE IF EXISTS ${extra}`, admin))
+    }
+  })
+
   it('refuses a plain string SchemaRef (wrong-database safety)', async () => {
     await expect(pg.tables(id, SCHEMA)).rejects.toThrow(
       'Falta la base de datos: actualiza la vista'

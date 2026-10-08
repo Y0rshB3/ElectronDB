@@ -245,9 +245,35 @@ describe('PostgreSQL database level', () => {
         calls.push(['db:schemas', ...args])
         return [{ name: 'public', owner: 'postgres', comment: '', system: false }]
       },
+      'db:closeDatabase': (...args: unknown[]) => {
+        calls.push(['db:closeDatabase', ...args])
+      },
       'db:tables': (...args: unknown[]) => {
         calls.push(['db:tables', ...args])
         return [
+          {
+            name: 'events',
+            partitions: [
+              {
+                name: 'events_2025',
+                schema: 'public',
+                bound: "FOR VALUES FROM ('2025-01-01') TO ('2026-01-01')",
+                partitions: [
+                  { name: 'events_2025_eu', schema: 'public', bound: "FOR VALUES IN ('eu')" }
+                ]
+              },
+              { name: 'events_2026', schema: 'archive', bound: 'DEFAULT' }
+            ],
+            engine: 'particionada',
+            rows: null,
+            dataLength: null,
+            indexLength: null,
+            autoIncrement: null,
+            createTime: null,
+            updateTime: null,
+            collation: null,
+            comment: ''
+          },
           {
             name: 'users',
             engine: null,
@@ -321,9 +347,44 @@ describe('PostgreSQL database level', () => {
     const tables = tree.parse(nodeIds.group('pg', 'public', 'tables', 'shop:eu'))!
     await tree.expand(tables)
     expect(calls).toContainEqual(['db:tables', 'pg', { database: 'shop:eu', schema: 'public' }])
-    expect(tree.childrenOf(tables).map((n) => n.name)).toEqual(['users'])
+    expect(tree.childrenOf(tables).map((n) => n.name)).toEqual(['events', 'users'])
     // The same schema in another database has its own cache.
     expect(tree.hasItems('pg', 'public', 'tables', 'app')).toBe(false)
+  })
+
+  it('nests partitions under their partitioned table, opening as tables of their schema', async () => {
+    const tree = useTreeStore()
+    const tables = tree.parse(nodeIds.group('pg', 'public', 'tables', 'app'))!
+    await tree.expand(tables)
+    const [events, users] = tree.childrenOf(tables)
+    expect(events.partitions).toHaveLength(2)
+    expect(tree.childrenOf(users)).toEqual([])
+    const parts = tree.childrenOf(events)
+    expect(parts.map((n) => [n.label, n.schema, n.name, n.subtype, n.parentId])).toEqual([
+      ['events_2025', 'public', 'events_2025', 'partition', events.id],
+      ['archive.events_2026', 'archive', 'events_2026', 'partition', events.id]
+    ])
+    expect(parts[0].id).toBe(nodeIds.object('pg', 'public', 'tables', 'events_2025', 'app'))
+    expect(parts[1].detail).toBe('DEFAULT')
+    expect(tree.childrenOf(parts[0]).map((n) => n.name)).toEqual(['events_2025_eu'])
+  })
+
+  it('closes a database: main closes its pool, the node shows closed again', async () => {
+    const tree = useTreeStore()
+    const db = tree.parse(nodeIds.database('pg', 'shop:eu'))!
+    await tree.expand(db)
+    const tables = tree.parse(nodeIds.group('pg', 'public', 'tables', 'shop:eu'))!
+    await tree.expand(tables)
+    await tree.expand(tree.parse(nodeIds.group('pg', 'public', 'tables', 'app'))!)
+    expect(tree.schemasOf('pg', 'shop:eu')).toHaveLength(1)
+    await tree.closeDatabase('pg', 'shop:eu')
+    expect(calls).toContainEqual(['db:closeDatabase', 'pg', 'shop:eu'])
+    expect(tree.schemasOf('pg', 'shop:eu')).toEqual([])
+    expect(tree.hasItems('pg', 'public', 'tables', 'shop:eu')).toBe(false)
+    expect(tree.isExpanded(db.id)).toBe(false)
+    expect(tree.isExpanded(tables.id)).toBe(false)
+    // Other databases keep their caches.
+    expect(tree.hasItems('pg', 'public', 'tables', 'app')).toBe(true)
   })
 
   it('names routine nodes with their signature so overloads stay apart', async () => {

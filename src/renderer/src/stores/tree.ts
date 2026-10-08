@@ -9,6 +9,7 @@ import type {
   RoutineInfo,
   SchemaInfo,
   TableInfo,
+  TablePartition,
   ViewInfo
 } from '@shared/types'
 import { api } from '@renderer/api'
@@ -39,6 +40,10 @@ export interface TreeNode {
   name?: string
   /** Sub type for routines (FUNCTION / PROCEDURE). */
   subtype?: string
+  /** PostgreSQL partitioned table (or partition): its partitions, shown nested under it. */
+  partitions?: TablePartition[]
+  /** Tooltip text (a partition's bound). */
+  detail?: string
   parentId: string | null
 }
 
@@ -384,10 +389,26 @@ export const useTreeStore = defineStore('tree', () => {
         const n = parse(nodeIds.object(c, s, g, name, node.database))!
         n.label = label
         n.subtype = raw.type
+        const partitions = g === 'tables' ? (item as TableInfo).partitions : undefined
+        if (partitions?.length) n.partitions = partitions
         return n
       })
     }
+    if (node.kind === 'object' && node.partitions?.length) return partitionNodes(node)
     return []
+  }
+
+  /** PostgreSQL: partitions nested under their partitioned table (tables of their own schema). */
+  function partitionNodes(node: TreeNode): TreeNode[] {
+    return (node.partitions ?? []).map((p) => {
+      const n = parse(nodeIds.object(node.connectionId, p.schema, 'tables', p.name, node.database))!
+      n.label = p.schema === node.schema ? p.name : `${p.schema}.${p.name}`
+      n.subtype = 'partition'
+      n.detail = p.bound
+      n.parentId = node.id
+      if (p.partitions?.length) n.partitions = p.partitions
+      return n
+    })
   }
 
   async function expand(node: TreeNode): Promise<void> {
@@ -443,6 +464,40 @@ export const useTreeStore = defineStore('tree', () => {
   }
 
   /** Drop cached data for a connection (e.g. when it is closed). */
+  /**
+   * PostgreSQL «Cerrar base de datos»: closes its pool in main, then drops its
+   * schemas, group items and expansion so the node shows closed again.
+   */
+  async function closeDatabase(connectionId: string, database: string): Promise<void> {
+    await api.db.closeDatabase(connectionId, database)
+    forgetDatabase(connectionId, database)
+  }
+
+  function forgetDatabase(connectionId: string, database: string): void {
+    const nextSchemas = { ...schemas.value }
+    delete nextSchemas[schemasKey(connectionId, database)]
+    schemas.value = nextSchemas
+    const tail = `:${seg(database)}`
+    const prefix = groupKeyPrefix(connectionId)
+    const nextItems = { ...groupItems.value }
+    for (const key of Object.keys(nextItems))
+      if (key.startsWith(prefix) && key.endsWith(tail)) delete nextItems[key]
+    groupItems.value = nextItems
+    const nextExpanded = { ...expanded.value }
+    for (const key of Object.keys(nextExpanded)) {
+      const n = parse(key)
+      if (n?.connectionId === connectionId && n.database === database) delete nextExpanded[key]
+    }
+    expanded.value = nextExpanded
+    const selectedNode = selectedId.value ? parse(selectedId.value) : null
+    if (
+      selectedNode?.connectionId === connectionId &&
+      selectedNode.database === database &&
+      selectedNode.kind !== 'database'
+    )
+      selectedId.value = nodeIds.database(connectionId, database)
+  }
+
   function forget(connectionId: string): void {
     const nextDb = { ...databases.value }
     delete nextDb[connectionId]
@@ -505,6 +560,8 @@ export const useTreeStore = defineStore('tree', () => {
     toggle,
     refresh,
     forget,
+    closeDatabase,
+    forgetDatabase,
     matchesFilter
   }
 })

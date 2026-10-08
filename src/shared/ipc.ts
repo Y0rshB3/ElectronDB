@@ -217,6 +217,12 @@ export interface IpcInvokeMap {
     args: [connectionId: string, schema: SchemaRef, type: EngineObjectType]
     result: ObjectSummary[]
   }
+  /**
+   * PostgreSQL: closes the pool of one database (and its idle query-tab sessions); the
+   * next use opens it again. Refused for the initial database and while a tab of that
+   * database has an open transaction.
+   */
+  'db:closeDatabase': { args: [connectionId: string, database: string]; result: void }
   /** PostgreSQL: installed extensions of a database (read-only list). */
   'db:extensions': { args: [connectionId: string, database: string]; result: ExtensionInfo[] }
   /** PostgreSQL: data types for the designer's type picker (pg_type at runtime). */
@@ -691,6 +697,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'db:showCreate',
   'db:schemas',
   'db:objects',
+  'db:closeDatabase',
   'db:extensions',
   'db:dataTypes',
   'db:cancel',

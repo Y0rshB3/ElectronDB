@@ -196,6 +196,11 @@ export function registerDbHandlers(ctx: AppContext): void {
     requireSequences(id)
     return withSession(id, null, (s) => introspect.listSequences(s, mysqlSchema(schema)))
   })
+  dbHandle('db:closeDatabase', (id, database) => {
+    refuseOnLite(id)
+    if (!isPg(id)) throw new DbUserError(CHANNEL_NOT_FOR_MYSQL)
+    return pg.closeDatabase(id, database)
+  })
   dbHandle('db:extensions', (id, database) => {
     refuseOnLite(id)
     if (!isPg(id)) throw new DbUserError(CHANNEL_NOT_FOR_MYSQL)

@@ -19,6 +19,7 @@ import type {
   RoutineInfo,
   SchemaInfo,
   TableInfo,
+  TablePartition,
   TableKind,
   TableStructure,
   TriggerInfo,
@@ -118,8 +119,11 @@ export async function listTables(s: PgQueryable, schema: string): Promise<TableI
       ORDER BY c.relname`,
     [schema]
   )
+  const partitioned = rows.some((r) => text(r.relkind) === 'p')
+  const partitions = partitioned ? await listPartitions(s, schema) : new Map()
   return rows.map((r) => ({
     name: text(r.name),
+    ...(partitions.has(text(r.name)) ? { partitions: partitions.get(text(r.name)) } : {}),
     engine: RELKIND_LABEL[text(r.relkind)] ?? null,
     rows: num(r.rows),
     dataLength: num(r.data_length),
@@ -130,6 +134,62 @@ export async function listTables(s: PgQueryable, schema: string): Promise<TableI
     collation: null,
     comment: text(r.comment)
   }))
+}
+
+/** Deepest sub-partition level read (PostgreSQL has no limit; trees are shallow in practice). */
+const MAX_PARTITION_DEPTH = 8
+
+/**
+ * Partitions of the partitioned tables of a schema, nested (sub-partitions under
+ * their partition), keyed by the top-level table's name. Partitions may live in
+ * other schemas; regular (non-partition) inheritance children are left out.
+ */
+export async function listPartitions(
+  s: PgQueryable,
+  schema: string
+): Promise<Map<string, TablePartition[]>> {
+  const rows = await s.query<Row>(
+    `WITH RECURSIVE parts AS (
+       SELECT i.inhparent AS parent, i.inhrelid AS child, 1 AS depth
+         FROM pg_inherits i
+         JOIN pg_class p ON p.oid = i.inhparent
+         JOIN pg_namespace pn ON pn.oid = p.relnamespace
+        WHERE pn.nspname = $1 AND p.relkind = 'p' AND NOT p.relispartition
+       UNION ALL
+       SELECT i.inhparent, i.inhrelid, parts.depth + 1
+         FROM pg_inherits i JOIN parts ON i.inhparent = parts.child
+        WHERE parts.depth < $2
+     )
+     SELECT parts.parent::int8 AS parent_oid, parts.child::int8 AS child_oid, parts.depth,
+            p.relname AS parent_name, c.relname AS name, n.nspname AS schema,
+            COALESCE(pg_get_expr(c.relpartbound, c.oid), '') AS bound
+       FROM parts
+       JOIN pg_class c ON c.oid = parts.child
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_class p ON p.oid = parts.parent
+      WHERE c.relispartition
+      ORDER BY parts.depth, c.relname`,
+    [schema, MAX_PARTITION_DEPTH]
+  )
+  const byOid = new Map<string, TablePartition>()
+  const top = new Map<string, TablePartition[]>()
+  for (const r of rows) {
+    const node: TablePartition = {
+      name: text(r.name),
+      schema: text(r.schema),
+      bound: text(r.bound)
+    }
+    byOid.set(text(r.child_oid), node)
+    if (Number(r.depth) === 1) {
+      const list = top.get(text(r.parent_name)) ?? []
+      list.push(node)
+      top.set(text(r.parent_name), list)
+    } else {
+      const parent = byOid.get(text(r.parent_oid))
+      if (parent) (parent.partitions ??= []).push(node)
+    }
+  }
+  return top
 }
 
 export async function listViews(s: PgQueryable, schema: string): Promise<ViewInfo[]> {

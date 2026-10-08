@@ -16,7 +16,7 @@ import { splitRoutineName } from '@renderer/utils/objectColumns'
 import { schemaRef } from '@renderer/utils/schemaRef'
 import { connectionUri } from '@renderer/components/dialogs/connectionForm'
 import { useConfirm } from './useConfirm'
-import { useNotify } from './useNotify'
+import { errorMessage, useNotify } from './useNotify'
 import { useWorkspace } from './useWorkspace'
 
 export interface MenuAction {
@@ -443,6 +443,16 @@ export function useObjectActions() {
     }
   }
 
+  /** «Cerrar base de datos»: closes the database's pool; its node shows closed again. */
+  async function closePgDatabase(connectionId: string, database: string): Promise<void> {
+    try {
+      await tree.closeDatabase(connectionId, database)
+      notify.success(`Base de datos ${database} cerrada`)
+    } catch (err) {
+      notify.error(errorMessage(err))
+    }
+  }
+
   function pgStatementTab(node: TreeNode, sql: string, name: string): void {
     ws.openQuery(node.connectionId, node.schema ?? null, { sql, name }, node.database)
   }
@@ -552,7 +562,9 @@ export function useObjectActions() {
   function pgActionsFor(node: TreeNode, refresh: MenuAction): MenuAction[] {
     const c = node.connectionId
     const db = node.database!
-    if (node.kind === 'database')
+    if (node.kind === 'database') {
+      const initial = connections.get(c)?.postgres?.initialDatabase || 'postgres'
+      const loaded = tree.schemasOf(c, db).length > 0
       return [
         {
           key: 'query',
@@ -560,6 +572,21 @@ export function useObjectActions() {
           icon: 'mdi-database-search-outline',
           action: () => ws.openQuery(c, null, undefined, db)
         },
+        loaded
+          ? {
+              key: 'closeDb',
+              label: 'Cerrar base de datos',
+              icon: 'mdi-database-off-outline',
+              // The initial database holds the connection's own sessions: it closes with it.
+              disabled: db === initial,
+              action: () => closePgDatabase(c, db)
+            }
+          : {
+              key: 'openDb',
+              label: 'Abrir base de datos',
+              icon: 'mdi-database-arrow-right-outline',
+              action: () => tree.expand(node)
+            },
         {
           key: 'extensions',
           label: 'Extensiones',
@@ -589,6 +616,7 @@ export function useObjectActions() {
           action: () => dropDatabase(node)
         }
       ]
+    }
     if (node.kind === 'schema') {
       const s = node.schema!
       return [

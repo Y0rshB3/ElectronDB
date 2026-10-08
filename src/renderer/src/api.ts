@@ -182,6 +182,7 @@ export const api = {
     objects: (c: string, s: SchemaRef, type: EngineObjectType) =>
       invokeSilent('db:objects', c, s, type),
     extensions: (c: string, database: string) => invokeSilent('db:extensions', c, database),
+    closeDatabase: (c: string, database: string) => invokeSilent('db:closeDatabase', c, database),
     dataTypes: (c: string, database: string) => invokeSilent('db:dataTypes', c, database),
     cancel: (c: string, executionId: string) => invokeSilent('db:cancel', c, executionId),
     sessionState: (c: string, key: string) => invokeSilent('db:sessionState', c, key),

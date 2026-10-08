@@ -51,6 +51,7 @@ export interface PgDbHandlers {
   tableStructure: H<'db:tableStructure'>
   showCreate: H<'db:showCreate'>
   objects: H<'db:objects'>
+  closeDatabase: H<'db:closeDatabase'>
   extensions: H<'db:extensions'>
   dataTypes: H<'db:dataTypes'>
   tableData: H<'db:tableData'>
@@ -311,6 +312,11 @@ export function createPgDbHandlers(ctx: AppContext, manager: ConnectionManager):
     objects: async (id, ref, type) => {
       const scope = requireSchema(pgScope(ref))
       return withSession(id, scope.database, (s) => introspect.listObjects(s, scope.schema, type))
+    },
+    closeDatabase: async (id, database) => {
+      if (!manager.isOpen(id)) return
+      const connection = await connectionOf(id)
+      await connection.closeDatabaseFromTree(database)
     },
     extensions: async (id, database) =>
       withSession(id, database, (s) => introspect.listExtensions(s)),

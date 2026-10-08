@@ -13,6 +13,7 @@ import { getLogger } from '../log'
 import { describeError, describeForLog, isConnectionLost, PgUserError } from './errors'
 import {
   buildSslPlan,
+  connectOrClose,
   composeSearchPath,
   createClient,
   formatSearchPath,
@@ -221,7 +222,7 @@ export class PgDriverConnection implements SqlDriverConnection<PgSession> {
         // An idle client whose socket died: drop it quietly; the next use reconnects.
         log.info(`a session of ${this.config.name} was dropped: ${describeForLog(err)}`)
       })
-      await client.connect()
+      await connectOrClose(client)
       return client
     }
     let client: pg.Client
@@ -287,6 +288,26 @@ export class PgDriverConnection implements SqlDriverConnection<PgSession> {
   /** Databases with an open pool (for the tree's open/closed state). */
   openDatabases(): string[] {
     return [...this.pools.keys()]
+  }
+
+  /**
+   * «Cerrar base de datos» in the tree: like closeDatabase, but the initial
+   * database stays open (connection-level reads use it) and an open
+   * transaction in one of its query tabs is never rolled back behind the user.
+   */
+  async closeDatabaseFromTree(database: string): Promise<void> {
+    if (database === this.initialDatabase)
+      throw new PgUserError(
+        `«${database}» es la base de datos inicial de la conexión: se cierra al cerrar la conexión.`
+      )
+    const busy = [...this.tabs.values()].some(
+      (t) => t.database === database && t.session.transactionStatus() !== 'idle'
+    )
+    if (busy)
+      throw new PgUserError(
+        `Hay una transacción abierta en una pestaña de «${database}»: confírmala o deshazla antes de cerrar la base de datos.`
+      )
+    await this.closeDatabase(database)
   }
 
   async closeDatabase(database: string): Promise<void> {

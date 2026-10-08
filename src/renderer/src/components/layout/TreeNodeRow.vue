@@ -30,7 +30,10 @@ const loading = computed(
 const error = computed(() => tree.errors[props.node.id])
 const selected = computed(() => tree.selectedId === props.node.id)
 
-const expandable = computed(() => props.node.kind !== 'object')
+/** Folders, plus PostgreSQL partitioned tables (their partitions are nested). */
+const expandable = computed(() => props.node.kind !== 'object' || !!props.node.partitions?.length)
+/** Double click / Enter: folders toggle, objects (a partitioned table too) open. */
+const toggles = computed(() => props.node.kind !== 'object')
 
 const children = computed(() =>
   expanded.value
@@ -56,6 +59,9 @@ const icon = computed(() => {
   if (n.kind === 'group') return GROUP_ICONS[n.group!]
   if (n.group === 'functions')
     return n.subtype === 'PROCEDURE' ? 'mdi-script-text-outline' : 'mdi-function-variant'
+  // PostgreSQL: partitioned tables and partitions.
+  if (n.partitions?.length) return 'mdi-table-split-cell'
+  if (n.subtype === 'partition') return 'mdi-table-column'
   return GROUP_ICONS[n.group!]
 })
 
@@ -107,9 +113,9 @@ const envPill = computed(() =>
       :aria-selected="selected"
       tabindex="0"
       @click="emit('select', node)"
-      @dblclick.stop="expandable ? emit('toggle', node) : emit('open', node)"
+      @dblclick.stop="toggles ? emit('toggle', node) : emit('open', node)"
       @contextmenu.prevent="emit('contextmenu', $event, node)"
-      @keydown.enter.prevent="expandable ? emit('toggle', node) : emit('open', node)"
+      @keydown.enter.prevent="toggles ? emit('toggle', node) : emit('open', node)"
     >
       <button
         class="tree-node__chevron"
@@ -137,7 +143,11 @@ const envPill = computed(() =>
         aria-hidden="true"
       />
       <v-icon :icon="icon" size="15" class="tree-node__icon" />
-      <span class="tree-node__label" :title="error ?? label">{{ label }}</span>
+      <span
+        class="tree-node__label"
+        :title="error ?? (node.detail ? `${label} · ${node.detail}` : label)"
+        >{{ label }}</span
+      >
       <span
         v-if="node.kind === 'connection' && connection"
         class="nd-pill tree-node__env"

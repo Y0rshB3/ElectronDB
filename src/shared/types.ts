@@ -236,8 +236,21 @@ export interface DatabaseInfo {
   collation: string
 }
 
+/** PostgreSQL partition of a partitioned table (nested under its parent in the tree). */
+export interface TablePartition {
+  name: string
+  /** Schema of the partition (it may differ from its parent's). */
+  schema: string
+  /** FOR VALUES … / DEFAULT, as pg_get_expr prints it. */
+  bound: string
+  /** Sub-partitions when the partition is itself partitioned. */
+  partitions?: TablePartition[]
+}
+
 export interface TableInfo {
   name: string
+  /** PostgreSQL partitioned tables: their partitions (listed only here, not as tables). */
+  partitions?: TablePartition[]
   engine: string | null
   rows: number | null
   dataLength: number | null
