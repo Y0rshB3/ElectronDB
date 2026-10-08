@@ -13,6 +13,7 @@ import {
   type PgDdlObjectType
 } from '@renderer/components/designer/pg/ddl'
 import { postgresqlDialect } from '@shared/dialects/postgresql'
+import { sqliteDialect } from '@shared/dialects/sqlite'
 import { schemaRef } from '@renderer/utils/schemaRef'
 import {
   analyzeDestructiveScript,
@@ -35,6 +36,8 @@ const engineUi = useEngineUi(() => props.tab.connectionId)
 const ddl = computed(() => engineUi.value.ddl!)
 /** PostgreSQL: materialized views, routine signatures, trigger tables, no DEFINER. */
 const isPg = computed(() => engineUi.value.id === 'postgresql')
+/** SQLite: views and triggers, dropped and recreated inside one transaction. */
+const isLite = computed(() => engineUi.value.id === 'sqlite')
 const canStripDefiner = computed(() => engineUi.value.descriptor.capabilities.definer)
 
 /** Every object type this editor opens (PostgreSQL adds materialized views). */
@@ -175,16 +178,20 @@ async function apply(): Promise<void> {
     !!objectName.value &&
     (isPg.value
       ? rename || objectType.value === 'materialized_view' || objectType.value === 'trigger'
-      : objectType.value !== 'view' || rename)
+      : isLite.value || objectType.value !== 'view' || rename)
   const message = rename
     ? `El nombre cambia: se creará ${typeLabel.value} "${newName}" y se eliminará "${objectName.value}". Lo que dependa del nombre anterior dejará de funcionar.`
     : replaces
-      ? `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
+      ? isLite.value
+        ? `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}" en una sola transacción: si la creación falla, no cambia nada.`
+        : `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
       : 'Se ejecutará el siguiente SQL.'
   // DROP + CREATE of routines/events/triggers, renamed views, or DROPs written by the user.
   const drops = isPg.value
     ? (postgresqlDialect.analyzeDestructive?.(script.value) ?? [])
-    : analyzeDestructiveScript(script.value)
+    : isLite.value
+      ? (sqliteDialect.analyzeDestructive?.(script.value) ?? [])
+      : analyzeDestructiveScript(script.value)
   const article = typeWithArticle.value
   const destructive: DestructiveDetails | undefined = drops.length
     ? {
@@ -230,7 +237,8 @@ async function apply(): Promise<void> {
           props.tab.id,
           tabTitle(name, schema.value, connections.nameOf(connectionId.value), database.value)
         )
-      const group = GROUP[objectType.value]
+      const group =
+        isLite.value && objectType.value === 'trigger' ? 'triggers' : GROUP[objectType.value]
       if (group) void refreshGroup(group)
     }
     notify.success(

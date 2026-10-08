@@ -1,6 +1,7 @@
 import { ENGINES } from '@shared/engines'
 import { sqliteDialect } from '@shared/dialects/sqlite'
 import { vortaqSQLite } from '@renderer/components/common/editor/sqliteCompletion'
+import { sqliteDdlSupport } from '@renderer/components/designer/sqliteDdl'
 import type { EngineUi } from './types'
 
 /**
@@ -16,6 +17,6 @@ export const sqliteUi: EngineUi = {
   editorLanguage: vortaqSQLite,
   designer: null,
   typeCatalog: { tableEngines: [] },
-  ddl: null,
+  ddl: sqliteDdlSupport,
   userSql: null
 }

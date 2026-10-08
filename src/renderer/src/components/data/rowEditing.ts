@@ -1,4 +1,4 @@
-import type { CellValue, QueryColumn, RowChange } from '@shared/types'
+import type { CellValue, QueryColumn, RowChange, StorageClass } from '@shared/types'
 
 /**
  * Client-side editing model for the table data grid. Rows keep their original
@@ -14,6 +14,8 @@ export interface EditableRow {
   /** Column indexes explicitly set by the user (used to build INSERT values). */
   touched: number[]
   deleted: boolean
+  /** SQLite: storage class of each loaded cell (kept by edits, shown in the tooltip). */
+  storage?: StorageClass[]
 }
 
 /** Focused cell of the grid. */
@@ -25,13 +27,14 @@ export interface ActiveCell {
 let seq = 0
 const nextUid = (): string => `r${++seq}`
 
-export function rowsFromPage(rows: CellValue[][]): EditableRow[] {
-  return rows.map((r) => ({
+export function rowsFromPage(rows: CellValue[][], storage?: StorageClass[][]): EditableRow[] {
+  return rows.map((r, i) => ({
     uid: nextUid(),
     original: r,
     values: [...r],
     touched: [],
-    deleted: false
+    deleted: false,
+    ...(storage?.[i] ? { storage: storage[i] } : {})
   }))
 }
 
@@ -123,12 +126,21 @@ export function buildRowChangeBatch(
       continue
     }
     const values: Record<string, CellValue> = {}
+    const storage: Record<string, StorageClass> = {}
     row.values.forEach((v, i) => {
-      if (isCellChanged(row, i)) values[columns[i].name] = v
+      if (!isCellChanged(row, i)) return
+      values[columns[i].name] = v
+      if (row.storage?.[i]) storage[columns[i].name] = row.storage[i]
     })
     if (Object.keys(values).length)
       updates.push({
-        change: { kind: 'update', key: keyOf(row, columns, keys), values },
+        change: {
+          kind: 'update',
+          key: keyOf(row, columns, keys),
+          values,
+          // SQLite only: rows of other engines carry no storage classes.
+          ...(Object.keys(storage).length ? { storage } : {})
+        },
         uid: row.uid
       })
   }

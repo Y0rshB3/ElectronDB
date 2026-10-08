@@ -224,6 +224,8 @@ export interface ServerRuntime {
   transactions: boolean
   returning: 'none' | 'insert-delete' | 'all'
   topology?: MongoTopology
+  /** SQLite: the file is open read-only (configured, or not writable). */
+  readOnly?: boolean
 }
 
 export interface DatabaseInfo {

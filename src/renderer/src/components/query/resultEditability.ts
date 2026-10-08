@@ -119,7 +119,14 @@ export function decideEditability(
    * (PostgreSQL: RowDescription has no alias) the alias check is skipped;
    * the statement parse already refused self-joins.
    */
-  options: { aliasMetadata?: boolean } = {}
+  options: {
+    aliasMetadata?: boolean
+    /**
+     * SQLite: the key is what the driver marked `primaryKey` in the result (the
+     * rowid, or the key of a WITHOUT ROWID table), not the declared primary key.
+     */
+    keyFromColumns?: boolean
+  } = {}
 ): Editability {
   const where = { schema: source.schema, table: source.table }
   if (!structure) return { editable: false, reason: 'no se pudo comprobar la tabla', ...where }
@@ -150,7 +157,9 @@ export function decideEditability(
     seen.add(key)
   }
 
-  const pk = primaryKeyOf(structure)
+  const pk = options.keyFromColumns
+    ? columns.filter((c) => c.primaryKey).map((c) => c.sourceName!)
+    : primaryKeyOf(structure)
   if (!pk.length) return { editable: false, reason: 'la tabla no tiene clave primaria', ...where }
 
   const keyIndexes = pk.map((k) => columns.findIndex((c) => same(c.sourceName, k)))

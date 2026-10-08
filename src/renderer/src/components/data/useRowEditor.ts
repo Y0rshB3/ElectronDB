@@ -1,6 +1,12 @@
 import { computed, ref, type Ref } from 'vue'
 import { parseRowChangeFailure } from '@shared/rowChangeFailure'
-import type { ApplyRowChangesResult, CellValue, QueryColumn, RowChange } from '@shared/types'
+import type {
+  ApplyRowChangesResult,
+  CellValue,
+  QueryColumn,
+  RowChange,
+  StorageClass
+} from '@shared/types'
 import { api } from '@renderer/api'
 import { useConfirm, type DestructiveDetails } from '@renderer/composables/useConfirm'
 import { errorMessage, useNotify } from '@renderer/composables/useNotify'
@@ -56,9 +62,9 @@ export function useRowEditor(columns: Readonly<Ref<QueryColumn[]>>) {
   const pending = computed(() => pendingCount(rows.value))
   const dirty = computed(() => pending.value > 0)
 
-  /** Replaces the rows with freshly loaded data, dropping selection and edits. */
-  function reset(data: CellValue[][]): void {
-    rows.value = rowsFromPage(data)
+  /** Replaces the rows with freshly loaded data (SQLite: plus storage classes), dropping selection and edits. */
+  function reset(data: CellValue[][], storage?: StorageClass[][]): void {
+    rows.value = rowsFromPage(data, storage)
     selected.value = []
     active.value = null
     applyError.value = null

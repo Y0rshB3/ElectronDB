@@ -50,6 +50,8 @@ const connections = useConnectionsStore()
 const isPostgres = computed(
   () => connections.get(props.tab.connectionId ?? '')?.engine === 'postgresql'
 )
+/** SQLite: rows are written by rowid (or the key of a WITHOUT ROWID table); views are read-only. */
+const isSqlite = computed(() => connections.get(props.tab.connectionId ?? '')?.engine === 'sqlite')
 /**
  * PostgreSQL rows are written by primary key only (a PK-less table or a
  * materialized view is read-only in v1); MySQL keeps all-columns keys.
@@ -134,14 +136,19 @@ const hasNext = computed(() =>
 )
 const noPrimaryKey = computed(() => columns.value.length > 0 && primaryKey.value.length === 0)
 /** Why the grid cannot be edited (PostgreSQL only; MySQL keeps editing by all columns). */
-const readOnlyNotice = computed(() =>
-  !isPostgres.value
+const readOnlyNotice = computed(() => {
+  if (isSqlite.value) {
+    if (!noPrimaryKey.value) return null
+    const reason = columns.value.find((c) => c.readOnlyReason)?.readOnlyReason
+    return `Solo lectura${reason ? `: ${reason}` : ''}. Las filas no se pueden editar desde la cuadrícula.`
+  }
+  return !isPostgres.value
     ? null
     : (pgReadOnlyReason.value ??
-      (noPrimaryKey.value
-        ? 'La tabla no tiene clave primaria: sus filas no se pueden editar desde la cuadrícula (solo lectura).'
-        : null))
-)
+        (noPrimaryKey.value
+          ? 'La tabla no tiene clave primaria: sus filas no se pueden editar desde la cuadrícula (solo lectura).'
+          : null))
+})
 
 watch(dirty, (value) => tabs.setDirty(props.tab.id, value), { immediate: true })
 
@@ -174,7 +181,7 @@ async function load(): Promise<void> {
       ...(appliedFilter.value.filter ? { filter: appliedFilter.value.filter } : {})
     })
     columns.value = result.columns
-    editor.reset(result.rows)
+    editor.reset(result.rows, result.storage)
     primaryKey.value = result.primaryKey
     total.value = result.total
     durationMs.value = result.durationMs
@@ -427,6 +434,7 @@ defineExpose({ rows, applyChanges, load })
           :error-col="applyError?.col ?? null"
           :column-info="columnInfo"
           :width-key="widthKey"
+          :plain-editors="isSqlite"
           :readonly="!!readOnlyNotice"
           @sort="toggleSort"
           @edit="editor.onEdit"

@@ -4,13 +4,17 @@ import { useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { useUiStore } from '@renderer/stores/ui'
 import { useTransactionPrompt } from './useTransactionPrompt'
 
-/** Query tab of an engine whose tabs own a server session (PostgreSQL, D12). */
+/**
+ * Query tab of an engine whose tabs own a session (D12): PostgreSQL (a server
+ * session per tab) and SQLite (the tab that opened the shared transaction).
+ */
 function hasTabSession(
   tab: WorkspaceTab,
   connections: ReturnType<typeof useConnectionsStore>
 ): boolean {
   if (tab.kind !== 'query' || !tab.connectionId) return false
-  return connections.get(tab.connectionId)?.engine === 'postgresql'
+  const engine = connections.get(tab.connectionId)?.engine
+  return engine === 'postgresql' || engine === 'sqlite'
 }
 
 /** Tab closing with an unsaved-changes guard, shared by the tab strip and keyboard shortcuts. */

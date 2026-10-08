@@ -436,7 +436,8 @@ export class SqliteDriverConnection implements SqlDriverConnection<SqliteSession
         flavor: 'sqlite',
         versionNumber: versionNumber(this.serverVersion),
         transactions: true,
-        returning: 'all'
+        returning: 'all',
+        readOnly: this.readOnly
       }
     }
   }

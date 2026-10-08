@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { CellValue, ColumnInfo, QueryColumn } from '@shared/types'
+import type { CellValue, ColumnInfo, QueryColumn, StorageClass } from '@shared/types'
 import { useColumnWidthsStore } from '@renderer/stores/columnWidths'
 import { columnKindOf, type ColumnKind } from './columnKind'
 import { displayCell, isCellChanged, type ActiveCell, type EditableRow } from './rowEditing'
@@ -25,6 +25,11 @@ const props = defineProps<{
    * reopening; without it widths live as long as the grid.
    */
   widthKey?: string | null
+  /**
+   * SQLite: values are dynamically typed, so cells use the plain text editor
+   * (no date pickers that would reject a stored integer or real).
+   */
+  plainEditors?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -39,8 +44,39 @@ const active = defineModel<ActiveCell | null>('active', { default: null })
 const kinds = computed<ColumnKind[]>(() => props.columns.map(columnKindOf))
 /** Date/time picker per column (DATE, DATETIME/TIMESTAMP with fsp, TIME, YEAR). */
 const specs = computed<(TemporalSpec | null)[]>(() =>
-  props.columns.map((c, i) => temporalSpec(c.type, props.columnInfo?.[i]?.columnType))
+  props.columns.map((c, i) =>
+    props.plainEditors ? null : temporalSpec(c.type, props.columnInfo?.[i]?.columnType)
+  )
 )
+
+const STORAGE_LABELS: Record<StorageClass, string> = {
+  null: 'NULL',
+  integer: 'INTEGER',
+  real: 'REAL',
+  text: 'TEXT',
+  blob: 'BLOB'
+}
+
+/**
+ * A locked column (SQLite rowid, generated column) is never edited on a
+ * loaded row; a new row may set its rowid.
+ */
+function isLocked(row: EditableRow, col: number): boolean {
+  const locked = props.columns[col]?.locked
+  return !!locked && (locked !== 'rowid' || !!row.original)
+}
+
+/** Tooltip: the value, plus its SQLite storage class and why it is locked. */
+function cellTitle(row: EditableRow, col: number): string {
+  const text = displayCell(row.values[col])
+  const parts = [text]
+  const storage = row.storage?.[col]
+  if (storage && !isCellChanged(row, col)) parts.push(`Almacenado como ${STORAGE_LABELS[storage]}`)
+  const locked = props.columns[col]?.locked
+  if (locked && isLocked(row, col))
+    parts.push(locked === 'rowid' ? 'rowid: identifica la fila (no editable)' : `No editable: ${locked}`)
+  return parts.join(' · ')
+}
 const nullable = (col: number): boolean => props.columnInfo?.[col]?.nullable ?? true
 
 /* ---------- column widths (drag the header edge, double-click to fit) ---------- */
@@ -146,7 +182,7 @@ function clickCell(uid: string, col: number, index: number): void {
 
 async function startEdit(uid: string, col: number): Promise<void> {
   const row = props.rows.find((r) => r.uid === uid)
-  if (props.readonly || !row || row.deleted) return
+  if (props.readonly || !row || row.deleted || isLocked(row, col)) return
   active.value = { uid, col }
   editing.value = { uid, col }
   const value = row.values[col]
@@ -372,6 +408,7 @@ defineExpose({ startEdit, revealError, autoFit })
                 'cell-active': isActive(row.uid, c),
                 'cell-null': row.values[c] === null,
                 'cell-editing': isEditing(row.uid, c),
+                'cell-locked': isLocked(row, c),
                 'cell-error': !!errorRow && row.uid === errorRow && errorCol === c
               }
             ]"
@@ -388,7 +425,7 @@ defineExpose({ startEdit, revealError, autoFit })
             <span
               class="cell-value"
               :class="{ 'is-sizer': isEditing(row.uid, c) }"
-              :title="isEditing(row.uid, c) ? undefined : displayCell(row.values[c])"
+              :title="isEditing(row.uid, c) ? undefined : cellTitle(row, c)"
               :aria-hidden="isEditing(row.uid, c) || undefined"
               >{{ displayCell(row.values[c]) }}</span
             >
@@ -706,6 +743,9 @@ td.cell-null .cell-value {
   font-style: italic;
   font-family: var(--nd-font-mono);
   font-size: var(--nd-fs-xs);
+  color: var(--nd-text-muted);
+}
+td.cell-locked .cell-value {
   color: var(--nd-text-muted);
 }
 td.cell-editing {

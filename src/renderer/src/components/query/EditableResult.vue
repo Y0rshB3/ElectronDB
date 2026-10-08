@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRef, watch } from 'vue'
-import type { CellValue, ColumnInfo, QueryColumn, TableStructure } from '@shared/types'
+import type {
+  CellValue,
+  ColumnInfo,
+  QueryColumn,
+  StorageClass,
+  TableStructure
+} from '@shared/types'
 import CellValuePanel from '@renderer/components/data/CellValuePanel.vue'
 import { isCellChanged } from '@renderer/components/data/rowEditing'
 import { useValuePanelPref } from '@renderer/components/data/useValuePanelPref'
@@ -34,24 +40,33 @@ const props = defineProps<{
   columns: QueryColumn[]
   rows: CellValue[][]
   truncated: boolean
+  /** SQLite: storage class of each cell (edits keep it). */
+  storage?: StorageClass[][]
 }>()
 
 const emit = defineEmits<{ dirty: [value: boolean] }>()
 
 const editor = useRowEditor(toRef(props, 'columns'))
 const { rows: gridRows, selected, active, applying, applyError, pending, dirty } = editor
-editor.reset(props.rows)
+editor.reset(props.rows, props.storage)
 
 /**
  * PostgreSQL: the statement is parsed with the PG lexer, the result columns
  * name their database (RowDescription has no table alias, so that check is
  * skipped) and every call addresses `{ database, schema }`.
  */
-const isPg = useConnectionsStore().get(props.connectionId)?.engine === 'postgresql'
+const engine = useConnectionsStore().get(props.connectionId)?.engine
+const isPg = engine === 'postgresql'
+/** SQLite: parsed with the SQLite lexer, keyed by the rowid the driver marked in the result. */
+const isLite = engine === 'sqlite'
 const database = isPg ? props.columns.find((c) => c.database)?.database : undefined
 
 /** Statement stage runs synchronously: most read-only results never touch the server. */
-const source = resultSource(props.columns, props.sql, isPg ? 'postgresql' : 'mysql')
+const source = resultSource(
+  props.columns,
+  props.sql,
+  isPg ? 'postgresql' : isLite ? 'sqlite' : 'mysql'
+)
 const editability = ref<Editability | null>(
   source.ok ? null : { editable: false, reason: source.reason }
 )
@@ -106,7 +121,12 @@ async function checkEditability(): Promise<void> {
       ? decideEditability(props.columns, source.source, loaded, props.rows, {
           aliasMetadata: false
         })
-      : decideEditability(props.columns, source.source, loaded, props.rows)
+      : isLite
+        ? decideEditability(props.columns, source.source, loaded, props.rows, {
+            aliasMetadata: false,
+            keyFromColumns: true
+          })
+        : decideEditability(props.columns, source.source, loaded, props.rows)
   } catch {
     editability.value = decideEditability(props.columns, source.source, null)
   }
@@ -280,6 +300,7 @@ defineExpose({ applyChanges, discard: editor.discard, dirty, editability })
           :error-col="applyError?.col ?? null"
           :column-info="columnInfo"
           :width-key="widthKey"
+          :plain-editors="isLite"
           @sort="toggleSort"
           @edit="editor.onEdit"
         />

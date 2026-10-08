@@ -1,5 +1,7 @@
 import type { EngineCapabilities } from '@shared/engines'
 import { postgresqlDialect } from '@shared/dialects/postgresql'
+import { qualified as liteQualified, quoteIdent as liteQ } from '@shared/dialects/sqlite'
+import type { SqliteMaintenanceAction } from '@shared/types'
 import type { EngineObjectType, NameRef, ObjectType } from '@shared/types'
 import { api } from '@renderer/api'
 import { descriptorOf } from '@renderer/engines/capabilities'
@@ -73,6 +75,35 @@ const PG_TYPE_LABELS: Partial<Record<EngineObjectType, { label: string; article:
   materialized_view: { label: 'vista materializada', article: 'la vista materializada' },
   sequence: { label: 'secuencia', article: 'la secuencia' },
   type: { label: 'tipo', article: 'el tipo' }
+}
+
+/** SQLite object types of the tree groups (tables, views, indexes, triggers). */
+export function sqliteObjectTypeOf(node: TreeNode): EngineObjectType | null {
+  switch (node.group) {
+    case 'tables':
+      return 'table'
+    case 'views':
+      return 'view'
+    case 'indexes':
+      return 'index'
+    case 'triggers':
+      return 'trigger'
+    default:
+      return null
+  }
+}
+
+const LITE_TYPE_LABELS: Partial<Record<EngineObjectType, { label: string; article: string }>> = {
+  table: { label: 'tabla', article: 'la tabla' },
+  view: { label: 'vista', article: 'la vista' },
+  index: { label: 'índice', article: 'el índice' },
+  trigger: { label: 'trigger', article: 'el trigger' }
+}
+
+/** «Mostrar en Finder» on macOS, the file manager elsewhere. */
+function showInFolderLabel(): string {
+  const platform = typeof window !== 'undefined' ? window.vortaq?.platform : undefined
+  return platform === 'darwin' ? 'Mostrar en Finder' : 'Mostrar en la carpeta'
 }
 
 const pgQ = postgresqlDialect.quoteIdent
@@ -656,6 +687,369 @@ export function useObjectActions() {
     return items
   }
 
+  /* ---------- SQLite (preview) ---------- */
+
+  const isLite = (connectionId: string): boolean => connections.get(connectionId)?.engine === 'sqlite'
+
+  async function dropLiteObject(node: TreeNode): Promise<void> {
+    const type = sqliteObjectTypeOf(node)
+    if (!type || !node.schema || !node.name) return
+    const labels = LITE_TYPE_LABELS[type]!
+    const target = liteQualified(node.schema, node.name)
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: `Eliminar ${labels.label}`,
+      message: `Se eliminará ${labels.label} ${node.schema}.${node.name} de forma permanente.`,
+      confirmText: 'Eliminar',
+      destructive: {
+        title: `¿Eliminar ${labels.article} «${node.name}»?`,
+        message: 'Se eliminará de forma permanente. Esta acción no se puede deshacer.',
+        items: [{ tag: `DROP ${type.toUpperCase()}`, text: target }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    await api.db.dropObject(node.connectionId, node.schema, type, node.name, {
+      confirmProduction: true
+    })
+    notify.success(`${node.name} eliminado`)
+    await tree.loadGroup(node.connectionId, node.schema, node.group!, true)
+    // Dropping a table also drops its indexes and triggers.
+    if (type === 'table')
+      for (const g of ['indexes', 'triggers'] as const)
+        if (tree.hasItems(node.connectionId, node.schema, g))
+          await tree.loadGroup(node.connectionId, node.schema, g, true)
+  }
+
+  async function exportLiteDdl(node: TreeNode): Promise<void> {
+    const type = sqliteObjectTypeOf(node)
+    if (!type || !node.schema || !node.name) return
+    await copyText(await api.db.showCreate(node.connectionId, node.schema, type, node.name), 'DDL')
+  }
+
+  /** «Vaciar»: DELETE FROM (SQLite has no TRUNCATE; triggers run, AUTOINCREMENT keeps its counter). */
+  async function emptyLiteTable(node: TreeNode): Promise<void> {
+    if (!node.schema || !node.name) return
+    const sql = `DELETE FROM ${liteQualified(node.schema, node.name)}`
+    const ok = await confirmDestructive({
+      connectionId: node.connectionId,
+      title: 'Vaciar tabla',
+      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los triggers).`,
+      details: sql,
+      confirmText: 'Vaciar',
+      destructive: {
+        title: `¿Vaciar la tabla «${node.name}»?`,
+        message: 'Se borrarán todas sus filas. Esta acción no se puede deshacer.',
+        items: [{ tag: 'DELETE', text: `${node.schema}.${node.name}` }],
+        confirmText: 'Eliminar'
+      }
+    })
+    if (!ok) return
+    const [result] = await api.db.execute(node.connectionId, sql, { confirmProduction: true })
+    if (result?.error) notify.error(result.error)
+    else notify.success(`Tabla ${node.name} vaciada`)
+  }
+
+  async function liteMaintenance(connectionId: string, action: SqliteMaintenanceAction): Promise<void> {
+    const writes = action === 'vacuum' || action === 'optimize'
+    if (writes) {
+      const ok = await confirmDestructive({
+        connectionId,
+        title: action === 'vacuum' ? 'Compactar la base de datos (VACUUM)' : 'Optimizar',
+        message:
+          action === 'vacuum'
+            ? 'VACUUM reescribe el archivo entero para recuperar espacio: puede tardar en archivos grandes y necesita espacio libre en disco.'
+            : 'PRAGMA optimize actualiza las estadísticas que usa el planificador de consultas.',
+        details: action === 'vacuum' ? 'VACUUM' : 'PRAGMA optimize',
+        alwaysAsk: false
+      })
+      if (!ok) return
+    }
+    const result = await api.sqlite.maintenance(
+      connectionId,
+      action,
+      writes ? { confirmProduction: true } : undefined
+    )
+    const titles: Record<SqliteMaintenanceAction, string> = {
+      integrityCheck: 'Comprobación de integridad',
+      quickCheck: 'Comprobación rápida',
+      foreignKeyCheck: 'Comprobación de claves foráneas',
+      vacuum: 'VACUUM',
+      optimize: 'Optimizar'
+    }
+    if (writes) {
+      notify.success(`${titles[action]} terminado`)
+      return
+    }
+    await ask({
+      title: titles[action],
+      message: result.ok
+        ? action === 'foreignKeyCheck'
+          ? 'No hay filas que incumplan las claves foráneas.'
+          : 'La base de datos está bien (ok).'
+        : 'Se han encontrado problemas:',
+      items: result.messages.slice(0, 50).map((m) => ({ text: m })),
+      confirmText: 'Cerrar'
+    })
+  }
+
+  /** «Copiar archivo…»: VACUUM INTO a new file the user picks (a consistent copy). */
+  async function copyLiteFile(connectionId: string): Promise<void> {
+    const config = connections.get(connectionId)
+    const base = (config?.sqlite?.filePath ?? 'copia.db').split(/[\\/]/).pop() ?? 'copia.db'
+    const stem = base.replace(/\.[^.]+$/, '')
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')
+    const target = await api.app.pickSaveFile('Copiar archivo SQLite', `${stem}-${stamp}.db`, [
+      { name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }
+    ])
+    if (!target) return
+    const result = await api.sqlite.copyFile(connectionId, target)
+    notify.success(`Copia guardada (${Math.max(1, Math.round(result.sizeBytes / 1024))} KB)`)
+  }
+
+  /** «Reabrir en modo escritura»: production read-only files need the typed confirmation. */
+  async function reopenWritable(connectionId: string): Promise<void> {
+    const ok = await confirmDestructive({
+      connectionId,
+      title: 'Reabrir en modo escritura',
+      message:
+        'El archivo se volverá a abrir en modo lectura y escritura para esta sesión (la conexión guardada sigue en solo lectura). Se cerrarán las transacciones abiertas.',
+      confirmText: 'Reabrir',
+      alwaysAsk: true
+    })
+    if (!ok) return
+    const info = await api.sqlite.reopenWritable(connectionId, { confirmProduction: true })
+    connections.setServerInfo(connectionId, info)
+    notify.success('Archivo abierto en modo escritura')
+  }
+
+  /** Extra connection-menu entries of a SQLite connection (file and maintenance). */
+  function liteConnectionItems(connectionId: string, open: boolean): MenuAction[] {
+    const config = connections.get(connectionId)
+    const filePath = config?.sqlite?.filePath ?? ''
+    const readOnly = connections.serverInfo[connectionId]?.runtime?.readOnly === true
+    const items: MenuAction[] = [
+      { key: 'd-lite', label: '', divider: true },
+      {
+        key: 'showFile',
+        label: showInFolderLabel(),
+        icon: 'mdi-folder-open-outline',
+        disabled: !filePath || config?.sqlite?.pathNeedsReview === true,
+        action: () => api.app.showInFolder(filePath)
+      },
+      {
+        key: 'copyFile',
+        label: 'Copiar archivo…',
+        icon: 'mdi-content-duplicate',
+        disabled: !open,
+        action: () => copyLiteFile(connectionId)
+      },
+      {
+        key: 'integrity',
+        label: 'Comprobar integridad',
+        icon: 'mdi-shield-check-outline',
+        disabled: !open,
+        action: () => liteMaintenance(connectionId, 'integrityCheck')
+      },
+      {
+        key: 'fkCheck',
+        label: 'Comprobar claves foráneas',
+        icon: 'mdi-key-link',
+        disabled: !open,
+        action: () => liteMaintenance(connectionId, 'foreignKeyCheck')
+      },
+      {
+        key: 'vacuum',
+        label: 'Compactar (VACUUM)',
+        icon: 'mdi-archive-arrow-down-outline',
+        disabled: !open || readOnly,
+        action: () => liteMaintenance(connectionId, 'vacuum')
+      }
+    ]
+    if (open && readOnly)
+      items.push({
+        key: 'reopenRw',
+        label: 'Reabrir en modo escritura…',
+        icon: 'mdi-lock-open-variant-outline',
+        action: () => reopenWritable(connectionId)
+      })
+    return items
+  }
+
+  function liteNewObjectFor(node: TreeNode): MenuAction[] {
+    const c = node.connectionId
+    const s = node.schema!
+    switch (node.group) {
+      case 'tables':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva tabla',
+            icon: 'mdi-table-plus',
+            action: () => ws.openTableDesigner(c, s, null)
+          }
+        ]
+      case 'views':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva vista',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'view', null)
+          }
+        ]
+      case 'indexes':
+        return [
+          {
+            key: 'new',
+            label: 'Nuevo índice',
+            icon: 'mdi-plus',
+            action: () =>
+              ws.openQuery(c, s, {
+                sql: `CREATE INDEX ${liteQ('nuevo_indice')} ON ${liteQualified(s, 'tabla')} (columna);`,
+                name: 'Nuevo índice'
+              })
+          }
+        ]
+      case 'triggers':
+        return [
+          {
+            key: 'new',
+            label: 'Nuevo trigger',
+            icon: 'mdi-plus',
+            action: () => ws.openDdlEditor(c, s, 'trigger', null)
+          }
+        ]
+      case 'queries':
+        return [
+          {
+            key: 'new',
+            label: 'Nueva consulta',
+            icon: 'mdi-plus',
+            action: () => ws.openQuery(c, s)
+          }
+        ]
+      default:
+        return []
+    }
+  }
+
+  /** Context menu of a SQLite database (main / attached) / group / object node. */
+  function liteActionsFor(node: TreeNode, refresh: MenuAction): MenuAction[] {
+    const c = node.connectionId
+    if (node.kind === 'schema') {
+      const s = node.schema!
+      return [
+        {
+          key: 'query',
+          label: 'Nueva consulta',
+          icon: 'mdi-database-search-outline',
+          action: () => ws.openQuery(c, s)
+        },
+        {
+          key: 'table',
+          label: 'Nueva tabla',
+          icon: 'mdi-table-plus',
+          action: () => ws.openTableDesigner(c, s, null)
+        },
+        {
+          key: 'backup',
+          label: 'Nueva copia de seguridad…',
+          icon: 'mdi-archive-plus-outline',
+          action: () => ui.openBackupDialog(c, s)
+        },
+        {
+          key: 'backups',
+          label: 'Copias de seguridad',
+          icon: 'mdi-archive-outline',
+          action: () => ws.openBackups(c, s)
+        },
+        { key: 'd1', label: '', divider: true },
+        refresh
+      ]
+    }
+    if (node.kind === 'group')
+      return [...liteNewObjectFor(node), { key: 'd1', label: '', divider: true }, refresh]
+
+    const s = node.schema!
+    const group = node.group
+    const items: MenuAction[] = []
+    if (group === 'queries') {
+      items.push(
+        { key: 'open', label: 'Abrir', icon: 'mdi-open-in-app', action: () => ws.openNode(node) },
+        ...liteNewObjectFor({ ...node, kind: 'group' }),
+        { key: 'd1', label: '', divider: true },
+        {
+          key: 'copy',
+          label: 'Copiar nombre',
+          icon: 'mdi-content-copy',
+          action: () => copyText(node.label, 'Nombre')
+        },
+        {
+          key: 'delete',
+          label: 'Eliminar',
+          icon: 'mdi-delete-outline',
+          danger: true,
+          action: () => deleteSavedQuery(node)
+        },
+        { key: 'd2', label: '', divider: true },
+        refresh
+      )
+      return items
+    }
+    items.push({
+      key: 'open',
+      label: group === 'indexes' ? 'Ver DDL' : group === 'triggers' ? 'Editar trigger' : 'Abrir',
+      icon: 'mdi-open-in-app',
+      action: () => ws.openNode(node)
+    })
+    if (group === 'tables')
+      items.push({
+        key: 'design',
+        label: 'Diseñar tabla',
+        icon: 'mdi-table-edit',
+        action: () => ws.designNode(node)
+      })
+    if (group === 'views')
+      items.push({
+        key: 'design',
+        label: 'Editar vista',
+        icon: 'mdi-pencil-outline',
+        action: () => ws.openDdlEditor(c, s, 'view', node.name!)
+      })
+    items.push(...liteNewObjectFor({ ...node, kind: 'group' }))
+    items.push({ key: 'd1', label: '', divider: true })
+    items.push({
+      key: 'copy',
+      label: 'Copiar nombre',
+      icon: 'mdi-content-copy',
+      action: () => copyText(liteQ(node.name!), 'Nombre')
+    })
+    items.push({
+      key: 'ddl',
+      label: 'Exportar DDL (copiar)',
+      icon: 'mdi-code-tags',
+      action: () => exportLiteDdl(node)
+    })
+    if (group === 'tables')
+      items.push({
+        key: 'empty',
+        label: 'Vaciar (DELETE)',
+        icon: 'mdi-eraser-variant',
+        danger: true,
+        action: () => emptyLiteTable(node)
+      })
+    items.push({
+      key: 'delete',
+      label: 'Eliminar',
+      icon: 'mdi-delete-outline',
+      danger: true,
+      action: () => dropLiteObject(node)
+    })
+    items.push({ key: 'd2', label: '', divider: true }, refresh)
+    return items
+  }
+
   async function deleteSavedQuery(node: TreeNode): Promise<void> {
     if (!node.name) return
     const ok = await ask({
@@ -833,6 +1227,7 @@ export function useObjectActions() {
     const caps = capsOf(c)
     if (node.kind !== 'connection' && node.database !== undefined)
       return pgActionsFor(node, refresh)
+    if (node.kind !== 'connection' && isLite(c)) return liteActionsFor(node, refresh)
     if (node.kind === 'connection') {
       const open = connections.isOpen(c)
       const items: (MenuAction | false)[] = [
@@ -847,7 +1242,9 @@ export function useObjectActions() {
               key: 'open',
               label: 'Abrir conexión',
               icon: 'mdi-lan-connect',
-              action: () => ws.ensureOpen(c)
+              action: async () => {
+                await ws.ensureOpen(c)
+              }
             },
         {
           key: 'edit',
@@ -894,6 +1291,7 @@ export function useObjectActions() {
           disabled: !open,
           action: () => ws.openUsers(c)
         },
+        ...(isLite(c) ? liteConnectionItems(c, open) : []),
         { key: 'd2', label: '', divider: true },
         { ...refresh, disabled: !open },
         {

@@ -82,6 +82,11 @@ export const useConnectionsStore = defineStore('connections', () => {
     }
   }
 
+  /** Replaces the facts of an open connection (SQLite «Reabrir en modo escritura»). */
+  function setServerInfo(id: string, info: ServerInfo): void {
+    serverInfo.value = { ...serverInfo.value, [id]: info }
+  }
+
   function markClosed(id: string): void {
     if (!(id in serverInfo.value)) return
     const next = { ...serverInfo.value }
@@ -138,6 +143,7 @@ export const useConnectionsStore = defineStore('connections', () => {
     isOpen,
     isProduction,
     needsTypedConfirm,
+    setServerInfo,
     nameOf,
     load,
     open,

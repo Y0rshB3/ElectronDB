@@ -11,6 +11,12 @@ import {
 } from 'vue'
 import type { QueryStatementResult, TransactionStatus } from '@shared/types'
 import { postgresqlDialect } from '@shared/dialects/postgresql'
+import { isAttachOrDetach, sqliteDialect } from '@shared/dialects/sqlite'
+import {
+  cachedSqlite,
+  sqliteCompletionSource
+} from '@renderer/components/common/editor/sqliteCompletion'
+import { useTreeStore } from '@renderer/stores/tree'
 import {
   cachedPg,
   pgCompletionSource,
@@ -49,6 +55,7 @@ const props = defineProps<{ tab: WorkspaceTab }>()
 const tabs = useTabsStore()
 const queries = useQueriesStore()
 const connections = useConnectionsStore()
+const tree = useTreeStore()
 const settings = useSettingsStore()
 const notify = useNotify()
 const { ask, confirmDestructive } = useConfirm()
@@ -74,6 +81,11 @@ const schemas = ref<string[]>([])
 const database = ref<string | null>(props.tab.database ?? null)
 const pgDatabases = ref<string[]>([])
 const txStatus = ref<TransactionStatus>('idle')
+/**
+ * SQLite: every tab of a connection shares one handle, so a transaction opened
+ * in another tab is visible here (its uncommitted changes) and blocks writes.
+ */
+const txElsewhere = ref(false)
 const settlingTx = ref(false)
 /** executionId of the run in progress (PostgreSQL cancel). */
 let executionId: string | null = null
@@ -166,6 +178,37 @@ function makePgProvider() {
 const pgCompletion = shallowRef(makePgProvider())
 const pgSource = computed(() => pgCompletionSource(pgCompletion.value))
 
+/** SQLite completion metadata: attached databases, their tables, views and columns. */
+function makeSqliteProvider() {
+  return cachedSqlite({
+    defaultDatabase: () => schema.value || 'main',
+    databases: async () =>
+      connectionId.value
+        ? (await invokeSilent('db:databases', connectionId.value)).map((d) => d.name)
+        : [],
+    tables: async (db) => {
+      if (!connectionId.value) return []
+      const [tables, views] = await Promise.all([
+        invokeSilent('db:tables', connectionId.value, db),
+        invokeSilent('db:views', connectionId.value, db).catch(() => [])
+      ])
+      return [
+        ...tables.map((t) => ({ name: t.name, kind: 'table' as const })),
+        ...views.map((v) => ({ name: v.name, kind: 'view' as const }))
+      ]
+    },
+    columns: async (db, table) =>
+      connectionId.value
+        ? (await invokeSilent('db:columns', connectionId.value, db, table)).map((c) => ({
+            name: c.name,
+            type: c.columnType
+          }))
+        : []
+  })
+}
+const sqliteCompletion = shallowRef(makeSqliteProvider())
+const sqliteSource = computed(() => sqliteCompletionSource(sqliteCompletion.value))
+
 const running = ref(false)
 const results = ref<QueryStatementResult[]>([])
 const notice = ref<string | null>(null)
@@ -225,6 +268,9 @@ function onSplitKey(event: KeyboardEvent): void {
 
 const connectionId = computed(() => props.tab.connectionId ?? '')
 const isPg = computed(() => connections.get(connectionId.value)?.engine === 'postgresql')
+const isLite = computed(() => connections.get(connectionId.value)?.engine === 'sqlite')
+/** Engines whose query tabs own a session (D12): transaction state, Confirmar/Deshacer, cancel. */
+const tabSession = computed(() => isPg.value || isLite.value)
 const production = computed(() => connections.isProduction(connectionId.value))
 /** Switching connection (opening it, loading its databases). */
 const switching = ref(false)
@@ -253,7 +299,8 @@ const resultSets = computed(() =>
       key: `rs${x.index}`,
       label: `Resultado ${n + 1}`,
       sql: x.r.sql,
-      set: x.r.resultSet!
+      set: x.r.resultSet!,
+      storage: x.r.storage
     }))
 )
 const errorCount = computed(() => results.value.filter((r) => r.error).length)
@@ -391,13 +438,20 @@ async function run(selectionOnly = false): Promise<void> {
   // Allowlist: on production (and the environments of Ajustes › Seguridad) anything not provably
   // read-only (SELECT/SHOW/DESCRIBE/EXPLAIN/USE...) asks for the typed name first.
   const pg = isPg.value
-  const check = pg ? postgresqlDialect.analyzeWrites(script) : analyzeWrites(script)
+  const lite = isLite.value
+  const check = pg
+    ? postgresqlDialect.analyzeWrites(script)
+    : lite
+      ? sqliteDialect.analyzeWrites(script)
+      : analyzeWrites(script)
   const confirmProduction = connections.needsTypedConfirm(connectionId.value) && check.writes
   // DROP / TRUNCATE / DELETE / ALTER … DROP / UPDATE without WHERE ask on any connection (setting).
   const drops = settings.settings.confirmDestructiveEverywhere
     ? pg
       ? (postgresqlDialect.analyzeDestructive?.(script) ?? [])
-      : analyzeDestructiveScript(script)
+      : lite
+        ? (sqliteDialect.analyzeDestructive?.(script) ?? [])
+        : analyzeDestructiveScript(script)
     : []
   if (confirmProduction || drops.length) {
     const allRows = drops.filter((d) => d.allRows).length
@@ -434,7 +488,7 @@ async function run(selectionOnly = false): Promise<void> {
   try {
     // confirmProduction tells main the user typed the name; main rejects unconfirmed writes to
     // production and to the environments of Ajustes › Seguridad.
-    executionId = pg ? newOperationId('exec') : null
+    executionId = pg || lite ? newOperationId('exec') : null
     const out = pg
       ? await api.invokeSilent('db:execute', connectionId.value, script, {
           schema: { database: database.value ?? '', schema: schema.value ?? '' },
@@ -442,12 +496,26 @@ async function run(selectionOnly = false): Promise<void> {
           executionId: executionId!,
           ...(confirmProduction ? { confirmProduction: true } : {})
         })
-      : await api.invokeSilent('db:execute', connectionId.value, script, {
-          schema: schema.value,
-          ...(confirmProduction ? { confirmProduction: true } : {})
-        })
+      : lite
+        ? await api.invokeSilent('db:execute', connectionId.value, script, {
+            schema: schema.value,
+            sessionKey: props.tab.id,
+            executionId: executionId!,
+            ...(confirmProduction ? { confirmProduction: true } : {})
+          })
+        : await api.invokeSilent('db:execute', connectionId.value, script, {
+            schema: schema.value,
+            ...(confirmProduction ? { confirmProduction: true } : {})
+          })
     if (seq !== runSeq) return
     if (pg) followSession(out)
+    if (lite) {
+      const last = out[out.length - 1]
+      if (last?.transactionStatus) txStatus.value = last.transactionStatus
+      // ATTACH / DETACH change the databases of the connection: refresh the tree.
+      if (sqliteDialect.splitStatements(script).some((st) => isAttachOrDetach(st.sql)))
+        void tree.loadDatabases(connectionId.value, true)
+    }
     results.value = out
     totalMs.value = Math.round(performance.now() - started)
     const firstSet = resultSets.value[0]
@@ -465,9 +533,12 @@ async function run(selectionOnly = false): Promise<void> {
     if (check.writes) {
       completion.value.clear()
       pgCompletion.value.clear()
+      sqliteCompletion.value.clear()
     }
     // A lost PostgreSQL session reports itself as an error: re-read the state.
     if (pg && notice.value) void refreshSessionState()
+    // SQLite: whether another tab owns the shared transaction (or a cancel dropped it).
+    if (lite) void refreshSessionState()
   }
 }
 
@@ -484,11 +555,14 @@ function followSession(out: QueryStatementResult[]): void {
 }
 
 async function refreshSessionState(): Promise<void> {
-  if (!isPg.value || !connectionId.value || !connections.isOpen(connectionId.value)) return
+  if (!tabSession.value || !connectionId.value || !connections.isOpen(connectionId.value)) return
   try {
-    txStatus.value = (await api.db.sessionState(connectionId.value, props.tab.id)).transactionStatus
+    const state = await api.db.sessionState(connectionId.value, props.tab.id)
+    txStatus.value = state.transactionStatus
+    txElsewhere.value = state.transactionElsewhere === true
   } catch {
     txStatus.value = 'idle'
+    txElsewhere.value = false
   }
 }
 
@@ -557,10 +631,13 @@ function locateError(result: QueryStatementResult): void {
 
 function stop(): void {
   if (!running.value) return
-  if (isPg.value) {
-    // PostgreSQL cancels the running statement (pg_cancel_backend); its error arrives as a result.
+  if (tabSession.value) {
+    // PostgreSQL cancels the running statement (pg_cancel_backend); SQLite ends the worker
+    // process and reopens the file. The error arrives as a result either way.
     const id = executionId
-    notice.value = 'Cancelando la consulta en curso…'
+    notice.value = isLite.value
+      ? 'Cancelando la consulta en curso (se reabrirá el archivo)…'
+      : 'Cancelando la consulta en curso…'
     if (!id) return
     void api.db
       .cancel(connectionId.value, id)
@@ -664,7 +741,7 @@ async function switchConnection(id: string): Promise<boolean> {
     }))
   )
     return false
-  if (isPg.value && connections.isOpen(connectionId.value)) {
+  if (tabSession.value && connections.isOpen(connectionId.value)) {
     // The tab session stays on the old connection: settle its transaction, then close it.
     if (
       !(await txPrompt.settleTransaction(
@@ -677,6 +754,7 @@ async function switchConnection(id: string): Promise<boolean> {
       return false
     await api.db.closeSession(connectionId.value, props.tab.id).catch(() => undefined)
     txStatus.value = 'idle'
+    txElsewhere.value = false
   }
   switching.value = true
   try {
@@ -720,6 +798,7 @@ async function switchConnection(id: string): Promise<boolean> {
     tabs.setTarget(props.tab.id, id, keep)
     // Fresh autocompletion metadata: the cache belongs to the old connection.
     completion.value = makeProvider()
+    sqliteCompletion.value = makeSqliteProvider()
     schema.value = keep
     updateTitle()
     void loadCompletion()
@@ -757,7 +836,11 @@ function listen(on: boolean): void {
   if (on) window.addEventListener('keydown', onWindowKeydown)
   else window.removeEventListener('keydown', onWindowKeydown)
 }
-onActivated(() => listen(true))
+onActivated(() => {
+  listen(true)
+  // Another tab of a SQLite connection may have opened or ended the shared transaction.
+  if (isLite.value) void refreshSessionState()
+})
 onDeactivated(() => listen(false))
 onUnmounted(() => listen(false))
 
@@ -766,10 +849,8 @@ onMounted(async () => {
   loadPayload()
   updateTitle()
   await Promise.all([loadSchemas(), loadCompletion()])
-  if (isPg.value) {
-    updateTitle()
-    await refreshSessionState()
-  }
+  if (isPg.value) updateTitle()
+  if (tabSession.value) await refreshSessionState()
 })
 
 /* ---------- AI assistant (never runs SQL: it only reads it or inserts it) ---------- */
@@ -922,15 +1003,34 @@ defineExpose({
           ><span class="query-view__label">Explicar / optimizar</span></v-btn
         >
       </template>
-      <template v-if="isPg && txStatus !== 'idle'">
+      <template v-if="isLite && txElsewhere && txStatus === 'idle'">
+        <span class="nd-viewbar__sep" aria-hidden="true" />
+        <span
+          class="nd-status-pill query-view__tx query-view__tx--open"
+          role="status"
+          title="Todas las pestañas de una conexión SQLite comparten el archivo abierto: ves los cambios sin confirmar de esa transacción y no puedes escribir hasta que se confirme o se deshaga desde su pestaña."
+          data-test="tx-elsewhere"
+          >Transacción abierta en otra pestaña</span
+        >
+      </template>
+      <template v-if="tabSession && txStatus !== 'idle'">
         <span class="nd-viewbar__sep" aria-hidden="true" />
         <span
           class="nd-status-pill query-view__tx"
           :class="txStatus === 'failed' ? 'query-view__tx--failed' : 'query-view__tx--open'"
           role="status"
           data-test="tx-status"
+          :title="
+            isLite
+              ? 'Las demás pestañas de esta conexión comparten el archivo: ven estos cambios sin confirmar y no pueden escribir hasta que confirmes o deshagas.'
+              : undefined
+          "
           >{{
-            txStatus === 'failed' ? 'Transacción abortada: ejecuta ROLLBACK' : 'Transacción abierta'
+            txStatus === 'failed'
+              ? 'Transacción abortada: ejecuta ROLLBACK'
+              : isLite
+                ? 'Transacción abierta (compartida con las demás pestañas)'
+                : 'Transacción abierta'
           }}</span
         >
         <v-btn
@@ -1007,7 +1107,7 @@ defineExpose({
           v-model="sql"
           :provider="completion"
           :engine="connections.get(connectionId)?.engine"
-          :completion-source="isPg ? pgSource : undefined"
+          :completion-source="isPg ? pgSource : isLite ? sqliteSource : undefined"
           min-height="80px"
           @run="run()"
           @save="save"
@@ -1148,6 +1248,7 @@ defineExpose({
               :columns="rs.set.columns"
               :rows="rs.set.rows"
               :truncated="rs.set.truncated"
+              :storage="rs.storage"
               @dirty="setPendingEdits(rs.key, $event)"
             />
           </v-window-item>

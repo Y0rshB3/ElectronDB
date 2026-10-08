@@ -248,6 +248,7 @@ export function useWorkspace() {
     if (node.kind !== 'object' || !node.schema || !node.name) return
     const { connectionId, schema, name, group, database } = node
     if (database !== undefined) return openPgNode(node)
+    if (connections.get(connectionId)?.engine === 'sqlite') return openSqliteNode(node)
     switch (group) {
       case 'tables':
         return openTableData(connectionId, schema, name)
@@ -299,6 +300,25 @@ export function useWorkspace() {
       }
       case 'queries':
         return openQuery(c, schema, { savedQueryId: name }, db)
+    }
+  }
+
+  /** SQLite objects: views open as data (read-only), indexes as DDL, triggers in the DDL editor. */
+  async function openSqliteNode(node: TreeNode): Promise<void> {
+    const { connectionId: c, schema, name, group } = node
+    if (!schema || !name) return
+    switch (group) {
+      case 'tables':
+      case 'views':
+        return openTableData(c, schema, name)
+      case 'indexes': {
+        const ddl = await api.db.showCreate(c, schema, 'index', name)
+        return openQuery(c, schema, { sql: ddl, name })
+      }
+      case 'triggers':
+        return openDdlEditor(c, schema, 'trigger', name)
+      case 'queries':
+        return openQuery(c, schema, { savedQueryId: name })
     }
   }
 
