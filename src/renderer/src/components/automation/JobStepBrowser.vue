@@ -35,6 +35,7 @@ import { ADD_DRAG_TYPE, endAddDrag, startAddDrag } from './stepDrag'
  * when the user expands them.
  */
 const props = defineProps<{ tasks: JobTask[] }>()
+const collapsed = defineModel<boolean>('collapsed', { default: false })
 const emit = defineEmits<{ add: [tasks: JobTask[]] }>()
 
 const connections = useConnectionsStore()
@@ -354,13 +355,27 @@ const emptyTree = computed(() =>
           :class="{ 'step-kind--active': kind === k.value }"
           :aria-checked="kind === k.value"
           :data-test="`step-kind-${k.value}`"
-          @click="kind = k.value"
+          @click="((kind = k.value), (collapsed = false))"
         >
-          <v-icon :icon="k.icon" size="15" aria-hidden="true" />{{ k.label }}
+          <v-icon :icon="k.icon" size="15" aria-hidden="true" /><span class="step-kind__long">{{
+            k.label
+          }}</span
+          ><span class="step-kind__short" aria-hidden="true">{{ k.short }}</span>
         </button>
       </div>
+      <v-btn
+        :icon="collapsed ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+        size="x-small"
+        variant="text"
+        class="step-browser__fold"
+        :aria-label="collapsed ? 'Mostrar «Añadir pasos»' : 'Ocultar «Añadir pasos»'"
+        :title="collapsed ? 'Mostrar' : 'Ocultar'"
+        :aria-expanded="!collapsed"
+        data-test="step-browser-fold"
+        @click="collapsed = !collapsed"
+      />
     </header>
-    <div class="step-browser__body">
+    <div v-show="!collapsed" class="step-browser__body">
       <div class="step-browser__tree" data-test="step-browser-tree">
         <v-text-field
           v-model="filter"
@@ -526,7 +541,7 @@ const emptyTree = computed(() =>
         </template>
       </div>
     </div>
-    <footer class="step-browser__foot">
+    <footer v-show="!collapsed" class="step-browser__foot">
       <span class="step-browser__hint">{{ kindMeta.hint }}</span>
       <v-btn
         size="small"
@@ -545,20 +560,26 @@ const emptyTree = computed(() =>
 
 <style scoped>
 .step-browser {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
 }
+.step-browser__fold {
+  margin-left: auto;
+}
 .step-browser__head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px 14px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--nd-hairline);
 }
 .step-browser__title {
+  flex: none;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -571,7 +592,10 @@ const emptyTree = computed(() =>
 }
 .step-browser__kinds {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 2px;
   padding: 2px;
   border-radius: var(--nd-radius-pill);
@@ -579,6 +603,8 @@ const emptyTree = computed(() =>
   border: 1px solid var(--nd-border);
 }
 .step-kind {
+  position: relative;
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -590,6 +616,9 @@ const emptyTree = computed(() =>
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
+}
+.step-kind__short {
+  display: none;
 }
 .step-kind:hover {
   color: var(--nd-text);
@@ -817,5 +846,27 @@ const emptyTree = computed(() =>
   min-width: 0;
   font-size: var(--nd-fs-xs);
   color: var(--nd-text-2);
+}
+/* Narrow editors: the kinds keep one line (title hidden, tighter pills), the tree narrows. */
+@container (max-width: 720px) {
+  .step-browser__title {
+    display: none;
+  }
+  .step-kind {
+    padding: 0 8px;
+  }
+  .step-kind__long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .step-kind__short {
+    display: inline;
+  }
+  .step-browser__body {
+    grid-template-columns: minmax(160px, 42%) minmax(0, 1fr);
+  }
 }
 </style>

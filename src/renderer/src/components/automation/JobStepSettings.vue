@@ -600,7 +600,7 @@ const formatValue = computed(() =>
   margin-top: 2px;
 }
 .step-settings__section {
-  margin: 8px 0 0;
+  margin: 10px 0 6px;
   font-size: var(--nd-fs-xs);
   font-weight: 700;
   letter-spacing: 0.04em;

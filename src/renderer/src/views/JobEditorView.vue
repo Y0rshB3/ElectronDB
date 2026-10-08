@@ -75,6 +75,8 @@ const strict = ref(false)
 type Section = 'steps' | 'schedule' | 'options' | 'history'
 const section = ref<Section>('steps')
 const selectedStep = ref<string | null>(null)
+/** «Añadir pasos» folded to its header, to give the sequence the whole height. */
+const browserCollapsed = ref(false)
 const passwordInput = ref<{ focus: () => void } | null>(null)
 
 const serialized = computed(() => JSON.stringify(buildJobInput(draft.value)))
@@ -368,67 +370,69 @@ onMounted(load)
           >
         </div>
       </div>
-      <button
-        type="button"
-        class="je-head__chip nd-transition"
-        :class="{
-          'je-head__chip--on': draft.scheduleEnabled && !scheduleInvalid,
-          'je-head__chip--error': scheduleInvalid
-        }"
-        :title="`Programación: ${scheduleLabel}`"
-        :aria-label="`Programación: ${scheduleLabel}. Abrir la programación`"
-        data-test="job-schedule-pill"
-        @click="section = 'schedule'"
-      >
-        <v-icon
-          :icon="draft.scheduleEnabled ? 'mdi-calendar-clock' : 'mdi-calendar-remove-outline'"
-          size="14"
-          aria-hidden="true"
-        />
-        <span class="je-head__chip-text">{{ scheduleLabel }}</span>
-        <v-icon
-          v-if="draft.scheduleEnabled && draft.launchAgent"
-          icon="mdi-power-sleep"
-          size="13"
-          title="También con la app cerrada"
-          aria-hidden="true"
-        />
-      </button>
-      <button
-        v-if="lastRun"
-        type="button"
-        class="je-head__chip je-head__chip--run nd-transition"
-        :title="`Última ejecución: ${formatDate(lastRun.startedAt)}`"
-        :aria-label="`Última ejecución del ${formatDate(lastRun.startedAt)}. Abrir el historial`"
-        data-test="job-last-run"
-        @click="openLastRun"
-      >
-        <StatusPill :status="lastRun.status" />
-      </button>
-      <v-btn
-        size="small"
-        prepend-icon="mdi-play"
-        class="je-head__run"
-        variant="tonal"
-        :loading="runningNow"
-        :disabled="loading || !!loadError || !draft.tasks.length"
-        data-test="job-run"
-        @click="runNow"
-      >
-        Ejecutar ahora
-      </v-btn>
-      <v-btn
-        size="small"
-        prepend-icon="mdi-content-save-outline"
-        color="primary"
-        variant="flat"
-        :loading="saving"
-        :disabled="loading || !!loadError"
-        data-test="job-save"
-        @click="save"
-      >
-        Guardar
-      </v-btn>
+      <div class="je-head__actions">
+        <button
+          type="button"
+          class="je-head__chip nd-transition"
+          :class="{
+            'je-head__chip--on': draft.scheduleEnabled && !scheduleInvalid,
+            'je-head__chip--error': scheduleInvalid
+          }"
+          :title="`Programación: ${scheduleLabel}`"
+          :aria-label="`Programación: ${scheduleLabel}. Abrir la programación`"
+          data-test="job-schedule-pill"
+          @click="section = 'schedule'"
+        >
+          <v-icon
+            :icon="draft.scheduleEnabled ? 'mdi-calendar-clock' : 'mdi-calendar-remove-outline'"
+            size="14"
+            aria-hidden="true"
+          />
+          <span class="je-head__chip-text">{{ scheduleLabel }}</span>
+          <v-icon
+            v-if="draft.scheduleEnabled && draft.launchAgent"
+            icon="mdi-power-sleep"
+            size="13"
+            title="También con la app cerrada"
+            aria-hidden="true"
+          />
+        </button>
+        <button
+          v-if="lastRun"
+          type="button"
+          class="je-head__chip je-head__chip--run nd-transition"
+          :title="`Última ejecución: ${formatDate(lastRun.startedAt)}`"
+          :aria-label="`Última ejecución del ${formatDate(lastRun.startedAt)}. Abrir el historial`"
+          data-test="job-last-run"
+          @click="openLastRun"
+        >
+          <StatusPill :status="lastRun.status" />
+        </button>
+        <v-btn
+          size="small"
+          prepend-icon="mdi-play"
+          class="je-head__run"
+          variant="tonal"
+          :loading="runningNow"
+          :disabled="loading || !!loadError || !draft.tasks.length"
+          data-test="job-run"
+          @click="runNow"
+        >
+          Ejecutar ahora
+        </v-btn>
+        <v-btn
+          size="small"
+          prepend-icon="mdi-content-save-outline"
+          color="primary"
+          variant="flat"
+          :loading="saving"
+          :disabled="loading || !!loadError"
+          data-test="job-save"
+          @click="save"
+        >
+          Guardar
+        </v-btn>
+      </div>
     </header>
     <div
       v-if="loading"
@@ -505,8 +509,12 @@ onMounted(load)
               />
             </div>
           </section>
-          <div class="je-browser">
-            <JobStepBrowser :tasks="draft.tasks" @add="addSteps" />
+          <div class="je-browser" :class="{ 'je-browser--collapsed': browserCollapsed }">
+            <JobStepBrowser
+              v-model:collapsed="browserCollapsed"
+              :tasks="draft.tasks"
+              @add="addSteps"
+            />
           </div>
         </div>
         <div v-if="selectedStep" class="je-steps__panel">
@@ -727,8 +735,9 @@ onMounted(load)
 .je-head {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 8px 10px;
   min-height: 56px;
   padding: 6px 14px;
   border-bottom: 1px solid var(--nd-border);
@@ -747,14 +756,23 @@ onMounted(load)
   border: 1px solid rgba(var(--nd-accent-rgb), 0.25);
 }
 .je-head__identity {
-  min-width: 0;
-  flex: 1 1 200px;
+  min-width: 220px;
+  flex: 1 1 260px;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .je-head__name {
   max-width: 460px;
+  min-width: 180px;
+}
+.je-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
 }
 .je-head__name :deep(.v-field) {
   border-radius: var(--nd-radius-sm);
@@ -856,6 +874,8 @@ onMounted(load)
   padding: 4px 14px 0;
   border-bottom: 1px solid var(--nd-border);
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 .je-section {
   position: relative;
@@ -890,7 +910,7 @@ onMounted(load)
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px;
   background: var(--nd-accent-gradient-h);
@@ -967,9 +987,12 @@ onMounted(load)
 }
 .je-browser {
   flex: 0 0 auto;
-  height: clamp(250px, 46%, 400px);
+  height: clamp(220px, 46%, 400px);
   border-top: 1px solid var(--nd-border);
   background: var(--nd-bg-panel);
+}
+.je-browser--collapsed {
+  height: auto;
 }
 .je-steps__panel {
   min-height: 0;
@@ -1086,6 +1109,11 @@ onMounted(load)
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+}
+@container job-editor (max-width: 640px) {
+  .je-head__chip {
+    max-width: 170px;
+  }
 }
 @container job-editor (max-width: 760px) {
   .je-history {

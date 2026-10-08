@@ -24,6 +24,8 @@ export type StepKind = 'backup' | 'savedQuery' | 'sql' | 'restore'
 export interface StepKindMeta {
   value: StepKind
   label: string
+  /** Label of narrow editors. */
+  short: string
   icon: string
   /** One short line under the browser explaining what the kind adds. */
   hint: string
@@ -32,24 +34,28 @@ export interface StepKindMeta {
 export const STEP_KINDS: StepKindMeta[] = [
   {
     value: 'backup',
+    short: 'Copia',
     label: 'Copia de seguridad',
     icon: 'mdi-archive-outline',
     hint: 'Elige las bases de datos que la tarea copiará en cada ejecución.'
   },
   {
     value: 'savedQuery',
+    short: 'Consulta',
     label: 'Consulta guardada',
     icon: 'mdi-bookmark-outline',
     hint: 'Las consultas guardadas de la conexión. El paso guarda una copia del SQL: editar la consulta después no cambia la tarea.'
   },
   {
     value: 'sql',
+    short: 'SQL',
     label: 'SQL libre',
     icon: 'mdi-console-line',
     hint: 'Un paso con un editor SQL vacío en la base de datos elegida.'
   },
   {
     value: 'restore',
+    short: 'Restaurar',
     label: 'Restauración',
     icon: 'mdi-backup-restore',
     hint: 'Restaura la copia de un paso anterior o la última copia en disco de una base de datos. El destino se elige en los ajustes del paso.'
