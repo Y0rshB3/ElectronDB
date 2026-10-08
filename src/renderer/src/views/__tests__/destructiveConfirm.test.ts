@@ -485,6 +485,28 @@ describe.each(scenarios)('$name with confirmDestructiveEverywhere off', (scenari
   )
 })
 
+describe('drop messages name the object kind with its article', () => {
+  afterEach(() => localStorage.clear())
+
+  it.each([
+    ['tables', undefined, 'items', 'Se eliminará la tabla `shop`.`items` de forma permanente.'],
+    ['views', undefined, 'v_items', 'Se eliminará la vista `shop`.`v_items` de forma permanente.'],
+    ['functions', 'PROCEDURE', 'purge', 'Se eliminará el procedimiento `shop`.`purge` de forma permanente.'],
+    ['events', undefined, 'nightly', 'Se eliminará el evento `shop`.`nightly` de forma permanente.']
+  ] as const)('%s', async (group, subtype, name, message) => {
+    setupDom()
+    bridge()
+    prepare('local', { off: true })
+    void useObjectActions().dropObject(node({ group, subtype, name }))
+    await flushPromises()
+    const ui = useUiStore()
+    expect(ui.confirm.open).toBe(true)
+    expect(ui.confirm.message).toBe(message)
+    ui.answer(false)
+    await flushPromises()
+  })
+})
+
 describe.each(scenarios)('$name on a production connection', (scenario) => {
   let wrapper: Wrapper | undefined
   afterEach(() => {

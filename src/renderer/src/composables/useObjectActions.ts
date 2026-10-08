@@ -102,7 +102,7 @@ const LITE_TYPE_LABELS: Partial<Record<EngineObjectType, { label: string; articl
   table: { label: 'tabla', article: 'la tabla' },
   view: { label: 'vista', article: 'la vista' },
   index: { label: 'índice', article: 'el índice' },
-  trigger: { label: 'trigger', article: 'el trigger' }
+  trigger: { label: 'disparador', article: 'el disparador' }
 }
 
 /** «Mostrar en Finder» on macOS, the file manager elsewhere. */
@@ -150,7 +150,7 @@ export function useObjectActions() {
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
       title: `Eliminar ${OBJECT_TYPE_LABELS[type]}`,
-      message: `Se eliminará ${OBJECT_TYPE_LABELS[type]} ${qualified(node.schema, node.name)} de forma permanente.`,
+      message: `Se eliminará ${OBJECT_TYPE_WITH_ARTICLE[type]} ${qualified(node.schema, node.name)} de forma permanente.`,
       confirmText: 'Eliminar',
       destructive: {
         title: `¿Eliminar ${OBJECT_TYPE_WITH_ARTICLE[type]} «${node.name}»?`,
@@ -297,7 +297,7 @@ export function useObjectActions() {
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
       title: `Eliminar ${labels.label}`,
-      message: `Se eliminará ${labels.label} ${target} de forma permanente.`,
+      message: `Se eliminará ${labels.article} ${target} de forma permanente.`,
       confirmText: 'Eliminar',
       destructive: {
         title: `¿Eliminar ${labels.article} «${node.label}»?`,
@@ -386,7 +386,7 @@ export function useObjectActions() {
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
       title: 'Vaciar tabla',
-      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los triggers).`,
+      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los disparadores).`,
       details: sql,
       confirmText: 'Vaciar',
       destructive: {
@@ -793,7 +793,7 @@ export function useObjectActions() {
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
       title: `Eliminar ${labels.label}`,
-      message: `Se eliminará ${labels.label} ${node.schema}.${node.name} de forma permanente.`,
+      message: `Se eliminará ${labels.article} ${node.schema}.${node.name} de forma permanente.`,
       confirmText: 'Eliminar',
       destructive: {
         title: `¿Eliminar ${labels.article} «${node.name}»?`,
@@ -828,7 +828,7 @@ export function useObjectActions() {
     const ok = await confirmDestructive({
       connectionId: node.connectionId,
       title: 'Vaciar tabla',
-      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los triggers).`,
+      message: `Se borrarán todas las filas de ${node.schema}.${node.name} (DELETE: se ejecutan los disparadores).`,
       details: sql,
       confirmText: 'Vaciar',
       destructive: {
@@ -1012,7 +1012,7 @@ export function useObjectActions() {
         return [
           {
             key: 'new',
-            label: 'Nuevo trigger',
+            label: 'Nuevo disparador',
             icon: 'mdi-plus',
             action: () => ws.openDdlEditor(c, s, 'trigger', null)
           }
@@ -1096,7 +1096,7 @@ export function useObjectActions() {
     }
     items.push({
       key: 'open',
-      label: group === 'indexes' ? 'Ver DDL' : group === 'triggers' ? 'Editar trigger' : 'Abrir',
+      label: group === 'indexes' ? 'Ver DDL' : group === 'triggers' ? 'Editar disparador' : 'Abrir',
       icon: 'mdi-open-in-app',
       action: () => ws.openNode(node)
     })

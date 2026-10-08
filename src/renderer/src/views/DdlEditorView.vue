@@ -84,6 +84,8 @@ const typeWithArticle = computed(() =>
     ? 'la vista materializada'
     : OBJECT_TYPE_WITH_ARTICLE[objectType.value]
 )
+/** Grammatical gender of the object kind, for «Nueva vista» / «Vista … guardada». */
+const feminine = computed(() => typeWithArticle.value.startsWith('la '))
 const dirty = computed(() => sql.value !== loadedSql.value)
 const script = computed(() => {
   if (!sql.value.trim()) return ''
@@ -180,11 +182,11 @@ async function apply(): Promise<void> {
       ? rename || objectType.value === 'materialized_view' || objectType.value === 'trigger'
       : isLite.value || objectType.value !== 'view' || rename)
   const message = rename
-    ? `El nombre cambia: se creará ${typeLabel.value} "${newName}" y se eliminará "${objectName.value}". Lo que dependa del nombre anterior dejará de funcionar.`
+    ? `El nombre cambia: se creará ${typeWithArticle.value} "${newName}" y se eliminará "${objectName.value}". Lo que dependa del nombre anterior dejará de funcionar.`
     : replaces
       ? isLite.value
-        ? `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}" en una sola transacción: si la creación falla, no cambia nada.`
-        : `Se eliminará y volverá a crear ${typeLabel.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
+        ? `Se eliminará y volverá a crear ${typeWithArticle.value} "${objectName.value}" en una sola transacción: si la creación falla, no cambia nada.`
+        : `Se eliminará y volverá a crear ${typeWithArticle.value} "${objectName.value}". Si la creación falla, el objeto quedará eliminado; el SQL sigue en el editor para reintentar.`
       : 'Se ejecutará el siguiente SQL.'
   // DROP + CREATE of routines/events/triggers, renamed views, or DROPs written by the user.
   const drops = isPg.value
@@ -208,7 +210,7 @@ async function apply(): Promise<void> {
     : undefined
   const ok = await confirmDestructive({
     connectionId: connectionId.value,
-    title: objectName.value ? `Aplicar cambios en ${typeLabel.value}` : `Crear ${typeLabel.value}`,
+    title: objectName.value ? `Aplicar cambios en ${typeWithArticle.value}` : `Crear ${typeLabel.value}`,
     message,
     details: script.value,
     alwaysAsk: replaces,
@@ -242,7 +244,7 @@ async function apply(): Promise<void> {
       if (group) void refreshGroup(group)
     }
     notify.success(
-      `${typeLabel.value.charAt(0).toUpperCase()}${typeLabel.value.slice(1)} "${name ?? ''}" guardado`
+      `${typeLabel.value.charAt(0).toUpperCase()}${typeLabel.value.slice(1)} "${name ?? ''}" ${feminine.value ? 'guardada' : 'guardado'}`
     )
     if (name) await load()
     else loadedSql.value = sql.value
@@ -323,14 +325,14 @@ defineExpose({ sql, script, apply })
       <span class="nd-viewbar__spacer" />
       <span class="nd-status-pill" :class="{ 'nd-status-pill--accent': !objectName }">
         <v-icon icon="mdi-code-braces" size="13" />
-        {{ objectName ? typeLabel : `Nuevo ${typeLabel}` }}
+        {{ objectName ? typeLabel : `${feminine ? 'Nueva' : 'Nuevo'} ${typeLabel}` }}
       </span>
     </div>
 
     <EmptyState
       v-if="loadError"
       icon="mdi-alert-circle-outline"
-      :title="`No se pudo cargar ${typeLabel}`"
+      :title="`No se pudo cargar ${typeWithArticle}`"
       :description="loadError"
     >
       <v-btn variant="tonal" size="small" prepend-icon="mdi-refresh" @click="load"
