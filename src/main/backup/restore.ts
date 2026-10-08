@@ -240,6 +240,8 @@ interface SavedSessionState {
   timeZone: boolean
   /** MariaDB system_versioning_insert_history was turned on (history rows of a .vqb). */
   insertHistory?: boolean
+  /** End value of current versioned rows on this server (see currentRowEnd); null = unknown. */
+  currentEnd?: string | null
 }
 
 async function prepareSession(
@@ -287,6 +289,29 @@ async function allowHistoryInsert(
   } catch {
     return false
   }
+}
+
+/**
+ * End value MariaDB gives the current rows of a system-versioned table, as text in the session
+ * time zone: the largest TIMESTAMP, 2106-02-07 06:28:15.999999 UTC on MariaDB 11.5+ (where
+ * FROM_UNIXTIME reaches it), 2038-01-19 03:14:07.999999 UTC before. Asked once per restore.
+ */
+async function currentRowEnd(
+  session: MysqlSession,
+  saved: SavedSessionState
+): Promise<string | undefined> {
+  if (saved.currentEnd === undefined) {
+    try {
+      const rows = await session.query<{ e: unknown }>(
+        'SELECT CAST(COALESCE(FROM_UNIXTIME(4294967295.999999), FROM_UNIXTIME(2147483647.999999)) AS CHAR) AS e'
+      )
+      const e = rows[0]?.e
+      saved.currentEnd = e === null || e === undefined ? null : String(e)
+    } catch {
+      saved.currentEnd = null
+    }
+  }
+  return saved.currentEnd ?? undefined
 }
 
 export async function restoreBackup(
@@ -573,6 +598,7 @@ async function restoreTable(
     // columns; where the server cannot take history rows only the current ones go in.
     const versioned = reader.versioning?.(meta) ?? null
     const currentOnly = !!versioned && !(await allowHistoryInsert(session, saved))
+    const currentEnd = versioned && !currentOnly ? await currentRowEnd(session, saved) : undefined
     const fields = currentOnly ? meta.Fields.slice(0, -2) : meta.Fields
     const columns =
       fields.length > 0 ? ` (${fields.map((f) => session.escapeId(f)).join(', ')})` : ''
@@ -588,7 +614,7 @@ async function restoreTable(
         }
       },
       signal,
-      currentOnly ? { currentOnly: true } : undefined
+      currentOnly ? { currentOnly: true } : currentEnd ? { currentEnd } : undefined
     )
     await batcher.flush()
     inserted = batcher.inserted

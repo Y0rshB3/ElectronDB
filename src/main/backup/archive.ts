@@ -39,6 +39,13 @@ export interface RowsOptions {
    * the current rows, without the two period columns.
    */
   currentOnly?: boolean
+  /**
+   * System-versioned table restored with its history: the end value the target server gives
+   * current rows. Rows whose end is the archive's current end get this one instead, so they
+   * stay current on a server with another TIMESTAMP range (MariaDB 11.5+ ends them in 2106,
+   * earlier versions in 2038).
+   */
+  currentEnd?: string
 }
 
 export const NOT_A_BACKUP_MESSAGE =

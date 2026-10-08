@@ -69,6 +69,17 @@ describe('MariaDB objects in a MySQL .vqb', () => {
         await archive.rows(meta, (t) => void current.push(t), undefined, { currentOnly: true })
       ).toBe(1)
       expect(current).toEqual(['(1)'])
+      // Restored on a server with another TIMESTAMP range: current rows take its end value.
+      const older: string[] = []
+      const OLD_END = '2038-01-19 03:14:07.999999'
+      expect(
+        await archive.rows(meta, (t) => void older.push(t), undefined, { currentEnd: OLD_END })
+      ).toBe(3)
+      expect(older).toEqual([
+        "(1, '2026-01-01 00:00:00.000000', '2026-01-02 00:00:00.000000')",
+        `(1, '2026-01-02 00:00:00.000000', '${OLD_END}')`,
+        "(2, '2026-01-01 00:00:00.000000', '2026-01-03 00:00:00.000000')"
+      ])
     } finally {
       await archive.close()
     }

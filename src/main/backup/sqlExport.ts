@@ -766,9 +766,22 @@ async function exportTable(
         { name: period.start, columnType: 'timestamp(6)', extra: '' },
         { name: period.end, columnType: 'timestamp(6)', extra: '' }
       )
+    // Current rows are written without their end column: the importing server gives them its
+    // own end value (2106 on MariaDB 11.5+, 2038 before), so they stay current on either.
+    let currentEnd: string | null = null
+    if (period && columns.length > 0) {
+      const rows = await session.query<{ e: unknown }>(
+        `SELECT ${session.escapeId(period.end)} AS e FROM ${session.escapeId(table)} LIMIT 1`
+      )
+      currentEnd = rows.length ? text(rows[0].e) || null : null
+    }
     if (columns.length > 0) {
       const kinds: LiteralKind[] = columns.map((c) => literalKindOf(c.columnType))
       const prefix = `INSERT INTO ${id(table)} (${columns.map((c) => id(c.name)).join(', ')}) VALUES\n`
+      const currentPrefix = `INSERT INTO ${id(table)} (${columns
+        .slice(0, -1)
+        .map((c) => id(c.name))
+        .join(', ')}) VALUES\n`
       const select = `SELECT ${columns.map((c) => session.escapeId(c.name)).join(', ')} FROM ${session.escapeId(table)}${period ? ' FOR SYSTEM_TIME ALL' : ''}`
       await writer.write(
         heading(`Datos de la tabla ${id(table)}`) +
@@ -778,28 +791,35 @@ async function exportTable(
             : '') +
           `/*!40000 ALTER TABLE ${id(table)} DISABLE KEYS */;\n`
       )
-      let batch: string[] = []
-      let batchBytes = 0
-      const flush = async (): Promise<void> => {
-        if (!batch.length) return
-        const sql = `${prefix}${batch.join(',\n')};\n`
-        batch = []
-        batchBytes = 0
+      // Two batches: history rows (every column) and current rows (no end column).
+      const batches = [
+        { prefix, rows: [] as string[], bytes: 0 },
+        { prefix: currentPrefix, rows: [] as string[], bytes: 0 }
+      ]
+      const flush = async (batch: (typeof batches)[number]): Promise<void> => {
+        if (!batch.rows.length) return
+        const sql = `${batch.prefix}${batch.rows.join(',\n')};\n`
+        batch.rows = []
+        batch.bytes = 0
         await writer.write(sql)
       }
       const { rows } = await session.streamRows(select)
       try {
         for await (const row of rows as AsyncIterable<unknown[]>) {
           if (hooks.cancelled()) break
-          const tuple = renderTuple(row, kinds)
+          const current = currentEnd !== null && text(row[row.length - 1]) === currentEnd
+          const tuple = current
+            ? renderTuple(row.slice(0, -1), kinds.slice(0, -1))
+            : renderTuple(row, kinds)
+          const batch = batches[current ? 1 : 0]
           const size = Buffer.byteLength(tuple, 'utf8') + 2
           if (
-            batch.length &&
-            (batch.length >= INSERT_MAX_ROWS || batchBytes + size > INSERT_MAX_BYTES)
+            batch.rows.length &&
+            (batch.rows.length >= INSERT_MAX_ROWS || batch.bytes + size > INSERT_MAX_BYTES)
           )
-            await flush()
-          batch.push(tuple)
-          batchBytes += size
+            await flush(batch)
+          batch.rows.push(tuple)
+          batch.bytes += size
           count++
           if (count % ROW_PROGRESS_EVERY === 0) hooks.onRows(count)
         }
@@ -807,7 +827,7 @@ async function exportTable(
         if (!rows.destroyed) rows.destroy()
       }
       if (hooks.cancelled()) throw new Error(EXPORT_CANCELLED)
-      await flush()
+      for (const batch of batches) await flush(batch)
       await writer.write(
         `/*!40000 ALTER TABLE ${id(table)} ENABLE KEYS */;\n` +
           (period

@@ -1,12 +1,7 @@
 import type { Nb3Manifest, Nb3ObjectMeta } from '../nb3/format'
 import type { RestoreArchive, RowsOptions } from '../archive'
 import { engineMismatchMessage } from './engine'
-import type {
-  VqbObjectMeta,
-  VqbObjectType,
-  VqbSequenceState,
-  VqbSystemVersioning
-} from './format'
+import type { VqbObjectMeta, VqbObjectType, VqbSequenceState, VqbSystemVersioning } from './format'
 import { mysqlTuple } from './mysqlValues'
 import { VqbReader } from './reader'
 import { tagOf, type VqbValue } from './values'
@@ -127,6 +122,29 @@ export class VqbMysqlArchive implements RestoreArchive {
     const source = this.source(meta)
     if (!source) throw new Error(`Faltan los metadatos de ${meta.Name} en la copia`)
     const versioning = source.systemVersioning
+    const currentEnd = versioning?.currentEnd ?? null
+    if (
+      !options.currentOnly &&
+      versioning &&
+      currentEnd !== null &&
+      options.currentEnd &&
+      options.currentEnd !== currentEnd
+    ) {
+      // Current rows get the target server's end value; history rows keep theirs.
+      const targetEnd = options.currentEnd
+      return this.reader.rows(
+        source,
+        (row) =>
+          onRow(
+            mysqlTuple(
+              valueText(row[row.length - 1]) === currentEnd
+                ? [...row.slice(0, -1), { $dt: targetEnd }]
+                : row
+            )
+          ),
+        signal
+      )
+    }
     if (!options.currentOnly || !versioning)
       return this.reader.rows(source, (row) => onRow(mysqlTuple(row)), signal)
     // History rows are dropped; current rows lose their two period columns.

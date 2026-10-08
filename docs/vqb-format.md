@@ -287,7 +287,10 @@ Restore: write the value as a literal: numbers, `$bigint` and `$dec` unquoted, `
 `source.timeZone` first. A table with `systemVersioning` is inserted with
 `SET @@session.system_versioning_insert_history = 1` (MariaDB 10.11 and later), naming the period
 columns; a server without it gets the current rows only (rows whose last value equals
-`currentEnd`, without the two period columns).
+`currentEnd`, without the two period columns). `currentEnd` depends on the server that wrote the
+file (2106-02-07 06:28:15.999999 UTC on MariaDB 11.5 and later, 2038-01-19 03:14:07.999999 UTC
+before): rows whose end equals it are inserted with the restoring server's own end value for
+current rows, so they stay current (not out of range, not history) on either kind of server.
 
 ### PostgreSQL
 
