@@ -149,7 +149,10 @@ const dirty = computed(() =>
     ? JSON.stringify(draft.value) !== initialSnapshot.value
     : statements.value.length > 0 || preStatements.value.length > 0
 )
-const validation = computed(() => validateDraft(draft.value) ?? plan.value.problems[0] ?? null)
+const validation = computed(
+  () =>
+    validateDraft(draft.value, { typeOptional: isSqlite.value }) ?? plan.value.problems[0] ?? null
+)
 
 const charset = computed(
   () => charsets.value.find((c) => c.collations.includes(draft.value.collation))?.charset ?? null

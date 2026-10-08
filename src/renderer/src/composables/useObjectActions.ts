@@ -53,6 +53,11 @@ export function engineObjectTypeOf(node: TreeNode): EngineObjectType | null {
       return 'sequence'
     case 'types':
       return 'type'
+    // SQLite (MySQL and PostgreSQL have no such tree groups).
+    case 'indexes':
+      return 'index'
+    case 'triggers':
+      return 'trigger'
     default:
       return objectTypeOf(node)
   }

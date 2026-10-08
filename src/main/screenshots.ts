@@ -1317,6 +1317,97 @@ const ENGINE_STEPS: Step[] = [
 ]
 STEPS.push(...ENGINE_STEPS)
 
+/**
+ * SQLite (preview) screens (VORTAQ_SHOTS_ONLY=42): need the profile and files of
+ * scripts/seed-sqlite-shots.mjs (connection «Tienda (SQLite)» with an attached
+ * `archivo`, and «Inventario (importada)» whose path came from another computer).
+ */
+const LITE_ID = 'shot-lite'
+const SQLITE_STEPS: Step[] = [
+  {
+    name: '42a-sqlite-new-connection',
+    script: `
+      S.ui.openConnectionDialog(null, 'sqlite')
+      await H.waitFor('[data-test="sqlite-open-file"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    name: '42b-sqlite-connection-dialog',
+    script: `
+      S.ui.openConnectionDialog(S.connections.get('${LITE_ID}'))
+      await H.waitFor('[data-test="sqlite-path"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    name: '42c-sqlite-imported-path',
+    script: `
+      S.ui.openConnectionDialog(S.connections.get('shot-lite-import'))
+      await H.waitFor('[data-test="sqlite-path-review"]', 8000)
+      await H.sleep(700)`,
+    cleanup: `S.ui.connectionDialog = { ...S.ui.connectionDialog, open: false }`
+  },
+  {
+    name: '42d-sqlite-tree',
+    script: `
+      S.ui.toggleInfoPanel(true)
+      await S.tree.expand(S.tree.parse('c:${LITE_ID}'))
+      if (!S.connections.isOpen('${LITE_ID}')) throw new Error('could not open Tienda (SQLite)')
+      S.tree.setExpanded('s:${LITE_ID}:main', true)
+      S.tree.setExpanded('s:${LITE_ID}:archivo', true)
+      for (const g of ['tables', 'views', 'indexes', 'triggers'])
+        await S.tree.expand(S.tree.parse('g:${LITE_ID}:main:' + g))
+      S.tree.select('g:${LITE_ID}:main:tables')
+      S.workspace.showObjects()
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '42e-sqlite-query-transaction',
+    script: `
+      const sql = [
+        "BEGIN;",
+        "UPDATE pedidos SET estado = 'pagado' WHERE id = 2;",
+        "SELECT rowid, id, cliente_id, estado, total FROM pedidos ORDER BY id;"
+      ].join('\\n')
+      S.workspace.openQuery('${LITE_ID}', 'main', { sql, name: 'Cobrar pedido' })
+      await H.sleep(1200)
+      await H.click('[data-test="run"]', 10000)
+      await H.waitFor('[data-test="tx-status"]', 15000)
+      await H.sleep(900)`
+  },
+  {
+    name: '42f-sqlite-other-tab',
+    script: `
+      S.workspace.openQuery('${LITE_ID}', 'main', { sql: 'SELECT * FROM pedidos_pendientes;', name: 'Pendientes' })
+      await H.sleep(1200)
+      await H.click('[data-test="run"]', 10000)
+      await H.waitFor('[data-test="tx-elsewhere"]', 15000)
+      await H.sleep(900)`
+  },
+  {
+    name: '42h-sqlite-designer-rebuild',
+    script: `
+      S.workspace.openTableDesigner('${LITE_ID}', 'main', 'clientes')
+      await H.waitFor('[data-test="column-nullable-2"]', 15000)
+      await H.settle(S, 800)
+      // email: NULL -> NOT NULL needs the rebuild procedure.
+      await H.click('[data-test="column-nullable-2"]', 5000)
+      await H.waitFor('[data-test="rebuild-note"]', 8000)
+      await H.click('[data-test="tab-sql"]', 5000)
+      await H.waitFor('[data-test="sql-preview"]', 8000)
+      await H.sleep(900)`
+  },
+  {
+    name: '42g-sqlite-table-data',
+    script: `
+      S.workspace.openTableData('${LITE_ID}', 'main', 'clientes')
+      await H.waitFor('.v-window-item--active table tbody tr, table tbody tr', 15000).catch(() => null)
+      await H.settle(S, 1600)`
+  }
+]
+STEPS.push(...SQLITE_STEPS)
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }

@@ -10,6 +10,7 @@ import { errorMessage } from '@renderer/composables/useNotify'
 import { itemLabel, itemName, objectDetails, type DetailRow } from '@renderer/utils/objectColumns'
 import { ENVIRONMENT_LABELS, GROUP_ICONS, GROUP_LABELS } from '@renderer/utils/objectTypes'
 import { formatUptime } from '@renderer/utils/format'
+import { descriptorOf } from '@renderer/engines/capabilities'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
 
 const tree = useTreeStore()
@@ -31,7 +32,16 @@ const connectionRows = computed<DetailRow[]>(() => {
   const s = server.value
   const dash = (v: string | number | null | undefined): string =>
     v === null || v === undefined || v === '' ? '—' : String(v)
-  const notes = c.source ? `Importada de Navicat (${c.source.name})` : ''
+  const sourceApp: Record<string, string> = {
+    navicat: 'Navicat',
+    dbeaver: 'DBeaver',
+    workbench: 'MySQL Workbench'
+  }
+  const notes = c.source
+    ? `Importada de ${sourceApp[c.source.app] ?? c.source.app} (${c.source.name})`
+    : ''
+  // SQLite: a file, no server (host, port, user and uptime do not apply).
+  const hasServer = descriptorOf(c)?.capabilities.needsHost !== false
   return [
     { label: 'Perfil activo', value: ENVIRONMENT_LABELS[c.environment] ?? c.environment },
     {
@@ -42,14 +52,20 @@ const connectionRows = computed<DetailRow[]>(() => {
           ? '—'
           : 'Conexión cerrada'
     },
-    { label: 'Host', value: dash(c.host) },
-    { label: 'Puerto', value: dash(c.port) },
-    { label: 'Nombre de usuario', value: dash(c.username) },
+    ...(hasServer
+      ? [
+          { label: 'Host', value: dash(c.host) },
+          { label: 'Puerto', value: dash(c.port) },
+          { label: 'Nombre de usuario', value: dash(c.username) }
+        ]
+      : []),
     { label: 'Codificación', value: dash(s?.characterSet) },
     ...(c.ssh.enabled
       ? [{ label: 'Túnel SSH', value: `${c.ssh.username}@${c.ssh.host}:${c.ssh.port}` }]
       : []),
-    ...(s ? [{ label: 'Tiempo activo', value: dash(formatUptime(s.uptimeSeconds)) }] : []),
+    ...(s && hasServer
+      ? [{ label: 'Tiempo activo', value: dash(formatUptime(s.uptimeSeconds)) }]
+      : []),
     // Engine-neutral facts (PostgreSQL: initial database, session time zone, TLS…); MySQL sends none.
     ...(s?.details ?? []).map((d) => ({ label: d.label, value: dash(d.value) })),
     { label: 'Observaciones', value: dash(notes) }
@@ -117,6 +133,22 @@ const schemaInfo = computed(() => {
         { label: 'Propietario', value: info?.owner || '—' },
         { label: 'Comentario', value: info?.comment || '—' }
       ]
+    }
+  }
+  const config = connections.get(n.connectionId)
+  if (config?.engine === 'sqlite') {
+    // SQLite: main is the connection's file, the others are attachments (or temp).
+    const file =
+      n.schema === 'main'
+        ? config.sqlite?.filePath
+        : n.schema === 'temp'
+          ? 'Temporal (en memoria)'
+          : config.sqlite?.attached.find((a) => a.alias === n.schema)?.filePath ||
+            'Adjuntada desde el editor (esta sesión)'
+    return {
+      title: n.schema,
+      subtitle: n.schema === 'main' ? 'Base de datos principal' : 'Base de datos adjunta',
+      rows: [{ label: 'Archivo', value: file || '—' }]
     }
   }
   const db = (tree.databases[n.connectionId] ?? []).find((d) => d.name === n.schema)
