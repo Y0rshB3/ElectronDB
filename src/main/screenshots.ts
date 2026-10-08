@@ -1657,6 +1657,14 @@ const MONGO_STEPS: Step[] = [
       await H.settle(S, 1200)`
   },
   {
+    // Connection info panel: topology, member and the read preference in Spanish.
+    name: '43b2-mongo-info-panel',
+    script: `
+      S.ui.toggleInfoPanel(true)
+      S.tree.select('c:${MONGO_ID}')
+      await H.settle(S, 1500)`
+  },
+  {
     name: '43c-mongo-documents-grid',
     script: `
       S.workspace.openCollection('${MONGO_ID}', '${MONGO_DB}', 'clientes')
