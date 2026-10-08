@@ -45,9 +45,9 @@ describe('engine descriptors', () => {
     for (const id of ENGINE_IDS) expect(ENGINES[id].id).toBe(id)
   })
 
-  it('ships the MySQL and PostgreSQL drivers; every engine but MySQL is a preview', () => {
+  it('ships the MySQL, PostgreSQL and SQLite drivers; every engine but MySQL is a preview', () => {
     const available = ENGINE_IDS.filter((id) => ENGINES[id].available)
-    expect(available).toEqual(['mysql', 'postgresql'])
+    expect(available).toEqual(['mysql', 'postgresql', 'sqlite'])
     expect(ENGINES.mysql.capabilities.preview).toBe(false)
     for (const id of ENGINE_IDS.filter((e) => e !== 'mysql')) {
       expect(ENGINES[id].capabilities.preview).toBe(true)
@@ -112,6 +112,9 @@ describe('engine descriptors', () => {
     })
     expect(caps('sqlite')).toMatchObject({
       hierarchy: 'attached',
+      supportsBackupsVqb: true,
+      tabSessions: true,
+      cancel: 'kill-process',
       needsHost: false,
       passwordOptional: true,
       supportsSsh: false,
@@ -150,9 +153,9 @@ describe('engine helpers', () => {
     ).toThrow('Sin copias .nb3')
   })
 
-  it('offers PostgreSQL in the pickers only with previews on', () => {
+  it('offers PostgreSQL and SQLite in the pickers only with previews on', () => {
     expect(pickableEngines(false).map((e) => e.id)).toEqual(['mysql'])
-    expect(pickableEngines(true).map((e) => e.id)).toEqual(['mysql', 'postgresql'])
+    expect(pickableEngines(true).map((e) => e.id)).toEqual(['mysql', 'postgresql', 'sqlite'])
   })
 })
 

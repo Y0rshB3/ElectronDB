@@ -52,6 +52,7 @@ export function groupsFor(connection: EngineHolder): GroupKind[] {
     if (g === 'functions') return caps.routines
     if (g === 'sequences') return caps.sequences
     if (g === 'materializedViews') return caps.materializedViews
+    if (g === 'triggers') return caps.triggers
     return true
   })
 }

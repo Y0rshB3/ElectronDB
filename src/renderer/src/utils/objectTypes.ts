@@ -11,12 +11,22 @@ export type GroupKind =
   | 'materializedViews'
   | 'sequences'
   | 'types'
+  // SQLite (preview)
+  | 'indexes'
+  | 'triggers'
 
 /** MySQL's groups, in order (pinned against ENGINES.mysql.groups). */
 export const GROUPS: GroupKind[] = ['tables', 'views', 'functions', 'events', 'queries', 'backups']
 
-/** Every group this renderer can list (MySQL's plus the PostgreSQL ones). */
-export const ALL_GROUPS: GroupKind[] = [...GROUPS, 'materializedViews', 'sequences', 'types']
+/** Every group this renderer can list (MySQL's plus the PostgreSQL and SQLite ones). */
+export const ALL_GROUPS: GroupKind[] = [
+  ...GROUPS,
+  'materializedViews',
+  'sequences',
+  'types',
+  'indexes',
+  'triggers'
+]
 
 export const GROUP_LABELS: Record<GroupKind, string> = {
   tables: 'Tablas',
@@ -27,7 +37,9 @@ export const GROUP_LABELS: Record<GroupKind, string> = {
   backups: 'Copias de seguridad',
   materializedViews: 'Vistas materializadas',
   sequences: 'Secuencias',
-  types: 'Tipos'
+  types: 'Tipos',
+  indexes: 'Índices',
+  triggers: 'Triggers'
 }
 
 export const GROUP_ICONS: Record<GroupKind, string> = {
@@ -39,7 +51,9 @@ export const GROUP_ICONS: Record<GroupKind, string> = {
   backups: 'mdi-archive',
   materializedViews: 'mdi-table-sync',
   sequences: 'mdi-numeric',
-  types: 'mdi-shape-outline'
+  types: 'mdi-shape-outline',
+  indexes: 'mdi-sort-ascending',
+  triggers: 'mdi-flash-outline'
 }
 
 export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {

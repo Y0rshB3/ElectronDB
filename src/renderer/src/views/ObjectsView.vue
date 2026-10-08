@@ -224,7 +224,9 @@ const NEW_LABELS: Record<GroupKind, string> = {
   backups: 'Nueva copia de seguridad',
   materializedViews: 'Nueva vista materializada',
   sequences: 'Nueva secuencia',
-  types: 'Nuevo tipo'
+  types: 'Nuevo tipo',
+  indexes: 'Nuevo índice',
+  triggers: 'Nuevo trigger'
 }
 const newLabel = computed(() => (group.value ? NEW_LABELS[group.value] : 'Nueva base de datos'))
 

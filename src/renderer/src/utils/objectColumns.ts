@@ -222,7 +222,40 @@ export const GROUP_COLUMNS: Record<GroupKind, ObjectColumn<unknown>[]> = {
     col<ObjectSummary>({ key: 'detail', title: 'Definición', value: (o) => o.detail ?? '' }),
     col<ObjectSummary>({ key: 'owner', title: 'Propietario', value: (o) => o.owner ?? '' }),
     col<ObjectSummary>({ key: 'comment', title: 'Comentario', value: (o) => o.comment ?? '' })
+  ],
+  // SQLite (preview)
+  indexes: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({ key: 'table', title: 'Tabla', value: (o) => o.table ?? '' }),
+    col<ObjectSummary>({ key: 'kind', title: 'Tipo', value: (o) => o.kind ?? '' }),
+    col<ObjectSummary>({ key: 'detail', title: 'Columnas', value: (o) => o.detail ?? '' })
+  ],
+  triggers: [
+    col<ObjectSummary>({ key: 'name', title: 'Nombre', value: (o) => o.name }),
+    col<ObjectSummary>({ key: 'table', title: 'Tabla', value: (o) => o.table ?? '' }),
+    col<ObjectSummary>({
+      key: 'kind',
+      title: 'Cuándo',
+      value: (o) => o.kind ?? '',
+      display: (o) => (o.kind ?? '').toUpperCase()
+    })
   ]
+}
+
+/** SQLite columns: no sizes, dates, collations or definers in the catalog. */
+const SQLITE_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
+  tables: [
+    col<TableInfo>({ key: 'name', title: 'Nombre', value: (t) => t.name }),
+    col<TableInfo>({ key: 'engine', title: 'Tipo', value: (t) => t.engine ?? '' }),
+    col<TableInfo>({
+      key: 'autoIncrement',
+      title: 'Auto incremento',
+      align: 'end',
+      value: (t) => t.autoIncrement,
+      display: (t) => (t.autoIncrement === null ? '' : formatNumber(t.autoIncrement))
+    })
+  ],
+  views: [col<ViewInfo>({ key: 'name', title: 'Nombre', value: (v) => v.name })]
 }
 
 const TYPE_KIND_LABELS: Record<string, string> = {
@@ -298,6 +331,7 @@ const PG_GROUP_COLUMNS: Partial<Record<GroupKind, ObjectColumn<unknown>[]>> = {
 /** Columns of a group for a connection's engine (MySQL: GROUP_COLUMNS unchanged). */
 export function columnsFor(group: GroupKind, engine?: EngineId | null): ObjectColumn<unknown>[] {
   if (engine === 'postgresql') return PG_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
+  if (engine === 'sqlite') return SQLITE_GROUP_COLUMNS[group] ?? GROUP_COLUMNS[group]
   return GROUP_COLUMNS[group]
 }
 
@@ -488,6 +522,14 @@ export function objectDetails(group: GroupKind, item: unknown): DetailRow[] {
         row('Comentario', o.comment)
       ]
     }
+    case 'indexes': {
+      const o = item as ObjectSummary
+      return [row('Tabla', o.table), row('Tipo', o.kind), row('Columnas', o.detail)]
+    }
+    case 'triggers': {
+      const o = item as ObjectSummary
+      return [row('Tabla', o.table), row('Cuándo', (o.kind ?? '').toUpperCase())]
+    }
   }
 }
 
@@ -501,5 +543,7 @@ export const GROUP_SINGULAR: Record<GroupKind, string> = {
   backups: 'copia de seguridad',
   materializedViews: 'vista materializada',
   sequences: 'secuencia',
-  types: 'tipo'
+  types: 'tipo',
+  indexes: 'índice',
+  triggers: 'trigger'
 }

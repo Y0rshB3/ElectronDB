@@ -42,6 +42,9 @@ import type {
   SchemaInfo,
   SchemaRef,
   ServerInfo,
+  SqliteCopyResult,
+  SqliteMaintenanceAction,
+  SqliteMaintenanceResult,
   StartupNotice,
   TabSessionState,
   TableDataPage,
@@ -102,6 +105,11 @@ export interface IpcInvokeMap {
   'app:pickDirectory': { args: [title: string]; result: string | null }
   'app:pickFile': {
     args: [title: string, filters?: { name: string; extensions: string[] }[]]
+    result: string | null
+  }
+  /** Save dialog for a new file: the chosen path, or null. It creates nothing. */
+  'app:pickSaveFile': {
+    args: [title: string, defaultName: string, filters?: { name: string; extensions: string[] }[]]
     result: string | null
   }
   /** One-off messages for the user after start (e.g. passwords to type again after the rename). */
@@ -292,6 +300,31 @@ export interface IpcInvokeMap {
     result: { charset: string; defaultCollation: string; collations: string[] }[]
   }
 
+  /*
+   * SQLite files (P3). A connection is a database file: opening never creates
+   * one; only «Crear base de datos nueva» (sqlite:createFile) does.
+   */
+  /** Creates an empty SQLite database at `filePath` (refused when the file exists). */
+  'sqlite:createFile': {
+    args: [filePath: string]
+    result: { filePath: string; sqliteVersion: string }
+  }
+  /** «Reabrir en modo escritura»: reopens a read-only connection read-write for this session. */
+  'sqlite:reopenWritable': {
+    args: [connectionId: string, options?: WriteOptions]
+    result: ServerInfo
+  }
+  /** «Copiar archivo»: VACUUM INTO a new file (a consistent copy, refused when the target exists). */
+  'sqlite:copyFile': {
+    args: [connectionId: string, targetPath: string]
+    result: SqliteCopyResult
+  }
+  /** Integrity / quick / foreign key check (reads), VACUUM and optimize (writes under the guard). */
+  'sqlite:maintenance': {
+    args: [connectionId: string, action: SqliteMaintenanceAction, options?: WriteOptions]
+    result: SqliteMaintenanceResult
+  }
+
   'backups:list': { args: [connectionId: string, schema?: string | null]; result: BackupFile[] }
   /** An encrypted .vqb without `password` answers its locked header meta; a wrong password throws. */
   'backups:meta': { args: [path: string, password?: string | null]; result: BackupMeta }
@@ -464,6 +497,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'app:showInFolder',
   'app:pickDirectory',
   'app:pickFile',
+  'app:pickSaveFile',
   'app:startupNotices',
   'app:dismissStartupNotice',
   'app:openExternal',
@@ -524,6 +558,10 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'db:createDatabase',
   'db:dropDatabase',
   'db:charsets',
+  'sqlite:createFile',
+  'sqlite:reopenWritable',
+  'sqlite:copyFile',
+  'sqlite:maintenance',
   'backups:list',
   'backups:meta',
   'backups:objectDdl',

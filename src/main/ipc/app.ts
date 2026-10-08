@@ -42,6 +42,15 @@ export function registerAppHandlers(ctx: AppContext): void {
     const res = await dialog.showOpenDialog({ title, properties: ['openFile'], filters })
     return res.canceled ? null : (res.filePaths[0] ?? null)
   })
+  handle('app:pickSaveFile', async (title, defaultName, filters) => {
+    const res = await dialog.showSaveDialog({
+      title,
+      defaultPath: defaultName,
+      filters,
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    })
+    return res.canceled || !res.filePath ? null : res.filePath
+  })
   handle('app:startupNotices', () => [
     ...startupNotices(ctx.userDataPath),
     ...raisedNotices(ctx.userDataPath)

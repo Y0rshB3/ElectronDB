@@ -9,6 +9,8 @@ import { aboutPanelOptions } from './licenses'
 import { windowIconPath } from './windowOptions'
 import { quitVetoed, restoreQuitPrompt, vetoQuit } from './quitGuard'
 import { runProfileMigration, runSecretMigration } from './migration'
+import { setSqliteSpawner } from './sqlite/spawner'
+import { electronSqliteSpawner } from './sqlite/electronSpawner'
 import {
   SCREENSHOT_QUERY,
   SCREENSHOT_WINDOW,
@@ -57,6 +59,8 @@ app.whenReady().then(async () => {
   // them. Headless runs leave it to the next interactive start: macOS may ask
   // for keychain access and nobody would be there to answer.
   if (!runJobId) await runSecretMigration(ctx, { keychain: switches.legacyKeychain })
+  // SQLite connections run in utility processes (src/main/sqlite/worker.ts).
+  setSqliteSpawner(electronSqliteSpawner)
   registerAllHandlers(ctx)
 
   if (runJobId) {

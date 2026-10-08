@@ -1,6 +1,6 @@
 /**
  * Engine → driver registry. Drivers are imported lazily so an engine nobody
- * opens never loads its client library. MySQL and PostgreSQL ship drivers.
+ * opens never loads its client library. MySQL, PostgreSQL and SQLite ship drivers.
  */
 import { engineAvailabilityError } from '@shared/connectionValidation'
 import { engineOf } from '@shared/engines'
@@ -12,7 +12,8 @@ type DriverLoader = () => Promise<Driver>
 
 const LOADERS: Partial<Record<EngineId, DriverLoader>> = {
   mysql: () => import('../mysql/driver').then((m) => m.mysqlDriver),
-  postgresql: () => import('../postgres/driver').then((m) => m.postgresDriver)
+  postgresql: () => import('../postgres/driver').then((m) => m.postgresDriver),
+  sqlite: () => import('../sqlite/driver').then((m) => m.sqliteDriver)
 }
 
 /** True when this build has a driver for the engine. */

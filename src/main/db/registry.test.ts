@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mysqlDriver } from '../mysql/driver'
 import { postgresDriver } from '../postgres/driver'
+import { sqliteDriver } from '../sqlite/driver'
 import { DbUserError } from './errors'
 import { getDriver, hasDriver } from './registry'
 
@@ -15,10 +16,14 @@ describe('driver registry', () => {
     expect(await getDriver('postgresql')).toBe(postgresDriver)
   })
 
+  it('serves the SQLite driver (preview) for sqlite connections', async () => {
+    expect(hasDriver('sqlite')).toBe(true)
+    expect(await getDriver('sqlite')).toBe(sqliteDriver)
+  })
+
   it('refuses every engine without a driver in this build', async () => {
     const labels = {
       mariadb: 'MariaDB',
-      sqlite: 'SQLite',
       mongodb: 'MongoDB'
     } as const
     for (const [engine, label] of Object.entries(labels) as [keyof typeof labels, string][]) {

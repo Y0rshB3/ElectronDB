@@ -236,14 +236,15 @@ export const ENGINES: Readonly<Record<EngineId, EngineDescriptor>> = {
     defaultPort: 0,
     defaultUser: '',
     groups: ['tables', 'views', 'indexes', 'triggers', 'queries'],
-    available: false,
+    available: true,
     capabilities: {
       family: 'sql',
       hierarchy: 'attached',
       hasSchemas: false,
       hasUsers: false,
       supportsBackupsNb3: false,
-      supportsBackupsVqb: false,
+      // SQLite backups exist only as .vqb (plus the native file copy, VACUUM INTO).
+      supportsBackupsVqb: true,
       supportsAutomation: false,
       supportsSsh: false,
       supportsSsl: false,

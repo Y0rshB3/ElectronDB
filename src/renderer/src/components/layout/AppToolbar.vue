@@ -10,7 +10,7 @@ import { useTourStore } from '@renderer/stores/tour'
 import { useObjectsContext } from '@renderer/composables/useObjectsContext'
 import { useNotify } from '@renderer/composables/useNotify'
 import { runSafely } from '@renderer/utils/errors'
-import { descriptorOf } from '@renderer/engines/capabilities'
+import { descriptorOf, groupsFor } from '@renderer/engines/capabilities'
 import { pickableEngines } from '@shared/engines'
 import { useSettingsStore } from '@renderer/stores/settings'
 
@@ -63,6 +63,11 @@ const caps = computed(() => {
   const id = ws.currentConnectionId()
   return descriptorOf(id ? connections.get(id) : undefined)?.capabilities ?? null
 })
+/** Tree groups of that connection's engine (SQLite lists indexes and triggers). */
+const groups = computed(() => {
+  const id = ws.currentConnectionId()
+  return groupsFor(id ? connections.get(id) : undefined)
+})
 
 interface ToolbarMenuItem {
   label: string
@@ -101,6 +106,16 @@ const objectsMenu = computed<ToolbarMenuItem[]>(() => {
   const items: (ToolbarMenuItem | false)[] = [
     { label: 'Tablas', icon: 'mdi-table', action: () => ws.showGroup('tables') },
     { label: 'Vistas', icon: 'mdi-table-eye', action: () => ws.showGroup('views') },
+    groups.value.includes('indexes') && {
+      label: 'Índices',
+      icon: 'mdi-sort-ascending',
+      action: () => ws.showGroup('indexes')
+    },
+    groups.value.includes('triggers') && {
+      label: 'Triggers',
+      icon: 'mdi-flash-outline',
+      action: () => ws.showGroup('triggers')
+    },
     routines && {
       label: 'Funciones y procedimientos',
       icon: 'mdi-function-variant',

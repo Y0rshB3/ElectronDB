@@ -471,6 +471,11 @@ export interface TabSessionState {
   effectiveSchema: string | null
   /** Database the session is connected to (PostgreSQL). */
   database: string | null
+  /**
+   * SQLite: all query tabs share one handle, and another tab owns the open
+   * transaction (this tab sees its uncommitted changes and cannot write).
+   */
+  transactionElsewhere?: boolean
 }
 
 export interface UserInfo {
@@ -534,6 +539,12 @@ export interface QueryColumn {
   database?: string
   /** Why the column cannot be edited, when the driver knows. */
   readOnlyReason?: string
+  /**
+   * SQLite: why this one column cannot be edited (the rowid, a generated column)
+   * while the rest of the row can. Unlike readOnlyReason it does not make the
+   * whole result read-only.
+   */
+  locked?: string
 }
 
 export type CellValue = string | number | boolean | null
@@ -700,8 +711,22 @@ export interface TableDataPage {
 }
 
 export type RowChange =
-  | { kind: 'insert'; values: Record<string, CellValue> }
-  | { kind: 'update'; key: Record<string, CellValue>; values: Record<string, CellValue> }
+  | {
+      kind: 'insert'
+      values: Record<string, CellValue>
+      /** SQLite: storage class each value should keep (see `update`). */
+      storage?: Record<string, StorageClass>
+    }
+  | {
+      kind: 'update'
+      key: Record<string, CellValue>
+      values: Record<string, CellValue>
+      /**
+       * SQLite: storage class of each edited cell as loaded, so an edit keeps it
+       * (an INTEGER stays an integer and a BLOB a blob in an untyped column).
+       */
+      storage?: Record<string, StorageClass>
+    }
   | { kind: 'delete'; key: Record<string, CellValue> }
 
 export interface ApplyRowChangesResult {
@@ -712,6 +737,27 @@ export interface ApplyRowChangesResult {
    * (null for updates, deletes and inserts without a generated id).
    */
   insertIds?: (number | string | null)[]
+}
+
+/* ---------- SQLite (files) ---------- */
+
+/** Maintenance actions of a SQLite connection (menu of the connection / database). */
+export type SqliteMaintenanceAction =
+  'integrityCheck' | 'quickCheck' | 'foreignKeyCheck' | 'vacuum' | 'optimize'
+
+export interface SqliteMaintenanceResult {
+  /** integrity_check/quick_check answered "ok", foreign_key_check found nothing, VACUUM ended. */
+  ok: boolean
+  /** Problems found (integrity check lines, «tabla: N filas sin padre»…); empty when ok. */
+  messages: string[]
+  durationMs: number
+}
+
+/** «Copiar archivo» (VACUUM INTO). */
+export interface SqliteCopyResult {
+  path: string
+  sizeBytes: number
+  durationMs: number
 }
 
 /* ---------- Backups (.vqb and .nb3) ---------- */

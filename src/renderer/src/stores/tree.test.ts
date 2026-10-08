@@ -211,7 +211,7 @@ describe('tree groups follow the engine', () => {
       'types',
       'queries'
     ])
-    expect(tree.groupsOf('lite')).toEqual(['tables', 'views', 'queries'])
+    expect(tree.groupsOf('lite')).toEqual(['tables', 'views', 'indexes', 'triggers', 'queries'])
     expect(tree.groupsOf('odd')).toEqual([])
     const schema = tree.parse(nodeIds.schema('pg', 'app'))!
     expect(tree.childrenOf(schema).map((n) => n.group)).toEqual(tree.groupsOf('pg'))

@@ -51,6 +51,8 @@ export interface GroupItems {
   materializedViews: ObjectSummary[]
   sequences: ObjectSummary[]
   types: ObjectSummary[]
+  indexes: ObjectSummary[]
+  triggers: ObjectSummary[]
 }
 
 /*
@@ -325,6 +327,12 @@ export const useTreeStore = defineStore('tree', () => {
           break
         case 'types':
           items = await api.db.objects(connectionId, ref, 'type')
+          break
+        case 'indexes':
+          items = await api.db.objects(connectionId, ref, 'index')
+          break
+        case 'triggers':
+          items = await api.db.objects(connectionId, ref, 'trigger')
           break
       }
       groupItems.value = { ...groupItems.value, [key]: items }

@@ -197,9 +197,18 @@ describe('main toolbar per engine', () => {
         'Nuevo procedimiento'
       ]
     })
+    // SQLite: .vqb backups, no users; its tree also lists indexes and triggers.
     expect(await toolbarFor('lite')).toEqual({
-      buttons: ['connection', 'query', 'objects', 'automation', 'more', 'ai', 'settings'],
-      objects: ['Tablas', 'Vistas', 'Consultas guardadas', 'Nueva tabla', 'Nueva vista']
+      buttons: ['connection', 'query', 'objects', 'backup', 'automation', 'more', 'ai', 'settings'],
+      objects: [
+        'Tablas',
+        'Vistas',
+        'Índices',
+        'Triggers',
+        'Consultas guardadas',
+        'Nueva tabla',
+        'Nueva vista'
+      ]
     })
   })
 })
@@ -209,8 +218,8 @@ describe('backup and job pickers', () => {
 
   it('only offer connections whose engine supports them', () => {
     const all = useConnectionsStore().sorted
-    // PostgreSQL has .vqb backups (no .nb3, no automation).
-    expect(backupConnections(all).map((c) => c.id)).toEqual(['my', 'pg'])
+    // PostgreSQL and SQLite have .vqb backups (no .nb3, no automation).
+    expect(backupConnections(all).map((c) => c.id)).toEqual(['my', 'pg', 'lite'])
     expect(automationConnections(all).map((c) => c.id)).toEqual(['my'])
     // The default restore target is the first *backup-capable* local connection.
     expect(findLocalConnection(backupConnections(all))?.id).toBe('my')

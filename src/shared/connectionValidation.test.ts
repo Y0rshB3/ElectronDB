@@ -96,8 +96,9 @@ describe('engine availability', () => {
     expect(engineAvailabilityError({ engine: 'mariadb' })).toBe(
       'MariaDB todavía no está disponible en esta versión de Vortaq.'
     )
+    // SQLite ships a driver (preview) since 0.2.0: a file is required instead.
     expect(connectionSaveError(input({ engine: 'sqlite' }))).toBe(
-      'SQLite todavía no está disponible en esta versión de Vortaq.'
+      'SQLite: selecciona el archivo de la base de datos.'
     )
     expect(connectionFormErrors(input({ engine: 'mongodb' }))).toEqual([
       'MongoDB todavía no está disponible en esta versión de Vortaq.'

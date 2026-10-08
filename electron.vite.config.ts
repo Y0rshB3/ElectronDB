@@ -11,7 +11,13 @@ export default defineConfig({
       alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main') }
     },
     build: {
-      rollupOptions: { input: { index: resolve('src/main/index.ts') } }
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          // SQLite utility process (utilityProcess.fork of out/main/sqliteWorker.js).
+          sqliteWorker: resolve('src/main/sqlite/worker.ts')
+        }
+      }
     }
   },
   preload: {
