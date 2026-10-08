@@ -166,17 +166,20 @@ export class MongoDriverConnection implements DocumentDriverConnection {
       // serverStatus needs the clusterMonitor role: the panel shows zeros without it.
     }
     const mongo = mongoOf(this.config)
+    // Short labels and values: the info panel gives them a narrow column.
     const details = [
       { label: 'Topología', value: topologyLabel(this.topology) },
-      { label: 'Miembro', value: roleLabel(this.memberRole) },
-      { label: 'Base de datos predeterminada', value: this.defaultDatabase },
-      { label: 'Preferencia de lectura', value: mongo.readPreference },
+      ...(this.topology === 'standalone'
+        ? []
+        : [{ label: 'Miembro', value: roleLabel(this.memberRole) }]),
+      { label: 'BD por defecto', value: this.defaultDatabase },
+      { label: 'Lectura', value: mongo.readPreference },
       { label: 'Cifrado', value: this.tls ? 'TLS' : 'sin cifrar' },
       ...(this.config.ssh.enabled ? [{ label: 'Túnel SSH', value: this.config.ssh.host }] : [])
     ]
     return {
       version: this.serverVersion,
-      versionComment: `MongoDB ${this.serverVersion}`,
+      versionComment: '',
       host: this.config.host,
       port: this.config.port,
       username: this.config.username,

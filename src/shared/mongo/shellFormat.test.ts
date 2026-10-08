@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import parseShell from '@mongodb-js/shell-bson-parser'
+import { parse as parseShell } from '@mongodb-js/shell-bson-parser'
 import {
   Binary,
   BSONRegExp,

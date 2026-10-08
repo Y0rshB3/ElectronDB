@@ -8,7 +8,7 @@
  * Parse errors are shown to the user but never logged: their text can quote
  * what the user typed (a filter value).
  */
-import parseShell from '@mongodb-js/shell-bson-parser'
+import { parse as parseShell } from '@mongodb-js/shell-bson-parser'
 import { EJSON, type Document } from 'bson'
 import {
   LARGE_VALUE_KEY,
