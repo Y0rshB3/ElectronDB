@@ -6,6 +6,7 @@ import {
   isMariaDbSession,
   jsonColumnsFromChecks,
   listMariaDbSequences,
+  replaceSafetyRefusal,
   skippedFromTableTypes,
   unquoteMariaDbDefault
 } from './mariadb'
@@ -153,5 +154,29 @@ describe('MariaDB engine helpers (P5)', () => {
       { name: 's2', type: 'sequence', schema: 'db', detail: null, comment: undefined }
     ])
     expect(calls[0]).toBe(MARIADB_SEQUENCES_SQL)
+  })
+})
+
+describe('replaceSafetyRefusal', () => {
+  const session = (version: string, rows: { name: string; type: string }[]) => ({
+    serverVersion: version,
+    query: async <T>(): Promise<T[]> => rows as T[]
+  })
+
+  it('refuses a REPLACE whose safety copy would leave MariaDB objects out', async () => {
+    const refusal = await replaceSafetyRefusal(
+      session('11.8.9-MariaDB', [{ name: 'seq', type: 'SEQUENCE' }]),
+      'tienda'
+    )
+    expect(refusal).toContain('No se reemplaza «tienda»')
+    expect(refusal).toContain('1 secuencia')
+    expect(refusal).toContain('Desactiva la copia previa')
+  })
+
+  it('allows it on MySQL servers and when nothing would be left out', async () => {
+    expect(
+      await replaceSafetyRefusal(session('8.4.3', [{ name: 's', type: 'SEQUENCE' }]), 'x')
+    ).toBeNull()
+    expect(await replaceSafetyRefusal(session('11.8.9-MariaDB', []), 'x')).toBeNull()
   })
 })

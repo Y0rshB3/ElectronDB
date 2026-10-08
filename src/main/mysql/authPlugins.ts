@@ -72,8 +72,9 @@ export function ed25519Response(password: string, scramble: Uint8Array): Uint8Ar
   // The base point has order L, so the clamped scalar can be reduced mod L.
   const s = Fn.create(leBytesToBigInt(head))
   const publicKey = Point.BASE.multiply(s).toBytes()
-  const r = Fn.create(leBytesToBigInt(sha512(concat(h.subarray(32), message))))
-  const R = Point.BASE.multiply(r === 0n ? 1n : r).toBytes()
+  // r = 0 (probability ~2^-252) cannot be multiplied by noble; 1 keeps R and S consistent.
+  const r = Fn.create(leBytesToBigInt(sha512(concat(h.subarray(32), message)))) || 1n
+  const R = Point.BASE.multiply(r).toBytes()
   const k = Fn.create(leBytesToBigInt(sha512(concat(R, publicKey, message))))
   const S = Fn.create(k * s + r)
   return concat(R, bigIntToLeBytes(S, 32))

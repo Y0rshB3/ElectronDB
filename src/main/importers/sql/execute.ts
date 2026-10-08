@@ -8,6 +8,7 @@ import {
   type SqlDumpImportResult
 } from '@shared/importers'
 import { isSystemSchema, systemSchemaRefusal } from '@shared/restoreTask'
+import { replaceSafetyRefusal } from '../../mysql/mariadb'
 import type { BackupCreateOptions, ConnectionConfig, ProgressDetail } from '@shared/types'
 import type { BackupService, ProgressReporter } from '../../backup/index'
 import {
@@ -194,6 +195,9 @@ export async function importSqlDump(
     if (intoSchema && options.replaceSchema && target) {
       const existing = await schemaCharset(session, target)
       if (existing && options.safetyBackup !== false) {
+        // MariaDB: a database whose copy would leave objects out is never dropped behind it.
+        const refusal = await replaceSafetyRefusal(session, target).catch(() => null)
+        if (refusal) throw new Error(refusal)
         const backupOptions: BackupCreateOptions = {
           connectionId: options.connectionId,
           schema: target,

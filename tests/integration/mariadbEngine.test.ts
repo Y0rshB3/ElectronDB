@@ -25,6 +25,7 @@ import { ConnectionsRepo, JobsRepo, RunsRepo, SettingsRepo } from '@main/storage
 import { ConnectionManager } from '@main/db/manager'
 import { executeScript } from '@main/mysql/query'
 import * as introspect from '@main/mysql/introspect'
+import { replaceSafetyRefusal } from '@main/mysql/mariadb'
 import { assertScriptAllowed } from '@main/ipc/productionGuard'
 import {
   mariadbBuildAlter,
@@ -211,6 +212,15 @@ describeServer(MARIADB_TARGET, 'MariaDB engine (integration)', (url) => {
       const utf8mb4 = (await introspect.listCharsets(s)).find((c) => c.charset === 'utf8mb4')
       expect(utf8mb4?.collations).toContain(utf8mb4?.defaultCollation)
       expect(utf8mb4?.collations).toContain('utf8mb4_uca1400_ai_ci')
+    })
+  })
+
+  it('refuses to replace a database whose safety copy would leave its sequences out', async () => {
+    await withRoot(async (s) => {
+      const refusal = await replaceSafetyRefusal(s, SCHEMA)
+      expect(refusal).toContain(`No se reemplaza «${SCHEMA}»`)
+      expect(refusal).toMatch(/seq_facturas/)
+      expect(refusal).toMatch(/precios/)
     })
   })
 

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import golden from './golden/mysql.json'
 import { mysqlDialect } from './mysql'
-import { MARIADB_LEX, analyzeWrites, isObviousWrite, mariadbDialect, splitStatements } from './mariadb'
+import {
+  MARIADB_LEX,
+  analyzeWrites,
+  isObviousWrite,
+  mariadbDialect,
+  splitStatements
+} from './mariadb'
 
 const MARIA_CORPUS = [
   'SELECT NEXTVAL(s)',
@@ -33,7 +39,17 @@ const MARIA_CORPUS = [
   '((SELECT 1))',
   'EXECUTE IMMEDIATE "DELETE FROM t"',
   'BACKUP STAGE START',
-  'SELECT JSON_VALUE(doc, "$.a") FROM t'
+  'SELECT JSON_VALUE(doc, "$.a") FROM t',
+  'SELECT s.nextval FROM dual',
+  'SELECT s.currval FROM dual',
+  'PREPARE st FROM @q',
+  'EXECUTE st',
+  'BEGIN NOT ATOMIC SELECT 1; END',
+  'BEGIN',
+  'SET GLOBAL max_connections = 10',
+  'SET SESSION sql_mode = "ORACLE"',
+  'FLUSH PRIVILEGES',
+  'DO 1'
 ]
 
 describe('MariaDB dialect', () => {
@@ -73,7 +89,14 @@ describe('MariaDB dialect', () => {
       'select next value for s',
       '/*M!100100 DROP TABLE t */',
       'SET STATEMENT max_statement_time=1 FOR DELETE FROM t',
-      '(DELETE FROM t)'
+      '(DELETE FROM t)',
+      'SELECT s.nextval FROM dual',
+      "EXECUTE IMMEDIATE 'DELETE FROM t'",
+      'PREPARE st FROM @q',
+      'BEGIN NOT ATOMIC DELETE FROM t; END',
+      'SET GLOBAL max_connections = 10',
+      'FLUSH TABLES',
+      'DO RELEASE_LOCK("x")'
     ]) {
       expect(isObviousWrite(sql), sql).toBe(true)
       expect(analyzeWrites(sql).writes, sql).toBe(true)

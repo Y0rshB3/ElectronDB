@@ -240,9 +240,12 @@ export function registerDbHandlers(ctx: AppContext): void {
       return applyRowChanges(s, db, table, changes, binary)
     })
   })
-  dbHandle('db:execute', (id, sql, options) => {
+  dbHandle('db:execute', async (id, sql, options) => {
     if (isPg(id)) return pg.execute(id, sql, options)
     if (isLite(id)) return lite.execute(id, sql, options)
+    // Open first: a `mysql` connection whose server is MariaDB becomes `mariadb` when it opens,
+    // and the guard must split and classify with the dialect that will run the script.
+    if (!manager.isOpen(id) && ctx.connections.get(id)?.engine === 'mysql') await manager.open(id)
     assertScriptAllowed(ctx, id, sql, options)
     const schema = options?.schema
     const mysqlOptions =

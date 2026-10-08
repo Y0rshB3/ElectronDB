@@ -11,6 +11,7 @@ import { SAFETY_BACKUP_LABEL, isSystemSchema, systemSchemaRefusal } from '@share
 import type { BackupCreateResult, BackupMeta, ConnectionConfig, RestoreResult } from '@shared/types'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import { describeError } from '../mysql/errors'
+import { replaceSafetyRefusal } from '../mysql/mariadb'
 import type { MysqlSession, SessionFactory } from '../mysql/types'
 import type { BackupService, ProgressReporter } from './index'
 import { metaNeedsPassword, vqbCharset } from './archive'
@@ -357,6 +358,9 @@ export async function replaceSchemaFromBackup(
       say(`  Copia previa desactivada: «${target}» se reemplaza sin copia`)
     } else {
       const label = `Copia previa de ${target}`
+      // MariaDB: a database whose copy would leave objects out is never dropped behind it.
+      const refusal = await replaceSafetyRefusal(session, target).catch(() => null)
+      if (refusal) throw new Error(`${refusal} ${keep}`)
       try {
         safety = await deps.backups.create(
           {

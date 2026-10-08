@@ -55,7 +55,8 @@ function asMysqlComments(sql: string): string {
   return sql.split(MARIA_COMMENT).join('/*!')
 }
 
-const SEQUENCE_WRITE = /\b(NEXTVAL|SETVAL)\s*\(|\bNEXT\s+VALUE\s+FOR\b/i
+// Also Oracle mode's pseudo-columns (`SET sql_mode='ORACLE'; SELECT s.nextval FROM dual`).
+const SEQUENCE_WRITE = /\b(NEXTVAL|SETVAL)\s*\(|\bNEXT\s+VALUE\s+FOR\b|\.\s*(NEXTVAL|SETVAL)\b/i
 const SEQUENCE_REASON = 'Secuencia (NEXTVAL/SETVAL)'
 
 /** Statements of a script with comments dropped, literals emptied and executable comments unwrapped. */
@@ -72,6 +73,14 @@ export function analyzeWrites(sql: string): WriteCheck {
 }
 
 const SET_STATEMENT = /^\s*SET\s+STATEMENT\b/i
+
+/**
+ * Leading words main also refuses on MariaDB (the renderer already asks for
+ * them, since none is provably read-only): dynamic SQL, anonymous compound
+ * blocks, server-wide settings and maintenance.
+ */
+const MARIADB_WRITE_LEADS =
+  /^(EXECUTE|PREPARE|DO|FLUSH|BEGIN\s+NOT\s+ATOMIC|SET\s+(GLOBAL\b|@@GLOBAL\.|PASSWORD\b|ROLE\b|DEFAULT\s+ROLE\b))/i
 
 /**
  * Inner statement of `SET STATEMENT a=1, b='x' FOR <statement>` (already
@@ -93,7 +102,7 @@ export function isObviousWrite(statement: string): boolean {
   for (const normalized of normalizedStatements(statement)) {
     const text = normalized.replace(/^[\s(]+/, '')
     if (mysqlIsObviousWrite(text)) return true
-    if (SEQUENCE_WRITE.test(text)) return true
+    if (SEQUENCE_WRITE.test(text) || MARIADB_WRITE_LEADS.test(text)) return true
     const inner = setStatementInner(text)
     if (inner !== null && isObviousWrite(inner)) return true
   }

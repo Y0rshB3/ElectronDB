@@ -118,6 +118,25 @@ export function skippedFromTableTypes(
 }
 
 /**
+ * Refusal of a REPLACE whose safety copy would leave MariaDB objects out
+ * (sequences, system-versioned tables): dropping the database would lose
+ * them for good. null on MySQL servers or when nothing would be left out.
+ */
+export async function replaceSafetyRefusal(
+  session: { serverVersion?: string; query<T>(sql: string, params?: unknown[]): Promise<T[]> },
+  schema: string
+): Promise<string | null> {
+  if (!isMariaDbSession(session)) return null
+  const rows = await session.query<{ name: unknown; type: unknown }>(MARIADB_SKIPPED_OBJECTS_SQL, [
+    schema
+  ])
+  const skipped = describeSkippedObjects(skippedFromTableTypes(rows))
+  return skipped
+    ? `No se reemplaza «${schema}»: su copia previa no podría guardarlo todo. ${skipped} Desactiva la copia previa solo si de verdad quieres reemplazarla sin ellos.`
+    : null
+}
+
+/**
  * "La copia no incluye 1 tabla versionada y 2 secuencias: a, s1, s2" (names
  * only, never data); null when nothing is skipped.
  */
