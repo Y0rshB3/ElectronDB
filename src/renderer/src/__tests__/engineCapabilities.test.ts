@@ -104,6 +104,75 @@ describe('context menus per engine', () => {
     expect(table).not.toContain('truncate')
   })
 
+  it('SQLite: file and maintenance entries, per-group menus, no database drop', async () => {
+    const tree = useTreeStore()
+    const { actionsFor } = useObjectActions()
+    const connections = useConnectionsStore()
+    await connections.open('lite')
+    expect(keys(actionsFor(tree.parse(nodeIds.connection('lite'))!))).toEqual([
+      'close',
+      'edit',
+      'query',
+      'backups',
+      'showFile',
+      'copyFile',
+      'integrity',
+      'fkCheck',
+      'vacuum',
+      'refresh',
+      'delete'
+    ])
+    // A read-only file offers «Reabrir en modo escritura» and no VACUUM.
+    connections.setServerInfo(
+      'lite',
+      makeServerInfo({
+        runtime: {
+          flavor: 'sqlite',
+          versionNumber: 3053004,
+          transactions: true,
+          returning: 'all',
+          readOnly: true
+        }
+      })
+    )
+    const ro = actionsFor(tree.parse(nodeIds.connection('lite'))!)
+    expect(keys(ro)).toContain('reopenRw')
+    expect(ro.find((a) => a.key === 'vacuum')?.disabled).toBe(true)
+    expect(keys(actionsFor(tree.parse(nodeIds.schema('lite', 'main'))!))).toEqual([
+      'query',
+      'table',
+      'backup',
+      'backups',
+      'refresh'
+    ])
+    expect(keys(actionsFor(tree.parse(nodeIds.group('lite', 'main', 'indexes'))!))).toEqual([
+      'new',
+      'refresh'
+    ])
+    expect(keys(actionsFor(tree.parse(nodeIds.object('lite', 'main', 'tables', 't'))!))).toEqual([
+      'open',
+      'design',
+      'new',
+      'copy',
+      'ddl',
+      'empty',
+      'delete',
+      'refresh'
+    ])
+    expect(keys(actionsFor(tree.parse(nodeIds.object('lite', 'main', 'views', 'v'))!))).toEqual([
+      'open',
+      'design',
+      'new',
+      'copy',
+      'ddl',
+      'delete',
+      'refresh'
+    ])
+    expect(
+      keys(actionsFor(tree.parse(nodeIds.object('lite', 'main', 'triggers', 'trg'))!))
+    ).toEqual(['open', 'new', 'copy', 'ddl', 'delete', 'refresh'])
+  })
+
   it('unknown engine: only entries that need no capability', () => {
     const tree = useTreeStore()
     const { actionsFor } = useObjectActions()

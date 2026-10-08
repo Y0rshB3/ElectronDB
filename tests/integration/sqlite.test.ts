@@ -271,6 +271,19 @@ describe('SQLite driver (integration, real files)', () => {
       primaryKey: true,
       locked: 'rowid'
     })
+    const rowidSource = resultSource(withRowid.resultSet!.columns, withRowid.sql, 'sqlite')
+    expect(rowidSource.ok).toBe(true)
+    const bookStructure = await lite.tableStructure(id, 'main', 'book')
+    const editable = rowidSource.ok
+      ? decideEditability(
+          withRowid.resultSet!.columns,
+          rowidSource.source,
+          bookStructure,
+          withRowid.resultSet!.rows,
+          { aliasMetadata: false, keyFromColumns: true }
+        )
+      : null
+    expect(editable).toMatchObject({ editable: true, primaryKey: ['rowid'], table: 'book' })
     // Views report the base table: the FROM target check refuses them.
     const [view] = ok(await exec('SELECT * FROM v_books'))
     const viewSource = resultSource(view.resultSet!.columns, view.sql, 'sqlite')

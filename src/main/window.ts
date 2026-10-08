@@ -58,8 +58,53 @@ export function createMainWindow(options: MainWindowOptions = {}): BrowserWindow
 }
 
 /**
+ * Renderer-side SQLite check of the smoke run, through the real IPC bridge and
+ * the SQLite utility process: create a file in the (scratch) profile, open a
+ * connection, run a script, cancel a runaway CTE (must end within a second,
+ * killing and reopening the worker) and read again.
+ */
+const SQLITE_SMOKE = `async () => {
+  const out = {}
+  try {
+    const invoke = window.vortaq.invoke
+    const info = await invoke('app:info')
+    const sep = info.platform === 'win32' ? '\\\\' : '/'
+    const file = info.userDataPath + sep + 'smoke-' + Date.now() + '.db'
+    out.version = (await invoke('sqlite:createFile', file)).sqliteVersion
+    const conn = await invoke('connections:save', {
+      name: 'Smoke SQLite', color: null, environment: 'local', host: '', port: 0, username: '',
+      authMode: 'none', savePassword: false, customDatabases: [], initialQueries: '',
+      ssh: { enabled: false, host: '', port: 22, username: '', authType: 'password', savePassword: false },
+      ssl: { enabled: false, verifyServer: false }, backupDir: '', extraBackupDirs: [],
+      engine: 'sqlite',
+      sqlite: { filePath: file, readOnly: false, foreignKeys: true, attached: [], busyTimeoutMs: 5000 }
+    })
+    await invoke('connections:open', conn.id)
+    const first = await invoke('db:execute', conn.id, 'CREATE TABLE t (x); INSERT INTO t VALUES (1), (2); SELECT count(*) FROM t', { sessionKey: 'smoke' })
+    out.count = first[2] && first[2].resultSet ? first[2].resultSet.rows[0][0] : null
+    const running = invoke('db:execute', conn.id, 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c', { sessionKey: 'smoke', executionId: 'smoke-cancel' })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const started = performance.now()
+    out.cancelled = await invoke('db:cancel', conn.id, 'smoke-cancel')
+    const cancelled = await running
+    out.cancelMs = Math.round(performance.now() - started)
+    out.cancelError = cancelled[0] ? cancelled[0].error : null
+    const again = await invoke('db:execute', conn.id, 'SELECT count(*) FROM t', { sessionKey: 'smoke' })
+    out.afterCancel = again[0] && again[0].resultSet ? again[0].resultSet.rows[0][0] : null
+    await invoke('connections:close', conn.id)
+    await invoke('connections:delete', conn.id)
+    out.ok = out.count === 2 && out.cancelled === true && out.cancelMs < 1000 && out.afterCancel === 2
+  } catch (e) {
+    out.error = String(e && e.message)
+    out.ok = false
+  }
+  return out
+}`
+
+/**
  * VORTAQ_SMOKE=1: records renderer console warnings/errors and load failures,
- * waits for the renderer to finish loading and mount, prints one
+ * waits for the renderer to finish loading and mount, runs the SQLite check
+ * (SQLITE_SMOKE), prints one
  * `[smoke] {json}` line to stdout and exits (0 = clean, 1 = problems).
  */
 export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
@@ -70,6 +115,8 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
     const ipc = (result.ipc ?? {}) as Record<string, string>
     for (const [channel, status] of Object.entries(ipc))
       if (status !== 'ok') problems.push(`ipc ${channel}: ${short(status)}`)
+    const sqlite = result.sqlite as { ok?: boolean } | undefined
+    if (sqlite && sqlite.ok !== true) problems.push(`sqlite: ${short(JSON.stringify(sqlite))}`)
     const ok = problems.length === 0 && result.mounted === true && result.bridge === true
     console.log(`[smoke] ${JSON.stringify({ ok, ...result, problems })}`)
     app.exit(ok ? 0 : 1)
@@ -98,7 +145,7 @@ export function watchSmoke(win: BrowserWindow, settleMs = 4000): void {
             for (const channel of ['app:info', 'app:startupNotices', 'settings:get', 'connections:list', 'jobs:list', 'jobs:runs', 'updates:check', 'ai:providers']) {
               try { await window.vortaq.invoke(channel); ipc[channel] = 'ok' } catch (e) { ipc[channel] = String(e && e.message) }
             }
-            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.vortaq?.invoke === 'function', title: document.title, ipc }
+            return { mounted: (document.querySelector('#app')?.children.length ?? 0) > 0, bridge: typeof window.vortaq?.invoke === 'function', title: document.title, ipc, sqlite: await (${SQLITE_SMOKE})() }
           })()`
         )
         .then((info: Record<string, unknown>) => finish(info))
