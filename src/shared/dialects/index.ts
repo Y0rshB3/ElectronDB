@@ -1,10 +1,11 @@
 /**
  * SQL dialect registry (docs/multi-engine-design.md, section 6). MySQL,
- * PostgreSQL and SQLite ship dialects; MariaDB registers its own in its phase.
+ * MariaDB, PostgreSQL and SQLite ship dialects.
  * MongoDB never has one (its classifier lives elsewhere).
  */
 import { engineOf } from '../engines'
 import type { EngineId } from '../types'
+import { mariadbDialect } from './mariadb'
 import { mysqlDialect } from './mysql'
 import { postgresqlDialect } from './postgresql'
 import { sqliteDialect } from './sqlite'
@@ -18,12 +19,14 @@ export type {
   SqlStatement,
   WriteCheck
 } from './types'
+export { mariadbDialect } from './mariadb'
 export { mysqlDialect } from './mysql'
 export { postgresqlDialect } from './postgresql'
 export { sqliteDialect } from './sqlite'
 
 const DIALECTS: Partial<Record<SqlDialectId, SqlDialect>> = {
   mysql: mysqlDialect,
+  mariadb: mariadbDialect,
   postgresql: postgresqlDialect,
   sqlite: sqliteDialect
 }

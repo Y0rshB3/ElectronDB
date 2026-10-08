@@ -3,6 +3,7 @@ import type { EngineId } from '../types'
 import {
   dialectForEngine,
   getDialect,
+  mariadbDialect,
   mysqlDialect,
   postgresqlDialect,
   sqliteDialect
@@ -32,11 +33,10 @@ describe('dialect registry', () => {
     expect(sqliteDialect.lex.blockBodies).toBe('trigger-begin-end')
   })
 
-  it('refuses dialects that are not in this build yet', () => {
-    expect(() => getDialect('mariadb')).toThrow(
-      'El dialecto SQL «mariadb» todavía no está disponible en esta versión.'
-    )
-    expect(() => dialectForEngine('mariadb')).toThrow('«mariadb»')
+  it('ships the MariaDB dialect', () => {
+    expect(getDialect('mariadb')).toBe(mariadbDialect)
+    expect(dialectForEngine('mariadb')).toBe(mariadbDialect)
+    expect(mariadbDialect.lex.executableComments).toContain('/*M!')
   })
 
   it('refuses an unknown engine with the engines.ts message', () => {
