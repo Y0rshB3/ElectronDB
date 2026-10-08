@@ -1,6 +1,38 @@
+<div align="center">
+
+<img src="build/icons/256x256.png" alt="Logo de Vortaq" width="128" height="128" />
+
 # Vortaq
 
-<img src="build/icons/256x256.png" alt="" width="96" height="96" />
+**Gestor de bases de datos de escritorio, abierto y en español**
+
+MySQL · MariaDB · PostgreSQL · SQLite · MongoDB
+
+[![Última versión](https://img.shields.io/github/v/release/Y0rshB3/ElectronDB?label=versi%C3%B3n&color=7c3aed)](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE)
+[![Plataformas](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-0ea5e9)](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+
+[**Descargar para macOS**](https://github.com/Y0rshB3/ElectronDB/releases/latest) ·
+[**Windows**](https://github.com/Y0rshB3/ElectronDB/releases/latest) ·
+[**Linux**](https://github.com/Y0rshB3/ElectronDB/releases/latest)
+
+<br />
+
+<img src="docs/images/consulta-mysql.png" alt="Vortaq: consulta con resultados editables" width="900" />
+
+</div>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/documentos-mongodb.png" alt="Documentos de MongoDB en tabla" /><br /><sub><b>MongoDB</b>: documentos en tabla, árbol o JSON, sin perder los tipos</sub></td>
+    <td width="50%"><img src="docs/images/postgresql.png" alt="Consulta de PostgreSQL con transacción" /><br /><sub><b>PostgreSQL</b>: una sesión y su transacción por pestaña</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/asistente-ia.png" alt="Asistente de IA" /><br /><sub><b>Asistente de IA</b> con tu propia clave: solo ve la estructura, nunca tus datos</sub></td>
+    <td width="50%"><img src="docs/images/disenador-sqlite.png" alt="Diseñador de tablas de SQLite" /><br /><sub><b>Diseñador de tablas</b>, también para SQLite (con reconstrucción segura)</sub></td>
+  </tr>
+</table>
+
 
 Vortaq es un gestor de bases de datos de escritorio, independiente y de código abierto, para macOS, Windows y
 Linux. Trabaja con MySQL, MariaDB, PostgreSQL, SQLite y MongoDB: explora y edita datos, escribe consultas con

@@ -28,6 +28,9 @@ electrondb-shots/
 # App icons live in build/ (and a copy in the renderer assets) and are meant to be committed
 !build/**
 !src/renderer/src/assets/**
+# README images (synthetic demo data only)
+!docs/images/
+!docs/images/*.png
 
 # Real data that must never be committed: backups, keychains, keys, profile secrets
 *.nb3
