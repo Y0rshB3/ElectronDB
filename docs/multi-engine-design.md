@@ -2239,7 +2239,9 @@ a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and need
 - **AI.** MariaDB connections get a MariaDB note in the context, their sequences are named (without
   their internal columns) and the version shows as «MariaDB x.y.z».
 - **Not done in P5:** sequences and system-versioned tables are still left out of `.nb3` **and `.vqb`**
-  backups (with the pre-backup warning naming them, as in P1b); completion does not list sequence
+  backups (with the pre-backup warning naming them, as in P1b); because of that, a REPLACE with a safety
+  copy (restore or `.sql` import) is **refused** on MariaDB when the database has such objects
+  (`replaceSafetyRefusal`), instead of dropping them for good; completion does not list sequence
   names; `/*M!` handling in the automation runner's own splitter (`automation/runner.ts`) is unchanged.
 
 #### PostgreSQL follow-ups (2026-10-07)

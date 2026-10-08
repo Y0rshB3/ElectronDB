@@ -350,6 +350,9 @@ además:
 - **Producción**: además de lo de MySQL, cuentan como escritura `NEXTVAL`/`SETVAL`/`NEXT VALUE FOR`, el contenido
   de `/*M! … */` y la sentencia de `SET STATEMENT … FOR`.
 - **Asistente de IA**: sabe que es MariaDB (secuencias, `RETURNING`, tablas versionadas, JSON como alias).
+- **Copias**: como las copias aún no guardan secuencias ni tablas versionadas (se avisa antes), **reemplazar**
+  una base de datos que las tenga (restaurar o importar un `.sql` con copia previa) se rechaza para no
+  perderlas.
 
 **Tus conexiones MySQL a MariaDB** siguen funcionando: las importadas de una entrada MariaDB (Navicat `.ncx`
 o la sección MariaDB de su carpeta) pasan a ser MariaDB al arrancar, y una conexión MySQL cuyo servidor
