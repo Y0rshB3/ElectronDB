@@ -3,6 +3,7 @@ import type { CellValue, QueryColumn, TableStructure } from '@shared/types'
 import { isAutoIncrementColumn, isViewLike } from '../../utils/columnMeta'
 import { singleTableSelect } from './selectSource'
 import { pgSingleTableSelect } from './selectSourcePg'
+import { sqliteSingleTableSelect } from './selectSourceSqlite'
 
 /**
  * Decides whether a query result set can be edited in place
@@ -60,11 +61,19 @@ const same = (a: string | undefined, b: string): boolean => a !== undefined && n
 export function resultSource(
   columns: QueryColumn[],
   sql: string,
-  /** 'postgresql' parses with the PostgreSQL lexer; anything else keeps the MySQL parser. */
-  dialect: 'mysql' | 'postgresql' = 'mysql'
+  /**
+   * 'postgresql' and 'sqlite' parse with their dialect's lexer; anything else
+   * keeps the MySQL parser.
+   */
+  dialect: 'mysql' | 'postgresql' | 'sqlite' = 'mysql'
 ): SourceCheck {
   if (!columns.length) return fail('el resultado no tiene columnas')
-  const parsed = dialect === 'postgresql' ? pgSingleTableSelect(sql) : singleTableSelect(sql)
+  const parsed =
+    dialect === 'postgresql'
+      ? pgSingleTableSelect(sql)
+      : dialect === 'sqlite'
+        ? sqliteSingleTableSelect(sql)
+        : singleTableSelect(sql)
   if (!parsed.ok) return fail(parsed.reason)
   const { ref } = parsed
   const schema = ref.schema ?? columns.find((c) => c.schema)?.schema

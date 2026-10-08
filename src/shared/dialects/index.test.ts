@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { EngineId } from '../types'
-import { dialectForEngine, getDialect, mysqlDialect, postgresqlDialect } from './index'
+import {
+  dialectForEngine,
+  getDialect,
+  mysqlDialect,
+  postgresqlDialect,
+  sqliteDialect
+} from './index'
 import { MYSQL_LEX } from './mysql'
 
 describe('dialect registry', () => {
@@ -20,12 +26,17 @@ describe('dialect registry', () => {
     expect(dialectForEngine('postgresql')).toBe(postgresqlDialect)
   })
 
+  it('ships the SQLite dialect', () => {
+    expect(getDialect('sqlite')).toBe(sqliteDialect)
+    expect(dialectForEngine('sqlite')).toBe(sqliteDialect)
+    expect(sqliteDialect.lex.blockBodies).toBe('trigger-begin-end')
+  })
+
   it('refuses dialects that are not in this build yet', () => {
-    expect(() => getDialect('sqlite')).toThrow(
-      'El dialecto SQL «sqlite» todavía no está disponible en esta versión.'
+    expect(() => getDialect('mariadb')).toThrow(
+      'El dialecto SQL «mariadb» todavía no está disponible en esta versión.'
     )
     expect(() => dialectForEngine('mariadb')).toThrow('«mariadb»')
-    expect(() => dialectForEngine('sqlite')).toThrow('«sqlite»')
   })
 
   it('refuses an unknown engine with the engines.ts message', () => {

@@ -205,7 +205,9 @@ describe('decideEditability', () => {
 describe('resultSource / primaryKeyOf', () => {
   it('names the table the statement reads without touching the server', () => {
     const columns = [col('id'), col('email')]
-    expect(resultSource(columns, "SELECT * FROM accounts.user AS u WHERE u.email LIKE '%x%'")).toEqual({
+    expect(
+      resultSource(columns, "SELECT * FROM accounts.user AS u WHERE u.email LIKE '%x%'")
+    ).toEqual({
       ok: true,
       source: SRC
     })
@@ -229,6 +231,23 @@ describe('resultSource / primaryKeyOf', () => {
     expect(resultSource([{ name: 'n', type: 'BIGINT' }], 'SELECT COUNT(*) FROM user')).toEqual({
       ok: false,
       reason: REASON_COMPUTED
+    })
+  })
+
+  it('parses SQLite statements with the SQLite lexer', () => {
+    const columns: QueryColumn[] = [
+      { name: 'id', type: 'INTEGER', schema: 'main', table: 'user', sourceName: 'id' }
+    ]
+    expect(resultSource(columns, 'SELECT * FROM [user] AS u', 'sqlite')).toEqual({
+      ok: true,
+      source: { schema: 'main', table: 'user', alias: 'u' }
+    })
+    expect(resultSource(columns, 'SELECT * FROM aux.`user`', 'sqlite')).toEqual({
+      ok: true,
+      source: { schema: 'aux', table: 'user', alias: 'user' }
+    })
+    expect(resultSource(columns, 'SELECT DISTINCT id FROM user', 'sqlite')).toMatchObject({
+      ok: false
     })
   })
 
