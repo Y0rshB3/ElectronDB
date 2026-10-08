@@ -746,13 +746,26 @@ describeMysql('mysql module (integration)', ({ url, version, is57 }) => {
     }
     const next = await manager.acquire(connectionId)
     try {
-      const [state] = await next.query<{ db: string | null; fk: string; trx: string }>(
-        `SELECT DATABASE() AS db, @@foreign_key_checks AS fk,
-                (SELECT COUNT(*) FROM information_schema.INNODB_TRX WHERE trx_mysql_thread_id = ${Number(leakedThread)}) AS trx`
+      const [state] = await next.query<{ db: string | null; fk: string }>(
+        `SELECT DATABASE() AS db, @@foreign_key_checks AS fk`
       )
       expect(state.db).toBeNull()
       expect(String(state.fk)).toBe('1')
-      expect(String(state.trx)).toBe('0')
+      // The dirty connection was destroyed: the server rolls its transaction back when it sees
+      // the disconnect, asynchronously (under load, 5.7 can take a moment). A transaction leaked
+      // into the pool would stay open forever, so it must be gone within a few seconds.
+      const openTrx = async (): Promise<string> => {
+        const [row] = await next.query<{ trx: string }>(
+          `SELECT COUNT(*) AS trx FROM information_schema.INNODB_TRX WHERE trx_mysql_thread_id = ${Number(leakedThread)}`
+        )
+        return String(row.trx)
+      }
+      let trx = await openTrx()
+      for (let i = 0; i < 50 && trx !== '0'; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        trx = await openTrx()
+      }
+      expect(trx).toBe('0')
       const rows = await next.query(`SELECT * FROM \`${SCHEMA}\`.trx_probe`)
       expect(rows).toEqual([])
     } finally {
