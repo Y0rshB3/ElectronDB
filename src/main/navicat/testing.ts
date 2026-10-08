@@ -66,5 +66,17 @@ export const MULTI_TYPE_CONN_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
   <key>PG cluster</key><dict><key>hostportlist</key><string>pg1.example.test:5433,pg2.example.test:5434</string><key>username</key><string>u</string><key>ssl_param</key><dict><key>mode</key><string>bogus</string></dict></dict>
   <key>Warehouse</key><dict><key>host</key><string>wh.example.test</string><key>serviceprovider</key><string>Redshift</string></dict>
 </dict>
+<key>SQLite</key><dict>
+  <key>Notas</key><dict><key>databasefile</key><string>/Users/demo/datos/notas.db</string></dict>
+  <key>Inventario Windows</key><dict><key>databasefile</key><string>C:\\Datos\\inventario.sqlite</string><key>attacheddatabases</key><array><dict><key>name</key><string>aux</string></dict></array></dict>
+  <key>Cifrada</key><dict><key>databasefile</key><string>/Users/demo/datos/secreta.db</string><key>sqliteencrypted</key><true/></dict>
+</dict>
+<key>MongoDB</key><dict>
+  <key>Mongo local</key><dict><key>host</key><string>localhost</string><key>port</key><integer>27017</integer><key>username</key><string>app</string><key>authsource</key><string>tienda</string><key>authmechanism</key><string>SCRAM-SHA-256</string><key>database</key><string>tienda</string></dict>
+  <key>Mongo rs</key><dict><key>host</key><string>localhost</string><key>connmethod</key><string>Replica Set</string><key>memberlist</key><array><string>rs1.example.test:27018</string><string>rs2.example.test:27019</string></array><key>replicasetname</key><string>rs0</string><key>readpreference</key><string>secondaryPreferred</string></dict>
+  <key>Atlas</key><dict><key>host</key><string>cluster0.example.test</string><key>usesrvrecord</key><true/><key>serviceprovider</key><string>MongoDBAtlas</string><key>username</key><string>u</string></dict>
+  <key>DocDB</key><dict><key>host</key><string>docdb.example.test</string><key>serviceprovider</key><string>DocumentDB</string><key>retrywrites</key><true/></dict>
+  <key>Kerberos</key><dict><key>host</key><string>krb.example.test</string><key>authmechanism</key><string>GSSAPI</string></dict>
+</dict>
 <key>SQL Server</key><dict><key>Ignored</key><dict><key>host</key><string>x</string></dict></dict>
 </dict></dict></dict></plist>`

@@ -36,7 +36,7 @@ export async function detectNavicat(root: string): Promise<NavicatDetection> {
     detection.connectionCount = connections.length
     for (const conn of connections) {
       // .nb3 backups exist for the MySQL-family sections only.
-      if (conn.navicatType === 'PostgreSQL') continue
+      if (conn.navicatType !== 'MySQL' && conn.navicatType !== 'MariaDB') continue
       const dir = await resolveBackupSourceDir(
         conn.savePath,
         connectionSettingsDir(paths, conn.name, conn.navicatType)

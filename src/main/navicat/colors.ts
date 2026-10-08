@@ -120,4 +120,4 @@ export async function readMarkerColorsByType(
   return out
 }
 
-const COLOR_SECTIONS: readonly NavicatSection[] = ['MySQL', 'MariaDB', 'PostgreSQL']
+const COLOR_SECTIONS: readonly NavicatSection[] = ['MySQL', 'MariaDB', 'PostgreSQL', 'SQLite', 'MongoDB']

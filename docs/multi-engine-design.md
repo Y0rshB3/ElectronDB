@@ -2296,7 +2296,7 @@ a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and need
   the one listed in 12.1 (`initialdatabase`, `ssl_param.mode` any spelling, `rootcert`, integer
   `usecustomdblist`, first host of `hostportlist` with a warning, forks refused). Tested only with a
   synthetic multi-type file: the MariaDB/PostgreSQL keys are still unverified against real Navicat Premium
-  files (open question 1). SQLite and MongoDB folder rows are still not read.
+  files (open question 1). SQLite and MongoDB folder rows are read since 2026-10-08 (below).
 - **Safety copies follow the chosen format.** Replacing a database from a `.sql` dump (and dump folders)
   takes its `previo-importacion` copy in Ajustes › Copias' format (`.vqb` by default, `.nb3` when chosen; a
   `.sql` default means `.vqb`, since «Deshacer» cannot restore a `.sql`). Restore/rollback copies keep the
@@ -2304,6 +2304,18 @@ a versioned table (MariaDB refuses it otherwise).`RETURNING` is a write and need
 - **Fix:** a failed sign-in (pg refusing an empty password client-side) used to leave the socket open, so
   the server backend waited in authentication until `authentication_timeout` (60 s) and, among other
   things, made `DROP DATABASE` wait. `connectOrClose` ends the client on any connect failure.
+
+#### Navicat folder: SQLite and MongoDB rows (2026-10-08)
+
+`conn.plist` sections `SQLite` and `MongoDB` are mapped as listed in 12.1 (`docs/navicat-storage.md`,
+«Other sections (unverified)»), with the same `(section, name)` identity as `.ncx` imports
+(`SQLite`, `MongoDB`), so an `.ncx` still merges its secrets into them. SQLite keeps the path as
+written and flags it for review when it is not absolute here or the file is missing (the connection
+cannot open until the user picks a file; the import never opens or creates it), refuses encrypted
+files and does not import attached databases (warning). MongoDB reads method, SRV, members (strings or
+dicts), replica set, auth source and mechanism (Kerberos/AWS/OIDC refused), read preference, retry
+options and providers. Rows whose engine is known but unusable (encrypted file, Kerberos) are now
+refused by `navicatBlockReason` too. Tested with synthetic files only; never a credential store.
 
 #### AI assistant scope and per-engine AI capability (2026-10-07)
 

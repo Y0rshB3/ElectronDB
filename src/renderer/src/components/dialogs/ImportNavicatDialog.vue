@@ -61,6 +61,10 @@ function blockOf(c: NavicatConnectionPreview): string | null {
 }
 /** Rows that can be selected (the others show their reason). */
 const importablePreviews = computed(() => connPreviews.value.filter((c) => !blockOf(c)))
+/** Last segment of a file path written on any OS ("—" when empty). */
+const fileNameOf = (path: string | undefined): string =>
+  path?.trim() ? (path.trim().split(/[\\/]/).pop() ?? path) : '—'
+
 const engineLabelOf = (c: NavicatConnectionPreview): string =>
   c.engine ? ENGINES[c.engine].label : c.navicatType
 const selectedJobs = ref<string[]>([])
@@ -609,8 +613,12 @@ watch(
                     environmentLabel(c.environment)
                   }}</span>
                 </td>
-                <td class="nd-mono import-dialog__host">
-                  {{ c.host }}:{{ c.port }}
+                <td class="nd-mono import-dialog__host" :title="c.filePath">
+                  <template v-if="c.navicatType === 'SQLite'">{{
+                    fileNameOf(c.filePath)
+                  }}</template>
+                  <template v-else-if="!c.port">{{ c.host }}</template>
+                  <template v-else>{{ c.host }}:{{ c.port }}</template>
                   <v-icon
                     v-if="c.ssh.enabled"
                     icon="mdi-lock-outline"
@@ -619,7 +627,7 @@ watch(
                   />
                 </td>
                 <td class="import-dialog__meta">
-                  <template v-if="c.navicatType !== 'PostgreSQL'"
+                  <template v-if="c.navicatType === 'MySQL' || c.navicatType === 'MariaDB'"
                     ><span class="nd-mono">{{ c.backupCount }}</span> copias</template
                   >
                 </td>

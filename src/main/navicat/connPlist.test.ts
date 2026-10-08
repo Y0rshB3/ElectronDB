@@ -173,8 +173,8 @@ describe('readNavicatConnections', () => {
   })
 })
 
-describe('conn.plist sections (P5: MariaDB, PostgreSQL)', () => {
-  it('maps the MariaDB and PostgreSQL sections; other sections are left out', async () => {
+describe('conn.plist sections (MariaDB, PostgreSQL, SQLite, MongoDB)', () => {
+  it('maps the MariaDB and PostgreSQL sections; unknown sections are left out', async () => {
     const connections = await parseConnPlist(MULTI_TYPE_CONN_PLIST)
     expect(connections.map((c) => `${c.navicatType}:${c.name}`)).toEqual([
       'MySQL:Shared name',
@@ -182,7 +182,15 @@ describe('conn.plist sections (P5: MariaDB, PostgreSQL)', () => {
       'MariaDB:Shared name',
       'PostgreSQL:PG cluster',
       'PostgreSQL:PG local',
-      'PostgreSQL:Warehouse'
+      'PostgreSQL:Warehouse',
+      'SQLite:Cifrada',
+      'SQLite:Inventario Windows',
+      'SQLite:Notas',
+      'MongoDB:Atlas',
+      'MongoDB:DocDB',
+      'MongoDB:Kerberos',
+      'MongoDB:Mongo local',
+      'MongoDB:Mongo rs'
     ])
     const by = (type: string, name: string) =>
       connections.find((c) => c.navicatType === type && c.name === name)!
@@ -221,6 +229,86 @@ describe('conn.plist sections (P5: MariaDB, PostgreSQL)', () => {
       unsupportedReason:
         'Amazon Redshift no es compatible: su catálogo es distinto del de PostgreSQL'
     })
+  })
+
+  it('maps SQLite rows: the file path as written, flagged when not usable here', async () => {
+    const env = {
+      platform: 'darwin' as const,
+      fileExists: (p: string) => p === '/Users/demo/datos/notas.db'
+    }
+    const connections = await parseConnPlist(MULTI_TYPE_CONN_PLIST, env)
+    const by = (name: string) =>
+      connections.find((c) => c.navicatType === 'SQLite' && c.name === name)!
+    expect(by('Notas')).toMatchObject({
+      engine: 'sqlite',
+      unsupportedReason: null,
+      host: '',
+      port: 0,
+      sqlite: { filePath: '/Users/demo/datos/notas.db', pathNeedsReview: false },
+      warnings: []
+    })
+    // A Windows path on a Mac: kept as written, flagged, never opened or created.
+    expect(by('Inventario Windows')).toMatchObject({
+      sqlite: { filePath: 'C:\\Datos\\inventario.sqlite', pathNeedsReview: true }
+    })
+    expect(by('Inventario Windows').warnings).toEqual([
+      'Ruta de otro equipo: revísala',
+      '«Inventario Windows»: el archivo SQLite no está en este equipo; elígelo al editar la conexión',
+      'Las bases de datos adjuntas no se importan: adjúntalas al editar la conexión'
+    ])
+    expect(by('Cifrada').unsupportedReason).toBe(
+      'Archivo SQLite cifrado: Vortaq no puede abrir bases de datos SQLite cifradas'
+    )
+    // A file that is missing on this computer is flagged too.
+    expect(by('Cifrada').sqlite?.pathNeedsReview).toBe(true)
+  })
+
+  it('maps MongoDB rows: method, members, auth, read preference and providers', async () => {
+    const connections = await parseConnPlist(MULTI_TYPE_CONN_PLIST)
+    const by = (name: string) =>
+      connections.find((c) => c.navicatType === 'MongoDB' && c.name === name)!
+    expect(by('Mongo local')).toMatchObject({
+      engine: 'mongodb',
+      host: 'localhost',
+      port: 27017,
+      username: 'app',
+      environment: 'local',
+      mongo: {
+        topology: 'standalone',
+        srv: false,
+        authMechanism: 'scram-sha-256',
+        authSource: 'tienda',
+        defaultDatabase: 'tienda',
+        retryWrites: true
+      },
+      warnings: []
+    })
+    expect(by('Mongo rs')).toMatchObject({
+      host: 'rs1.example.test',
+      port: 27018,
+      mongo: {
+        topology: 'replicaSet',
+        members: [
+          { host: 'rs1.example.test', port: 27018 },
+          { host: 'rs2.example.test', port: 27019 }
+        ],
+        replicaSet: 'rs0',
+        readPreference: 'secondaryPreferred',
+        authMechanism: 'none'
+      }
+    })
+    expect(by('Atlas')).toMatchObject({
+      port: 0,
+      ssl: { enabled: true, verifyServer: true },
+      mongo: { srv: true, authMechanism: 'default' }
+    })
+    expect(by('DocDB').mongo?.retryWrites).toBe(false)
+    expect(by('DocDB').warnings).toEqual([
+      'Amazon DocumentDB: se desactivan las escrituras reintentables (retryWrites=false), que no admite'
+    ])
+    expect(by('Kerberos').unsupportedReason).toBe(
+      'Autenticación Kerberos/GSSAPI, AWS u OIDC: no soportada en esta versión'
+    )
   })
 
   it('keys MySQL rows by name and the others by section and name', () => {

@@ -1,14 +1,30 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import type {
   ConnectionConfig,
   EngineId,
   Environment,
+  MongoOptions,
   NavicatConnectionPreview,
   NavicatSection,
   SshConfig,
   SslConfig
 } from '@shared/types'
-import { applySslMode, firstHost, mysqlFamily, postgresFamily } from '../importers/connections/util'
+import {
+  MONGO_RETRY_WRITES_WARNING,
+  applySslMode,
+  checkForeignPaths,
+  firstHost,
+  mongoMechanismOf,
+  mongoProviderNeedsNoRetry,
+  mongoReadPreferenceOf,
+  mongoTopologyOf,
+  mysqlFamily,
+  positiveInt,
+  postgresFamily,
+  sqliteBlock
+} from '../importers/connections/util'
+import { SQLITE_ENCRYPTED_REASON, type FileExists } from '../importers/connections/types'
 import { countNb3Files, resolveBackupSourceDir } from './backupsScan'
 import { readMarkerColorsByType } from './colors'
 import { connectionSettingsDir, navicatPaths } from './paths'
@@ -16,11 +32,24 @@ import { isPlistDict as isDict, parsePlistXml, type PlistDict as Dict } from './
 
 /**
  * `conn.plist` type sections Vortaq maps (docs/multi-engine-design.md, 12.1).
- * `MySQL` is verified on real files; `MariaDB` (same keys as MySQL) and
- * `PostgreSQL` follow the design's mapping and are tested with synthetic
- * files only. Every other section is left out, as before.
+ * `MySQL` is verified on real files; `MariaDB` (same keys as MySQL),
+ * `PostgreSQL`, `SQLite` and `MongoDB` follow the design's mapping and are
+ * tested with synthetic files only. Every other section is left out, as before.
  */
-export const NAVICAT_SECTIONS: readonly NavicatSection[] = ['MySQL', 'MariaDB', 'PostgreSQL']
+export const NAVICAT_SECTIONS: readonly NavicatSection[] = [
+  'MySQL',
+  'MariaDB',
+  'PostgreSQL',
+  'SQLite',
+  'MongoDB'
+]
+
+/** SQLite `attacheddatabases` (shape unverified): never imported, the user attaches them again. */
+export const SQLITE_ATTACHED_WARNING =
+  'Las bases de datos adjuntas no se importan: adjúntalas al editar la conexión'
+/** MongoDB `memberlist` in a shape the import does not know. */
+export const MONGO_MEMBERS_WARNING =
+  'No se ha podido leer la lista de miembros: revisa los servidores al editar la conexión'
 
 /**
  * Selection key of a preview row: the plain name for MySQL (what earlier
@@ -41,6 +70,10 @@ export interface NavicatConnection {
   warnings: string[]
   /** PostgreSQL: `initialdatabase`. */
   initialDatabase?: string
+  /** SQLite: the database file as written (flagged when it is not usable on this computer). */
+  sqlite?: { filePath: string; pathNeedsReview: boolean }
+  /** MongoDB options read from the section (merged over the defaults on import). */
+  mongo?: Partial<MongoOptions>
   name: string
   host: string
   port: number
@@ -118,11 +151,186 @@ function parseSsl(raw: Dict): SslConfig {
   return ssl
 }
 
+/** Where the parser checks paths (tests pass another platform and a fake file system). */
+export interface PlistEnvironment {
+  platform: NodeJS.Platform
+  fileExists: FileExists
+}
+
+const HOST_ENV: PlistEnvironment = { platform: process.platform, fileExists: existsSync }
+
+const NO_SSH: SshConfig = {
+  enabled: false,
+  host: '',
+  port: 22,
+  username: '',
+  authType: 'password',
+  savePassword: false
+}
+
+/** The fields every section shares, for the SQLite and MongoDB parsers. */
+function baseConnection(
+  name: string,
+  type: NavicatSection,
+  raw: Dict
+): Pick<
+  NavicatConnection,
+  | 'navicatType'
+  | 'name'
+  | 'savePath'
+  | 'customDatabases'
+  | 'initialQueries'
+  | 'color'
+  | 'savePassword'
+> {
+  return {
+    navicatType: type,
+    name,
+    savePath: optionalPath(raw.savepath) ?? null,
+    customDatabases: [],
+    initialQueries: '',
+    color: null,
+    savePassword: bool(raw.savepassword)
+  }
+}
+
+/**
+ * SQLite section: `databasefile` (the path on the machine that wrote the file;
+ * only the text is checked, the file is never opened or created),
+ * `sqliteencrypted` (Navicat's encrypted files cannot be opened) and
+ * `attacheddatabases` (shape unverified: listed as a warning).
+ */
+function parseSqliteConnection(name: string, raw: Dict, env: PlistEnvironment): NavicatConnection {
+  const warnings: string[] = []
+  const filePath = str(raw.databasefile ?? raw.databasefilename).trim()
+  checkForeignPaths([filePath], env.platform, warnings)
+  const file = sqliteBlock(name, filePath, env.platform, env.fileExists, warnings)
+  const attached = raw.attacheddatabases
+  if (
+    (Array.isArray(attached) && attached.length) ||
+    (isDict(attached) && Object.keys(attached).length)
+  )
+    warnings.push(SQLITE_ATTACHED_WARNING)
+  return {
+    ...baseConnection(name, 'SQLite', raw),
+    engine: 'sqlite',
+    unsupportedReason: bool(raw.sqliteencrypted) ? SQLITE_ENCRYPTED_REASON : null,
+    warnings,
+    sqlite: { filePath: file.filePath, pathNeedsReview: file.pathNeedsReview },
+    host: '',
+    port: 0,
+    username: '',
+    savePassword: false,
+    environment: inferEnvironment(name, '', false),
+    ssh: { ...NO_SSH },
+    ssl: { enabled: false, verifyServer: false }
+  }
+}
+
+/** `memberlist` as an array of "host:port" strings or of {host, port} dicts (shape unverified). */
+function mongoMembers(raw: unknown, warnings: string[]): { host: string; port: number }[] {
+  if (raw === undefined || raw === null || raw === '') return []
+  const items = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string'
+      ? raw.split(',')
+      : isDict(raw)
+        ? Object.values(raw)
+        : null
+  if (!items) {
+    warnings.push(MONGO_MEMBERS_WARNING)
+    return []
+  }
+  const members: { host: string; port: number }[] = []
+  for (const item of items) {
+    if (typeof item === 'string') {
+      const m = /^\s*\[?([^\]\s]+?)\]?(?::(\d+))?\s*$/.exec(item)
+      if (m?.[1]) members.push({ host: m[1], port: positiveInt(m[2], 27017) })
+    } else if (isDict(item) && str(item.host).trim()) {
+      members.push({ host: str(item.host).trim(), port: int(item.port, 27017) })
+    } else {
+      warnings.push(MONGO_MEMBERS_WARNING)
+      return []
+    }
+  }
+  return members
+}
+
+/**
+ * MongoDB section (design 12.1; keys unverified against real files, read
+ * case-insensitively by value and never required): `connmethod`,
+ * `usesrvrecord`, `memberlist`, `replicasetname`, `authsource`,
+ * `authmechanism` (Kerberos/AWS/OIDC are not importable), `readpreference`,
+ * `retrywrites`/`retryreads` and `serviceprovider` (DocumentDB/Cosmos DB turn
+ * retryable writes off; Atlas and SRV turn TLS on).
+ */
+function parseMongoConnection(name: string, raw: Dict, env: PlistEnvironment): NavicatConnection {
+  const warnings: string[] = []
+  const ssh = parseSsh(raw)
+  const method = mongoTopologyOf(str(raw.connmethod) || undefined, warnings)
+  const members = mongoMembers(raw.memberlist, warnings)
+  const srv = bool(raw.usesrvrecord) || method?.srv === true
+  const topology = method?.topology ?? (members.length > 1 ? 'replicaSet' : 'standalone')
+  const auth = mongoMechanismOf(str(raw.authmechanism) || undefined, warnings)
+  const readPreference = mongoReadPreferenceOf(str(raw.readpreference) || undefined, warnings)
+  const provider = str(raw.serviceprovider).trim()
+  const noRetry = mongoProviderNeedsNoRetry(provider)
+  if (noRetry) warnings.push(MONGO_RETRY_WRITES_WARNING(noRetry))
+  const seedList = topology !== 'standalone' && !srv && members.length > 0
+  const host = seedList ? members[0].host : str(raw.host).trim()
+  const port = srv ? 0 : seedList ? members[0].port : int(raw.port, 27017)
+  let ssl = parseSsl(raw)
+  const tls = ssl.enabled || srv || /atlas/i.test(provider)
+  ssl = tls ? { ...ssl, enabled: true, verifyServer: ssl.verifyServer || !ssl.enabled } : ssl
+  checkForeignPaths(
+    [
+      ssh.enabled ? ssh.privateKeyPath : undefined,
+      ssl.caCertPath,
+      ssl.clientCertPath,
+      ssl.clientKeyPath
+    ],
+    env.platform,
+    warnings
+  )
+  const username = str(raw.username).trim()
+  const database = str(raw.database ?? raw.initialdatabase).trim()
+  const flag = (v: unknown, fallback: boolean): boolean =>
+    v === undefined || v === null || v === '' ? fallback : bool(v)
+  return {
+    ...baseConnection(name, 'MongoDB', raw),
+    engine: 'mongodb',
+    unsupportedReason: auth.unsupported,
+    warnings,
+    host,
+    port,
+    username,
+    environment: inferEnvironment(name, host, ssh.enabled),
+    ssh,
+    ssl,
+    mongo: {
+      topology,
+      srv,
+      members: seedList ? members : [],
+      replicaSet: str(raw.replicasetname).trim(),
+      authMechanism: auth.mechanism ?? (username ? 'default' : 'none'),
+      authSource: str(raw.authsource).trim() || 'admin',
+      defaultDatabase: database,
+      ...(readPreference ? { readPreference } : {}),
+      directConnection: ssh.enabled,
+      retryWrites: noRetry ? false : flag(raw.retrywrites, true),
+      retryReads: flag(raw.retryreads, true)
+    }
+  }
+}
+
 function parseConnection(
   name: string,
   raw: Dict,
-  type: NavicatSection = 'MySQL'
+  type: NavicatSection = 'MySQL',
+  env: PlistEnvironment = HOST_ENV
 ): NavicatConnection {
+  if (type === 'SQLite') return parseSqliteConnection(name, raw, env)
+  if (type === 'MongoDB') return parseMongoConnection(name, raw, env)
   const ssh = parseSsh(raw)
   const warnings: string[] = []
   const customList = Array.isArray(raw.customdblist)
@@ -180,7 +388,10 @@ function typeSections(root: unknown): { type: NavicatSection; dict: Dict }[] {
 }
 
 /** Parses conn.plist XML. Throws an actionable error when the plist is not readable. */
-export async function parseConnPlist(xml: string): Promise<NavicatConnection[]> {
+export async function parseConnPlist(
+  xml: string,
+  env: PlistEnvironment = HOST_ENV
+): Promise<NavicatConnection[]> {
   let root: unknown
   try {
     root = await parsePlistXml(xml)
@@ -192,7 +403,7 @@ export async function parseConnPlist(xml: string): Promise<NavicatConnection[]> 
   const connections: NavicatConnection[] = []
   for (const { type, dict } of typeSections(root)) {
     for (const [name, raw] of Object.entries(dict)) {
-      if (isDict(raw)) connections.push(parseConnection(name, raw, type))
+      if (isDict(raw)) connections.push(parseConnection(name, raw, type, env))
     }
   }
   // MySQL first (as before), then by name.
@@ -267,7 +478,8 @@ export async function readNavicatConnections(
       customDatabases: connection.customDatabases,
       initialQueries: connection.initialQueries,
       backupCount,
-      alreadyImported: existing.some((c) => isImportedFromNavicat(c, connection.name, type))
+      alreadyImported: existing.some((c) => isImportedFromNavicat(c, connection.name, type)),
+      ...(connection.sqlite ? { filePath: connection.sqlite.filePath } : {})
     }
     entries.push({ connection, preview, backupSourceDir })
   }

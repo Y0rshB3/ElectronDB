@@ -308,6 +308,56 @@ describe('importFromNavicat: MariaDB and PostgreSQL sections (P5)', () => {
     expect(result.warnings.some((w) => w.includes('"Warehouse" no se ha importado'))).toBe(true)
   })
 
+  it('imports SQLite and MongoDB rows; a SQLite file from another computer needs review', async () => {
+    ctx.settings.update({ previewEngines: true })
+    const result = await importFromNavicat(ctx, {
+      connections: [
+        'SQLite\u001fInventario Windows',
+        'SQLite\u001fCifrada',
+        'MongoDB\u001fMongo rs',
+        'MongoDB\u001fKerberos'
+      ],
+      jobs: []
+    })
+    expect(result.connections.map((c) => `${c.engine}:${c.name}`)).toEqual([
+      'sqlite:Inventario Windows',
+      'mongodb:Mongo rs'
+    ])
+    const [lite, mongo] = result.connections
+    expect(lite).toMatchObject({
+      authMode: 'none',
+      host: '',
+      sqlite: {
+        filePath: 'C:\\Datos\\inventario.sqlite',
+        pathNeedsReview: true,
+        foreignKeys: false
+      },
+      source: { app: 'navicat', name: 'Inventario Windows', navicatType: 'SQLite' }
+    })
+    expect(mongo).toMatchObject({
+      authMode: 'none',
+      host: 'rs1.example.test',
+      port: 27018,
+      mongo: {
+        topology: 'replicaSet',
+        replicaSet: 'rs0',
+        readPreference: 'secondaryPreferred',
+        members: [
+          { host: 'rs1.example.test', port: 27018 },
+          { host: 'rs2.example.test', port: 27019 }
+        ]
+      },
+      source: { navicatType: 'MongoDB' }
+    })
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        '«Inventario Windows»: Ruta de otro equipo: revísala',
+        'La conexión "Cifrada" no se ha importado: Archivo SQLite cifrado: Vortaq no puede abrir bases de datos SQLite cifradas',
+        'La conexión "Kerberos" no se ha importado: Autenticación Kerberos/GSSAPI, AWS u OIDC: no soportada en esta versión'
+      ])
+    )
+  })
+
   it('a MySQL-section record promoted to MariaDB keeps matching and stays MariaDB', async () => {
     const [first] = (await importFromNavicat(ctx, { connections: ['Shared name'], jobs: [] }))
       .connections

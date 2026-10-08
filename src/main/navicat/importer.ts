@@ -1,6 +1,13 @@
 import { join } from 'node:path'
 import { engineAvailabilityError } from '@shared/connectionValidation'
-import { defaultPostgresOptions, engineOf, isMysqlFamilyEngine } from '@shared/engines'
+import {
+  DEFAULT_NETWORK,
+  defaultMongoOptions,
+  defaultPostgresOptions,
+  defaultSqliteOptions,
+  engineOf,
+  isMysqlFamilyEngine
+} from '@shared/engines'
 import type {
   ConnectionConfig,
   ConnectionInput,
@@ -64,11 +71,35 @@ export function navicatBlockReason(
   connection: Pick<NavicatConnectionEntry['connection'], 'engine' | 'unsupportedReason'>,
   previewEngines: boolean
 ): string | null {
-  if (!connection.engine) return connection.unsupportedReason ?? 'Motor no soportado'
+  // A known engine can still be unusable (an encrypted SQLite file, Kerberos sign-in).
+  if (!connection.engine || connection.unsupportedReason)
+    return connection.unsupportedReason ?? 'Motor no soportado'
   const unavailable = engineAvailabilityError({ engine: connection.engine })
   if (unavailable) return unavailable
   const engine = engineOf({ engine: connection.engine })
   return engine.capabilities.preview && !previewEngines ? previewEngineReason(engine.label) : null
+}
+
+/**
+ * SQLite block: the file as written (flagged for review when it is not usable
+ * here: such a connection cannot open until the user picks the file) over the
+ * defaults, keeping an earlier import's options. Imported files keep foreign
+ * keys off, as the other importers do.
+ */
+function sqliteInput(
+  connection: NavicatConnectionEntry['connection'],
+  existing: ConnectionConfig | null,
+  environment: Environment
+): Pick<ConnectionInput, 'sqlite'> {
+  const file = connection.sqlite ?? { filePath: '', pathNeedsReview: true }
+  const base = existing?.sqlite ?? {
+    ...defaultSqliteOptions(environment === 'production'),
+    foreignKeys: false
+  }
+  const sqlite = { ...base, filePath: file.filePath }
+  if (file.pathNeedsReview) sqlite.pathNeedsReview = true
+  else delete sqlite.pathNeedsReview
+  return { sqlite }
 }
 
 function toConnectionInput(
@@ -79,6 +110,11 @@ function toConnectionInput(
 ): ConnectionInput {
   const { connection, backupSourceDir } = entry
   const engine = connection.engine ?? 'mysql'
+  const environment = mergeEnvironment(existing, connection.environment)
+  const mechanism = connection.mongo?.authMechanism
+  // SQLite has no password; MongoDB without credentials (or with a client certificate) neither.
+  const noPassword =
+    engine === 'sqlite' || (engine === 'mongodb' && (mechanism === 'none' || mechanism === 'x509'))
   return {
     id: existing?.id,
     // The section's engine. ConnectionsRepo.save refuses to turn a record of another engine
@@ -93,15 +129,22 @@ function toConnectionInput(
           }
         }
       : {}),
+    ...(engine === 'sqlite' ? sqliteInput(connection, existing, environment) : {}),
+    ...(engine === 'mongodb'
+      ? {
+          mongo: { ...defaultMongoOptions(), ...existing?.mongo, ...connection.mongo },
+          network: { ...DEFAULT_NETWORK, ...existing?.network }
+        }
+      : {}),
     name: existing?.name ?? connection.name,
     color: connection.color,
-    environment: mergeEnvironment(existing, connection.environment),
+    environment,
     host: connection.host,
     port: connection.port,
     username: connection.username,
     // Navicat files never say whether a password is needed: keep what the user
     // chose on a re-import, otherwise assume one (it is never stored there).
-    authMode: existing?.authMode ?? 'password',
+    authMode: noPassword ? 'none' : (existing?.authMode ?? 'password'),
     savePassword: connection.savePassword,
     customDatabases: connection.customDatabases,
     initialQueries: connection.initialQueries,

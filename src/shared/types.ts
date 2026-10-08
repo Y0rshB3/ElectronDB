@@ -1482,8 +1482,8 @@ export interface NavicatCandidatesResult {
   candidates: NavicatCandidate[]
 }
 
-/** conn.plist sections the Navicat folder import maps (MySQL, MariaDB, PostgreSQL). */
-export type NavicatSection = 'MySQL' | 'MariaDB' | 'PostgreSQL'
+/** conn.plist sections the Navicat folder import maps. */
+export type NavicatSection = 'MySQL' | 'MariaDB' | 'PostgreSQL' | 'SQLite' | 'MongoDB'
 
 export interface NavicatConnectionPreview {
   /** What `navicat:import` takes: the name for MySQL rows, `<section>\u001f<name>` otherwise. */
@@ -1508,6 +1508,8 @@ export interface NavicatConnectionPreview {
   initialQueries: string
   backupCount: number
   alreadyImported: boolean
+  /** SQLite: the database file as written in conn.plist (never opened by the preview). */
+  filePath?: string
 }
 
 export interface NavicatJobPreview {

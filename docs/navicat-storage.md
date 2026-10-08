@@ -35,6 +35,31 @@ No `password` key exists: connection passwords are not stored in any of these fi
 import always asks the user to type them (Vortaq reads nothing else of Navicat's, such as the
 system keychain). There is `pemclientkeypassword` inside `ssl_param` (empty).
 
+### Other sections (unverified)
+
+Only the `MySQL` section above was verified on the author's files. The folder import also reads
+the `MariaDB` (same keys as MySQL), `PostgreSQL`, `SQLite` and `MongoDB` sections with the key
+names of the design (docs/multi-engine-design.md, 12.1). **None of these is confirmed by a real
+file**; they are tested with the synthetic `MULTI_TYPE_CONN_PLIST` (`src/main/navicat/testing.ts`)
+and every key is optional:
+
+- `PostgreSQL`: `initialdatabase`, `hostportlist` (first host only, with a warning),
+  `ssl_param.mode` (any libpq spelling) and `ssl_param.rootcert`, `usecustomdblist` as an integer,
+  `serviceprovider` (forks such as Redshift stay unsupported).
+- `SQLite`: `databasefile` (also `databasefilename`), the path on the machine that wrote it. Only
+  the text is checked: a path that is not absolute on this OS (a `C:\…` path on a Mac adds «Ruta de
+  otro equipo: revísala») or whose file is missing here is imported flagged for review, and the
+  connection cannot open until the user picks the file; the file is never opened or created by the
+  import. `sqliteencrypted` makes the row not importable. `attacheddatabases` (shape unknown) is
+  not imported, with a warning.
+- `MongoDB`: `host`, `port`, `username`, `database`, `connmethod` (`Standalone`, `Replica Set` /
+  `ReplicaSet`, `ShardCluster`, `SRV`), `usesrvrecord`, `memberlist` (an array of `host:port`
+  strings or of `{host, port}` dicts; any other shape adds a warning), `replicasetname`,
+  `authsource`, `authmechanism` (`GSSAPI`/Kerberos, AWS and OIDC make the row not importable),
+  `readpreference`, `retrywrites`/`retryreads`, `serviceprovider` (`DocumentDB` and
+  `AzureCosmosDB` turn retryable writes off with a warning; `MongoDBAtlas` and SRV turn TLS on),
+  `usessl`/`ssl_param` and the SSH keys as for MySQL. Timeouts are not read.
+
 ## Colour blob (`markercolor`)
 
 NSArchiver "streamtyped" NSColor. After the ASCII marker `ffff` come four
@@ -166,12 +191,9 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
 - Only direct `<Connection>` children of `<Connections>` are read. A UTF-8 BOM is tolerated.
 - `Ver` 1.1 and 1.4 write every attribute on every connection; **1.5 omits default/off
   attributes**, so every attribute is optional (MySQL port 3306, SSH port 22, flags off).
-- `ConnType` (case-insensitive): `MYSQL`, `MARIADB` (imported as a MySQL connection while
-  MariaDB has no driver of its own), `POSTGRESQL`, `SQLITE`, `MONGODB`, `SQLSERVER`,
-  `ORACLE`, `REDIS`, `SNOWFLAKE`. MySQL and MariaDB are importable; `POSTGRESQL`, `SQLITE` and
-  `MONGODB` are importable while «Motores en vista previa» is on (otherwise listed and
-  disabled with «… está en vista previa…»); the rest are listed with «Motor no soportado en esta
-  versión». The import identity is
+- `ConnType` (case-insensitive): `MYSQL`, `MARIADB`, `POSTGRESQL`, `SQLITE`, `MONGODB`,
+  `SQLSERVER`, `ORACLE`, `REDIS`, `SNOWFLAKE`. The first five are importable; the rest are listed
+  with «Motor no soportado en esta versión». The import identity is
   `(type, ConnectionName)`, the same as for `conn.plist` imports, so an `.ncx` merges into
   connections imported from the folder.
 - Attributes used: `ConnectionName`, `ConnType`, `Host`, `Port`, `UserName`, `Database`,
@@ -191,7 +213,7 @@ tests on synthetic files in `tests/fixtures/importers/ncx/`.
   encrypted files: listed as not importable, and `SQLiteEncryptPassword` is never read.
   Imported SQLite connections keep foreign keys off and use no password. No attached
   databases are imported (no documented attribute).
-- MongoDB (`MONGODB`, importable while «Motores en vista previa» is on): attribute names from public
+- MongoDB (`MONGODB`): attribute names from public
   parsers and the design notes, **not confirmed by a sample** of the user's, read case-insensitively and never
   required. `ConnMethod` (also `ConnectionMethod`): `Standalone`, `ReplicaSet` / `Replica Set`,
   `ShardCluster`, `SRV`; `UseSRVRecord` (SRV: port unused, TLS on); `ReplicaSetName`; `AuthSource`;
