@@ -47,6 +47,7 @@ import {
   withSslMode
 } from './connectionForm'
 import { recentSqliteFiles, rememberSqliteFile } from '@renderer/utils/sqliteRecent'
+import { MONGO_READ_PREFERENCE_LABELS } from '@shared/mongo/readPreference'
 
 const ui = useUiStore()
 const connections = useConnectionsStore()
@@ -236,13 +237,9 @@ const MONGO_MECHANISMS: { value: MongoAuthMechanism; title: string }[] = [
   { value: 'plain', title: 'LDAP (PLAIN)' },
   { value: 'x509', title: 'Certificado X.509' }
 ]
-const MONGO_READ_PREFERENCES: { value: MongoReadPreference; title: string }[] = [
-  { value: 'primary', title: 'Primario' },
-  { value: 'primaryPreferred', title: 'Primario preferido' },
-  { value: 'secondary', title: 'Secundario' },
-  { value: 'secondaryPreferred', title: 'Secundario preferido' },
-  { value: 'nearest', title: 'El más cercano' }
-]
+const MONGO_READ_PREFERENCES: { value: MongoReadPreference; title: string }[] = (
+  Object.entries(MONGO_READ_PREFERENCE_LABELS) as [MongoReadPreference, string][]
+).map(([value, title]) => ({ value, title }))
 /** Seed list (replica set / sharded cluster) instead of host and port. */
 const mongoUsesMembers = computed(
   () => isMongo.value && !mongoOptions.value.srv && mongoOptions.value.topology !== 'standalone'

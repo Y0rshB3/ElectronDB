@@ -17,6 +17,7 @@ import type {
 import type { DocumentDriverConnection } from '../db/driver'
 import { RAW_BSON, mongoOf } from './client'
 import { MongoUserError, isInterrupted, toServerError } from './errors'
+import { readPreferenceLabel } from '@shared/mongo/readPreference'
 
 /** Cursors idle longer than this are closed (the server's own default is also 10 minutes). */
 export const CURSOR_IDLE_MS = 10 * 60_000
@@ -179,7 +180,7 @@ export class MongoDriverConnection implements DocumentDriverConnection {
         ? []
         : [{ label: 'Miembro', value: roleLabel(this.memberRole) }]),
       { label: 'BD por defecto', value: this.defaultDatabase },
-      { label: 'Lectura', value: mongo.readPreference },
+      { label: 'Lectura', value: readPreferenceLabel(mongo.readPreference) },
       { label: 'Cifrado', value: this.tls ? 'TLS' : 'sin cifrar' },
       ...(this.config.ssh.enabled ? [{ label: 'Túnel SSH', value: this.config.ssh.host }] : [])
     ]
