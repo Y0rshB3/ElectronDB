@@ -1518,6 +1518,13 @@ default_transaction_read_only = off` before that script and restores `on` after 
 
 ## 11. Backups and automation stay MySQL-only
 
+> **Phase 4b update (.vqb).** Backups are no longer MySQL-only: Vortaq's own format `.vqb`
+> (`docs/vqb-format.md`) is the default for new backups and is the only backup format of
+> PostgreSQL (capability `supportsBackupsVqb`; `hasBackups()` = `.nb3` or `.vqb`). `.nb3` stays
+> MySQL-only (the gates below still apply to it), restores go to the same engine only, and
+> automation stays MySQL-only (`supportsAutomation`), so PostgreSQL has no job steps, packages or
+> «Restaurar todo» yet.
+
 All of these gates are checked in main and mirrored in the UI (coupling §5).
 
 | Where                                                                                                                                                                 | Gate                                                                          |
