@@ -22,9 +22,14 @@ const props = defineProps<{
   strict?: boolean
 }>()
 /** Intro on a row: the parent opens the settings and moves focus into them. */
-const emit = defineEmits<{ open: [id: string] }>()
+const emit = defineEmits<{
+  open: [id: string]
+  /** «Copiar y restaurar» from the empty sequence. */
+  recipe: []
+}>()
 
 const connections = useConnectionsStore()
+const stepNameOf = (id: string): string => connections.get(id)?.name ?? ''
 const listEl = ref<HTMLElement | null>(null)
 
 const TYPE_LABELS: Record<JobTask['type'], string> = {
@@ -85,12 +90,12 @@ const rows = computed<Row[]>(() =>
       database = task.schema || (sourceSchema ? `${sourceSchema} (mismo nombre)` : '')
       detail = `desde ${restoreSourceLabel(task, tasks.value, (id) => connections.nameOf(id))}${
         task.includeData === false ? ' · solo estructura' : ''
-      }${task.safetyBackup === false ? ' · sin copia previa' : ''}`
+      } · ${task.safetyBackup === false ? 'sin copia previa' : 'con copia previa'}`
     }
     return {
       task,
       index,
-      name: task.referenceName || defaultReferenceName(task, tasks.value),
+      name: task.referenceName || defaultReferenceName(task, tasks.value, stepNameOf),
       connectionName:
         connection?.name ?? (task.connectionId ? 'Conexión eliminada' : 'Sin conexión'),
       engineIcon: engine?.icon ?? 'mdi-help-circle-outline',
@@ -247,6 +252,25 @@ defineExpose({ focusRow, revealRow })
   >
     <div v-if="!tasks.length" class="step-list__empty" data-test="step-list-empty">
       <p class="step-list__empty-title">Esta tarea aún no tiene pasos</p>
+      <div class="step-list__recipe" data-test="step-list-recipe">
+        <v-icon icon="mdi-database-sync-outline" size="20" aria-hidden="true" />
+        <div class="step-list__recipe-text">
+          <strong>¿Llevar Staging a Local cada noche?</strong>
+          <span
+            >«Copiar y restaurar» añade de una vez la copia de cada base de datos y su restauración
+            en el destino, con o sin copia previa.</span
+          >
+        </div>
+        <v-btn
+          size="small"
+          color="primary"
+          variant="flat"
+          prepend-icon="mdi-database-sync-outline"
+          data-test="step-list-recipe-open"
+          @click="emit('recipe')"
+          >Copiar y restaurar…</v-btn
+        >
+      </div>
       <ol class="step-list__howto">
         <li>
           <span class="step-list__howto-n" aria-hidden="true">1</span>
@@ -620,6 +644,34 @@ defineExpose({ focusRow, revealRow })
   width: 100%;
   max-width: 820px;
 }
+.step-list__recipe {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 820px;
+  padding: 10px 14px;
+  border: 1px solid rgba(var(--nd-accent-rgb), 0.35);
+  border-radius: var(--nd-radius-control);
+  background: rgba(var(--nd-accent-rgb), 0.07);
+}
+.step-list__recipe > .v-icon {
+  flex: none;
+  color: var(--nd-accent);
+}
+.step-list__recipe-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+}
+.step-list__recipe-text strong {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text);
+}
 .step-list__howto li {
   display: flex;
   gap: 10px;
@@ -657,6 +709,9 @@ defineExpose({ focusRow, revealRow })
 @container (max-width: 560px) {
   .step-list__howto {
     grid-template-columns: 1fr;
+  }
+  .step-list__recipe {
+    flex-wrap: wrap;
   }
 }
 </style>

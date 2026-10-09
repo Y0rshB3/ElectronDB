@@ -9,11 +9,12 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { ENVIRONMENT_LABELS } from '@renderer/utils/objectTypes'
 import { formatDate } from '@renderer/utils/format'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
-import { automationConnections } from '@renderer/components/backups/backupHelpers'
-import { TASK_ICONS, defaultReferenceName } from './jobForm'
+import { automationConnections, canBackup } from '@renderer/components/backups/backupHelpers'
+import { TASK_ICONS } from './jobForm'
 import {
   STEP_KINDS,
   backupStep,
+  dedupeSteps,
   connectionsForKind,
   inJob,
   restorableSteps,
@@ -36,7 +37,11 @@ import { ADD_DRAG_TYPE, endAddDrag, startAddDrag } from './stepDrag'
  */
 const props = defineProps<{ tasks: JobTask[] }>()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
-const emit = defineEmits<{ add: [tasks: JobTask[]] }>()
+const emit = defineEmits<{
+  add: [tasks: JobTask[]]
+  /** «Copiar y restaurar», proposing the selected connection as origin. */
+  recipe: [sourceId: string | null]
+}>()
 
 const connections = useConnectionsStore()
 const settings = useSettingsStore()
@@ -137,8 +142,14 @@ interface Item {
 interface ItemGroup {
   key: string
   title: string
+  /** Muted text after the title. */
+  note?: string
   items: Item[]
   empty?: string
+  /** The empty group offers «Copiar y restaurar» instead of a passive hint. */
+  recipe?: boolean
+  /** No «Seleccionar todo» (a single shortcut item). */
+  noSelectAll?: boolean
 }
 
 /** Job copies of the selected database found on disk (restore kind). */
@@ -172,6 +183,14 @@ function databaseItems(c: ConnectionConfig): string[] {
   return selectedDatabase.value ? all.filter((d) => d === selectedDatabase.value) : all
 }
 
+/** Where a restore item lands by default: «se restaura en Local con copia previa». */
+function restoreTargetText(task: JobTask): string {
+  const target = task.connectionId ? connections.get(task.connectionId) : undefined
+  return target
+    ? `se restaura en ${target.name} ${task.safetyBackup !== false ? 'con' : 'sin'} copia previa`
+    : 'elige el destino en los ajustes del paso'
+}
+
 const groups = computed<ItemGroup[]>(() => {
   const c = connection.value
   const db = selectedDatabase.value
@@ -182,15 +201,17 @@ const groups = computed<ItemGroup[]>(() => {
       {
         key: 'steps',
         title: 'Copias que hace esta tarea',
-        empty:
-          'Añade antes un paso de copia de seguridad para restaurar lo que copie en la misma ejecución.',
+        note: 'se restauran después de hacerlas, en la misma ejecución',
+        recipe: true,
         items: steps.map(({ task, index }) => {
           const used = restoresOf(task.id, tasks).length
+          const preview = restoreFromStep(task, usable.value, blocked)
+          const from = connections.get(task.connectionId)?.name ?? 'conexión eliminada'
           return {
             key: `step:${task.id}`,
             icon: TASK_ICONS.backupschema,
-            title: `Copia del paso ${index + 1} · ${task.schema || defaultReferenceName(task)}`,
-            subtitle: `${connections.nameOf(task.connectionId)}${task.includeData === false ? ' · solo estructura' : ''}${task.format === 'vqb' ? ` · .vqb${task.encrypt ? ' cifrada' : ''}` : ' · .nb3'}`,
+            title: `Copia de ${task.schema || '—'} (${from}) — ${task.includeData === false ? 'solo estructura' : 'estructura y datos'}`,
+            subtitle: `Paso ${index + 1}${task.format === 'vqb' ? ` · .vqb${task.encrypt ? ' cifrada' : ''}` : ' · .nb3'} · ${restoreTargetText(preview)}`,
             inJob: used ? (used === 1 ? 'ya se restaura' : `se restaura ${used} veces`) : undefined,
             build: () => [restoreFromStep(task, usable.value, blocked)]
           }
@@ -201,7 +222,8 @@ const groups = computed<ItemGroup[]>(() => {
       const names = databaseItems(c)
       out.push({
         key: 'latest',
-        title: `Última copia en disco · ${c.name}`,
+        title: `Copias en disco de ${c.name}`,
+        note: 'la más reciente de cada base de datos',
         empty: schemaLoader.isLoading(c.id)
           ? 'Cargando bases de datos…'
           : schemaLoader.errorOf(c.id)
@@ -210,7 +232,7 @@ const groups = computed<ItemGroup[]>(() => {
         items: names.map((name) => ({
           key: `latest:${c.id}:${name}`,
           icon: 'mdi-archive-clock-outline',
-          title: `Última copia de ${name}`,
+          title: `Última copia de ${name} · ${c.name}`,
           subtitle:
             db === name
               ? latestLoading.value
@@ -227,23 +249,48 @@ const groups = computed<ItemGroup[]>(() => {
   }
   if (!c) return []
   if (kind.value === 'backup') {
-    return [
-      {
-        key: 'dbs',
-        title: `Bases de datos · ${c.name}`,
-        empty: schemaLoader.isLoading(c.id)
-          ? 'Cargando bases de datos…'
-          : (schemaLoader.errorOf(c.id) ?? 'Sin bases de datos.'),
-        items: databaseItems(c).map((name) => ({
-          key: `backup:${c.id}:${name}`,
-          icon: 'mdi-database-outline',
-          title: name,
-          subtitle: `Copia ${engineOf(c).id === 'mysql' || engineOf(c).id === 'mariadb' ? 'en .vqb (o .nb3/.sql en sus ajustes)' : 'en .vqb'}`,
-          inJob: inJob(tasks, 'backupschema', c.id, name) ? 'ya en la tarea' : undefined,
-          build: () => [backupStep(c, name)]
-        }))
-      }
-    ]
+    const names = databaseItems(c)
+    const out: ItemGroup[] = []
+    // The whole connection: one backup step per database (system databases excluded).
+    if (!db && names.length > 1) {
+      const missing = names.filter((n) => !inJob(tasks, 'backupschema', c.id, n))
+      const already = names.length - missing.length
+      out.push({
+        key: 'all',
+        title: 'Toda la conexión',
+        noSelectAll: true,
+        items: [
+          {
+            key: `backup-all:${c.id}`,
+            icon: 'mdi-database-arrow-down-outline',
+            title: `Todas las bases de datos de ${c.name}`,
+            subtitle: !already
+              ? `${names.length} bases de datos, sin las del sistema · una copia por cada una`
+              : missing.length
+                ? `${names.length} bases de datos · ${already} ya en la tarea: ${missing.length === 1 ? 'se añade la que falta' : `se añaden las otras ${missing.length}`}`
+                : `Las ${names.length} bases de datos ya se copian en esta tarea`,
+            inJob: missing.length ? undefined : 'ya en la tarea',
+            build: () => missing.map((name) => backupStep(c, name))
+          }
+        ]
+      })
+    }
+    out.push({
+      key: 'dbs',
+      title: `Bases de datos · ${c.name}`,
+      empty: schemaLoader.isLoading(c.id)
+        ? 'Cargando bases de datos…'
+        : (schemaLoader.errorOf(c.id) ?? 'Sin bases de datos.'),
+      items: names.map((name) => ({
+        key: `backup:${c.id}:${name}`,
+        icon: 'mdi-database-outline',
+        title: name,
+        subtitle: `Copia ${engineOf(c).id === 'mysql' || engineOf(c).id === 'mariadb' ? 'en .vqb (o .nb3/.sql en sus ajustes)' : 'en .vqb'}`,
+        inJob: inJob(tasks, 'backupschema', c.id, name) ? 'ya en la tarea' : undefined,
+        build: () => [backupStep(c, name)]
+      }))
+    })
+    return out
   }
   if (kind.value === 'savedQuery') {
     const list = savedQueriesFor(queries.list(c.id), db)
@@ -305,8 +352,27 @@ function toggleChecked(key: string): void {
     : [...checked.value, key]
 }
 
+/** «Seleccionar todo» of a list: every item checked, some, or none. */
+function groupState(g: ItemGroup): 'all' | 'some' | 'none' {
+  const fresh = g.items.filter((i) => !i.inJob)
+  const pool = fresh.length ? fresh : g.items
+  const n = g.items.filter((i) => checked.value.includes(i.key)).length
+  return n === 0 ? 'none' : pool.every((i) => checked.value.includes(i.key)) ? 'all' : 'some'
+}
+
+function toggleGroup(g: ItemGroup): void {
+  // Items already in the job are left out (unless every item is), so «Añadir» adds no repeats.
+  const fresh = g.items.filter((i) => !i.inJob)
+  const keys = (fresh.length ? fresh : g.items).map((i) => i.key)
+  checked.value =
+    groupState(g) === 'all'
+      ? checked.value.filter((k) => !keys.includes(k))
+      : [...checked.value, ...keys.filter((k) => !checked.value.includes(k))]
+}
+
 function addItems(items: Item[]): void {
-  const built = items.flatMap((i) => i.build())
+  // «Todas las bases de datos» and one of them checked together add that copy once.
+  const built = dedupeSteps(items.flatMap((i) => i.build()))
   if (built.length) emit('add', built)
   checked.value = []
 }
@@ -334,9 +400,15 @@ function onItemDblClick(event: MouseEvent, item: Item): void {
 
 function onItemDragStart(event: DragEvent, item: Item): void {
   const items = checked.value.includes(item.key) ? checkedItems.value : [item]
-  startAddDrag(() => items.flatMap((i) => i.build()))
+  startAddDrag(() => dedupeSteps(items.flatMap((i) => i.build())))
   event.dataTransfer?.setData(ADD_DRAG_TYPE, item.key)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+}
+
+/** Origin proposed to «Copiar y restaurar»: the selected connection, when it can back up. */
+function openRecipe(): void {
+  const c = connection.value
+  emit('recipe', c && canBackup(c) ? c.id : null)
 }
 
 const emptyTree = computed(() =>
@@ -374,6 +446,28 @@ const emptyTree = computed(() =>
           ><span class="step-kind__short" aria-hidden="true">{{ k.short }}</span>
         </button>
       </div>
+      <v-btn
+        size="small"
+        variant="tonal"
+        color="primary"
+        prepend-icon="mdi-database-sync-outline"
+        class="step-browser__recipe step-browser__recipe--long"
+        title="Copia bases de datos de una conexión y las restaura en otra en cada ejecución"
+        data-test="browser-recipe"
+        @click="openRecipe"
+        >Copiar y restaurar</v-btn
+      >
+      <v-btn
+        icon="mdi-database-sync-outline"
+        size="x-small"
+        variant="tonal"
+        color="primary"
+        class="step-browser__recipe step-browser__recipe--short"
+        aria-label="Copiar y restaurar"
+        title="Copiar y restaurar: copia bases de datos de una conexión y las restaura en otra en cada ejecución"
+        data-test="browser-recipe-short"
+        @click="openRecipe"
+      />
       <v-btn
         :icon="collapsed ? 'mdi-chevron-up' : 'mdi-chevron-down'"
         size="x-small"
@@ -497,9 +591,57 @@ const emptyTree = computed(() =>
           Elige una conexión o una base de datos para ver lo que puedes añadir.
         </p>
         <template v-for="g in groups" :key="g.key">
-          <h4 class="step-browser__group">{{ g.title }}</h4>
-          <p v-if="!g.items.length" class="step-browser__muted">{{ g.empty }}</p>
-          <ul v-else class="avail-list" :aria-label="g.title">
+          <h4 class="step-browser__group">
+            {{ g.title }}<span v-if="g.note" class="step-browser__group-note"> · {{ g.note }}</span>
+          </h4>
+          <div
+            v-if="!g.items.length && g.recipe"
+            class="step-browser__suggest"
+            data-test="browser-recipe-suggest"
+          >
+            <v-icon icon="mdi-lightbulb-on-outline" size="18" aria-hidden="true" />
+            <div class="step-browser__suggest-text">
+              <strong>Esta tarea aún no hace copias.</strong>
+              <span
+                >Para copiar las bases de datos de una conexión (p. ej. Staging) y restaurarlas en
+                otra (p. ej. Local) en cada ejecución, con o sin copia previa del destino, usa
+                «Copiar y restaurar».</span
+              >
+            </div>
+            <v-btn
+              size="small"
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-database-sync-outline"
+              data-test="browser-recipe-suggest-open"
+              @click="openRecipe"
+              >Copiar y restaurar…</v-btn
+            >
+          </div>
+          <p v-else-if="!g.items.length" class="step-browser__muted">{{ g.empty }}</p>
+          <v-checkbox
+            v-if="g.items.length > 1 && !g.noSelectAll"
+            :model-value="groupState(g) === 'all'"
+            :indeterminate="groupState(g) === 'some'"
+            density="compact"
+            hide-details
+            class="step-browser__all"
+            :aria-label="`Seleccionar todo: ${g.title}`"
+            :data-test="`browser-select-all-${g.key}`"
+            @update:model-value="toggleGroup(g)"
+          >
+            <template #label
+              ><span class="step-browser__all-label"
+                >Seleccionar todo
+                <span class="step-browser__all-count"
+                  >({{ g.items.filter((i) => checked.includes(i.key)).length }}/{{
+                    g.items.length
+                  }})</span
+                ></span
+              ></template
+            >
+          </v-checkbox>
+          <ul v-if="g.items.length" class="avail-list" :aria-label="g.title">
             <li
               v-for="item in g.items"
               :key="item.key"
@@ -573,8 +715,58 @@ const emptyTree = computed(() =>
   min-height: 0;
   height: 100%;
 }
-.step-browser__fold {
+.step-browser__recipe--short {
+  display: none;
+}
+.step-browser__recipe {
   margin-left: auto;
+  flex: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.step-browser__group-note {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.step-browser__all {
+  margin: -2px 0 2px;
+  padding-left: 2px;
+}
+.step-browser__all-label {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text-2);
+}
+.step-browser__all-count {
+  color: var(--nd-text-muted);
+  font-size: var(--nd-fs-xs);
+}
+.step-browser__suggest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--nd-accent-rgb), 0.35);
+  border-radius: var(--nd-radius-control);
+  background: rgba(var(--nd-accent-rgb), 0.07);
+}
+.step-browser__suggest > .v-icon {
+  flex: none;
+  color: var(--nd-accent);
+}
+.step-browser__suggest-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+}
+.step-browser__suggest-text strong {
+  font-size: var(--nd-fs-dense);
+  color: var(--nd-text);
 }
 .step-browser__head {
   display: flex;
@@ -874,6 +1066,17 @@ const emptyTree = computed(() =>
   }
   .step-browser__body {
     grid-template-columns: minmax(160px, 42%) minmax(0, 1fr);
+  }
+  .step-browser__recipe--long {
+    display: none;
+  }
+  .step-browser__recipe--short {
+    display: inline-flex;
+  }
+}
+@container (max-width: 520px) {
+  .step-browser__suggest {
+    flex-wrap: wrap;
   }
 }
 </style>

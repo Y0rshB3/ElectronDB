@@ -14,7 +14,8 @@
  * VORTAQ_TEST_MYSQL_URL, VORTAQ_TEST_MARIADB_URL, VORTAQ_TEST_PG_URL,
  * VORTAQ_TEST_MONGO_URL (default: the compose containers). Creates the MySQL
  * databases `ventas` and `crm` (dropped first; the last 45 step drops them
- * again) and the MongoDB database `tienda_auto` (dropped first). Never touches ports 3306-3309 or
+ * again), `ventas`, `crm` and `auth` on MySQL 5.7 «Staging» for the «Copiar y
+ * restaurar» steps 46* (the last 46 step drops them) and the MongoDB database `tienda_auto` (dropped first). Never touches ports 3306-3309 or
  * 5432 and never the real profile. Data is synthetic.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -75,6 +76,28 @@ await my.query(`
   CREATE TABLE crm.contactos (id INT PRIMARY KEY, nombre VARCHAR(40));
 `)
 await my.end()
+
+// Staging 5.7: the databases «Copiar y restaurar» copies into Local (steps 46*).
+const staging = await mysql.createConnection({
+  host: MYSQL57_URL.hostname,
+  port: Number(MYSQL57_URL.port),
+  user: decodeURIComponent(MYSQL57_URL.username),
+  password: decodeURIComponent(MYSQL57_URL.password),
+  multipleStatements: true
+})
+await staging.query(`
+  DROP DATABASE IF EXISTS ventas;
+  CREATE DATABASE ventas;
+  CREATE TABLE ventas.pedidos (id INT PRIMARY KEY, estado VARCHAR(20), total DECIMAL(10,2));
+  INSERT INTO ventas.pedidos VALUES (1, 'pagado', 99.90);
+  DROP DATABASE IF EXISTS crm;
+  CREATE DATABASE crm;
+  CREATE TABLE crm.contactos (id INT PRIMARY KEY, nombre VARCHAR(40));
+  DROP DATABASE IF EXISTS auth;
+  CREATE DATABASE auth;
+  CREATE TABLE auth.usuarios (id INT PRIMARY KEY, email VARCHAR(80));
+`)
+await staging.end()
 
 const mongo = new MongoClient(MONGO_URL.toString(), { serverSelectionTimeoutMS: 5000 })
 await mongo.connect()
@@ -292,4 +315,6 @@ for (const r of runs)
       .join('\n') + '\n',
     { mode: 0o600 }
   )
-console.log(`Seeded ${PROFILE} (MySQL ventas/crm, MongoDB tienda_auto, job ${MULTI.name})`)
+console.log(
+  `Seeded ${PROFILE} (MySQL ventas/crm, 5.7 ventas/crm/auth, MongoDB tienda_auto, job ${MULTI.name})`
+)

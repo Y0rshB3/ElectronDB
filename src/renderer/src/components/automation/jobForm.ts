@@ -1,4 +1,5 @@
 import { backupFamilyOf, jobStepEngineProblem } from '@shared/jobEngines'
+import { naturalStepName, type ConnectionName } from '@shared/jobRecipes'
 import { restoreSourceOf, restoreTaskProblem } from '@shared/restoreTask'
 import type {
   ConnectionConfig,
@@ -50,14 +51,15 @@ export const TASK_ICONS: Record<JobTaskType, string> = {
   restoreschema: 'mdi-backup-restore'
 }
 
-function randomId(): string {
+/** Id of a new step. */
+export function newStepId(): string {
   return globalThis.crypto?.randomUUID
     ? globalThis.crypto.randomUUID()
     : `t-${Math.random().toString(36).slice(2)}`
 }
 
 export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobTask {
-  const task: JobTask = { id: randomId(), type, connectionId, schema, referenceName: '' }
+  const task: JobTask = { id: newStepId(), type, connectionId, schema, referenceName: '' }
   if (type === 'backupschema') {
     task.includeData = true
     // New steps write .vqb (Vortaq's own format); saved steps without a format stay .nb3.
@@ -99,8 +101,17 @@ export function newRestoreTask(
   return task
 }
 
-/** Default reference name («Backup <schema>», «Restaurar <schema>») when the user leaves it empty. */
-export function defaultReferenceName(task: JobTask, tasks: JobTask[] = []): string {
+/**
+ * Default reference name when the user leaves it empty. With the connection
+ * names: «Copia de ventas (Staging)», «Restaurar ventas en Local»; without
+ * them, the names of earlier versions («Backup <bd>», «Restaurar <bd>»).
+ */
+export function defaultReferenceName(
+  task: JobTask,
+  tasks: JobTask[] = [],
+  nameOf?: ConnectionName
+): string {
+  if (nameOf && task.type !== 'runquery') return naturalStepName(task, tasks, nameOf)
   if (task.type === 'backupschema') return `Backup ${task.schema}`.trim()
   if (task.type === 'restoreschema')
     return `Restaurar ${task.schema || restoreSourceOf(task, tasks)?.schema || ''}`.trim()
@@ -138,6 +149,19 @@ export function draftFromJob(job: Job): JobDraft {
 }
 
 type Lookup = (id: string) => ConnectionConfig | null | undefined
+
+/**
+ * The step's name was made by Vortaq (empty, or a default name for its current
+ * connection, database and source): it follows the step when they change.
+ */
+export function hasAutoName(task: JobTask, tasks: JobTask[], nameOf: ConnectionName): boolean {
+  const name = task.referenceName.trim()
+  return (
+    !name ||
+    name === defaultReferenceName(task, tasks) ||
+    name === defaultReferenceName(task, tasks, nameOf)
+  )
+}
 
 /**
  * Problems of one step (same messages and order as validateDraft), so the
@@ -224,7 +248,8 @@ export function validateDraft(
   return errors
 }
 
-export function buildJobInput(draft: JobDraft): JobInput {
+/** `nameOf` (connection names) gives unnamed steps their natural names. */
+export function buildJobInput(draft: JobDraft, nameOf?: ConnectionName): JobInput {
   const input: JobInput = {
     name: draft.name.trim(),
     continueOnError: draft.continueOnError,
@@ -234,7 +259,7 @@ export function buildJobInput(draft: JobDraft): JobInput {
         type: task.type,
         connectionId: task.connectionId,
         schema: task.schema,
-        referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks)
+        referenceName: task.referenceName.trim() || defaultReferenceName(task, draft.tasks, nameOf)
       }
       if (task.type === 'backupschema') {
         out.includeData = task.includeData !== false
@@ -272,7 +297,7 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
 
 /** Copy of a step with a new id (a restore keeps its source; nothing points at the copy). */
 export function duplicateTask(task: JobTask): JobTask {
-  const copy: JobTask = { ...task, id: randomId() }
+  const copy: JobTask = { ...task, id: newStepId() }
   if (task.restoreSource) copy.restoreSource = { ...task.restoreSource }
   return copy
 }

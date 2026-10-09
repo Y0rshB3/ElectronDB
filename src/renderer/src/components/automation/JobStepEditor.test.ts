@@ -378,7 +378,9 @@ describe('job editor: sequence, browser and settings', () => {
     await w.get('[data-test="step-kind-restore"]').trigger('click')
     await settle()
     const item = w.get('[data-test="avail-step:b1"]')
-    expect(item.text()).toContain('Copia del paso 1')
+    // Names the copy, its connection and content, and where it lands by default.
+    expect(item.text()).toContain('Copia de shop (Staging) — estructura y datos')
+    expect(item.text()).toContain('Paso 1 · .vqb · se restaura en Local con copia previa')
     const types: string[] = []
     const dataTransfer = {
       types,
@@ -413,6 +415,173 @@ describe('job editor: sequence, browser and settings', () => {
     })
     // The dropped step is selected: its settings show the chosen target.
     expect(w.get('[data-test="restore-target"]').text()).toContain('Local')
+  })
+
+  it('«Seleccionar todo» checks every database of the list (tri-state) and adds them', async () => {
+    current = makeJob({ ...current, tasks: [] })
+    const w = await mountEditor()
+    await w.get('[data-test="browse-connection-c1"]').trigger('click')
+    await settle()
+    const all = () => w.get('[data-test="browser-select-all-dbs"] input')
+    expect((all().element as HTMLInputElement).checked).toBe(false)
+    await w.get('[data-test="avail-backup:c1:shop"]').trigger('keydown', { key: ' ' })
+    await settle()
+    expect(all().attributes('aria-checked')).toBe('mixed')
+    expect(w.get('[data-test="browser-select-all-dbs"]').text()).toContain('(1/2)')
+    await all().setValue(true)
+    await settle()
+    expect(w.get('[data-test="browser-add"]').text()).toContain('Añadir (2)')
+    await all().setValue(false)
+    await settle()
+    expect((w.get('[data-test="browser-add"]').element as HTMLButtonElement).disabled).toBe(true)
+    await all().setValue(true)
+    await settle()
+    await w.get('[data-test="browser-add"]').trigger('click')
+    await settle()
+    const input = await saved(w)
+    expect(input.tasks.map((t) => [t.type, t.schema, t.referenceName])).toEqual([
+      ['backupschema', 'shop', 'Copia de shop (Staging)'],
+      ['backupschema', 'crm', 'Copia de crm (Staging)']
+    ])
+  })
+
+  it('«Todas las bases de datos» adds one copy per database not yet in the job, once', async () => {
+    const w = await mountEditor()
+    await w.get('[data-test="browse-connection-c1"]').trigger('click')
+    await settle()
+    const item = w.get('[data-test="avail-backup-all:c1"]')
+    expect(item.text()).toContain('Todas las bases de datos de Staging')
+    // shop and crm are both in the job already.
+    expect(item.text()).toContain('ya en la tarea')
+    current = makeJob({ ...current, tasks: [steps()[0]] })
+    const w2 = await mountEditor()
+    await w2.get('[data-test="browse-connection-c1"]').trigger('click')
+    await settle()
+    const item2 = w2.get('[data-test="avail-backup-all:c1"]')
+    expect(item2.text()).toContain('1 ya en la tarea: se añade la que falta')
+    // Checked together with crm itself: crm is added once.
+    await item2.trigger('keydown', { key: ' ' })
+    await w2.get('[data-test="avail-backup:c1:crm"]').trigger('keydown', { key: ' ' })
+    await w2.get('[data-test="browser-add"]').trigger('click')
+    await settle()
+    const input = await saved(w2)
+    expect(input.tasks.map((t) => t.schema)).toEqual(['shop', 'crm'])
+  })
+
+  it('restore lists: latest copies name their connection; with no copies it offers «Copiar y restaurar»', async () => {
+    current = makeJob({ ...current, tasks: [] })
+    const w = await mountEditor()
+    await w.get('[data-test="step-kind-restore"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="browser-recipe-suggest"]').text()).toContain('Copiar y restaurar')
+    await w.get('[data-test="browse-connection-c1"]').trigger('click')
+    await settle()
+    const items = w.get('[data-test="step-browser-items"]')
+    expect(items.text()).toContain('Copias en disco de Staging')
+    expect(items.get('[data-test="avail-latest:c1:shop"]').text()).toContain(
+      'Última copia de shop · Staging'
+    )
+    await w.get('[data-test="browser-recipe-suggest-open"]').trigger('click')
+    await settle()
+    // The selected connection is proposed as origin.
+    expect(w.get('[data-test="recipe-databases"]').text()).toContain('shop')
+  })
+
+  it('«Copiar y restaurar» adds the copies and then the restores of every database, with or without safety copy', async () => {
+    current = makeJob({ ...current, tasks: [] })
+    const w = await mountEditor()
+    expect(w.find('[data-test="copy-restore-dialog"]').exists()).toBe(false)
+    await w.get('[data-test="step-list-recipe-open"]').trigger('click')
+    await settle()
+    const dialog = () => w.get('[data-test="copy-restore-dialog"]')
+    // Nothing is opened until the user picks the origin.
+    expect(calls(invoke, 'connections:open')).toHaveLength(0)
+    expect((w.get('[data-test="recipe-add"]').element as HTMLButtonElement).disabled).toBe(true)
+    const source = w
+      .findAllComponents({ name: 'VSelect' })
+      .find((c) => c.attributes('data-test') === 'recipe-source')!
+    source.vm.$emit('update:modelValue', 'c1')
+    await settle()
+    expect(calls(invoke, 'connections:open')).toHaveLength(1)
+    // Every database (system ones excluded) is checked; the target is the local connection.
+    expect(dialog().get('[data-test="recipe-count"]').text()).toBe('2/2')
+    expect(dialog().text()).not.toContain('information_schema')
+    expect(dialog().get('[data-test="recipe-summary"]').text()).toBe(
+      'Añadirá 4 pasos: 2 copias de Staging y, después, 2 restauraciones en Local con copia previa.'
+    )
+    // crm goes to crm_copia; no safety copy.
+    await dialog().get('[data-test="recipe-target-crm"] input').setValue('crm_copia')
+    await dialog().get('[data-test="recipe-safety-off"]').trigger('click')
+    await settle()
+    expect(dialog().get('[data-test="recipe-safety-hint"]').text()).toContain(
+      'se reemplazan directamente'
+    )
+    expect(w.get('[data-test="recipe-add"]').text()).toContain('Añadir 4 pasos')
+    await w.get('[data-test="recipe-add"]').trigger('click')
+    await settle()
+    expect(w.find('[data-test="copy-restore-dialog"]').exists()).toBe(false)
+    expect(rowNames(w)[0]).toContain('Copia de shop (Staging)')
+    expect(rowNames(w)[2]).toContain('Restaurar shop en Local')
+    expect(w.get('[data-test="job-task-3"] [data-test="step-detail"]').text()).toBe(
+      'desde copia del paso 2 (crm) · sin copia previa'
+    )
+    await w.get('[data-test="job-name"] input').setValue('Staging a Local')
+    const input = await saved(w)
+    const [b1, b2, r1, r2] = input.tasks
+    expect(input.tasks.map((t) => t.type)).toEqual([
+      'backupschema',
+      'backupschema',
+      'restoreschema',
+      'restoreschema'
+    ])
+    expect(b1).toMatchObject({
+      connectionId: 'c1',
+      schema: 'shop',
+      format: 'vqb',
+      includeData: true
+    })
+    expect(r1).toMatchObject({
+      connectionId: 'l1',
+      schema: '',
+      referenceName: 'Restaurar shop en Local',
+      restoreSource: { kind: 'task', taskId: b1.id },
+      safetyBackup: false,
+      includeData: true
+    })
+    expect(r2).toMatchObject({
+      schema: 'crm_copia',
+      referenceName: 'Restaurar crm_copia en Local',
+      restoreSource: { kind: 'task', taskId: b2.id }
+    })
+  })
+
+  it('a default step name follows its target; a name the user typed stays', async () => {
+    current = makeJob({
+      ...current,
+      tasks: [
+        steps()[0],
+        {
+          id: 'r1',
+          type: 'restoreschema',
+          connectionId: 'l1',
+          schema: '',
+          referenceName: 'Restaurar shop en Local',
+          restoreSource: { kind: 'task', taskId: 'b1' },
+          safetyBackup: true,
+          includeData: true
+        }
+      ]
+    })
+    const w = await mountEditor()
+    await w.get('[data-test="job-task-1"]').trigger('click')
+    await settle()
+    await w.get('[data-test="restore-target-schema"] input').setValue('shop_dev')
+    await settle()
+    expect(rowNames(w)[1]).toContain('Restaurar shop_dev en Local')
+    await w.get('[data-test="step-reference"] input').setValue('Mi restauración')
+    await w.get('[data-test="restore-target-schema"] input').setValue('shop_qa')
+    await settle()
+    expect(rowNames(w)[1]).toContain('Mi restauración')
   })
 
   it('shows «Sin programar», then the schedule from the Programación section', async () => {

@@ -29,7 +29,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     date: '2026-10-08',
     highlights: [
       'Nuevo editor de tareas: secuencia de pasos arriba y «Añadir pasos» abajo',
-      'Busca en conexión › base de datos y añade copias, consultas guardadas, SQL o restauraciones con doble clic o arrastrando',
+      'Busca en conexión › base de datos y añade copias, consultas guardadas, SQL o restauraciones con doble clic, arrastrando o con «Seleccionar todo»',
+      '«Copiar y restaurar»: copia todas las bases de datos de una conexión (p. ej. Staging) y restáuralas en otra (Local) en cada ejecución, con o sin copia previa del destino',
       'Reordena los pasos arrastrándolos o con Alt+↑/↓; sus ajustes se abren en un panel lateral',
       'Programación, Opciones e Historial en sus propias secciones, con la próxima ejecución a la vista'
     ],

@@ -15,7 +15,14 @@ import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 import { automationConnections, environmentLabel } from '@renderer/components/backups/backupHelpers'
 import ReplaceContentToggle from '@renderer/components/backups/ReplaceContentToggle.vue'
-import { TASK_ICONS, TASK_TYPES, defaultReferenceName, newRestoreTask, newTask } from './jobForm'
+import {
+  TASK_ICONS,
+  TASK_TYPES,
+  defaultReferenceName,
+  hasAutoName,
+  newRestoreTask,
+  newTask
+} from './jobForm'
 
 /**
  * Settings of the selected step of the job editor (side panel). Edits the
@@ -49,6 +56,7 @@ const queryConnectionItems = computed(() =>
 )
 
 const connectionOf = (id: string | null | undefined) => (id ? connections.get(id) : undefined)
+const stepNameOf = (id: string): string => connections.get(id)?.name ?? ''
 
 /** Step types offered: no query step on PostgreSQL, SQLite or MongoDB. */
 const typeItems = computed(() => {
@@ -78,10 +86,21 @@ const sourceFamily = computed(() => {
   return connection ? backupFamilyOf(connection.engine) : null
 })
 
+/** Changes that alter a step's default name («Copia de ventas (Staging)»…). */
+const NAMING: (keyof JobTask)[] = ['connectionId', 'schema', 'restoreSource', 'type']
+
 function update(changes: Partial<JobTask>): void {
   if (index.value < 0) return
   const next = [...tasks.value]
-  next[index.value] = { ...next[index.value], ...changes }
+  const current = next[index.value]
+  // A name Vortaq gave the step follows its connection, database and source.
+  if (
+    !('referenceName' in changes) &&
+    NAMING.some((k) => k in changes) &&
+    hasAutoName(current, tasks.value, stepNameOf)
+  )
+    changes = { ...changes, referenceName: '' }
+  next[index.value] = { ...current, ...changes }
   tasks.value = next
 }
 
@@ -140,13 +159,18 @@ function changeType(type: JobTaskType): void {
   tasks.value = next
 }
 
+/** «Copia de ventas (Staging)» already names its connection; other names get it appended. */
+function withConnection(name: string, connection: string): string {
+  return name.includes(`(${connection})`) ? name : `${name} (${connection})`
+}
+
 /** «Origen» choices of a restore step: earlier backup steps, or the latest file on disk. */
 const sourceItems = computed(() => {
   const items = tasks.value.slice(0, Math.max(index.value, 0)).flatMap((t, i) =>
     t.type === 'backupschema'
       ? [
           {
-            title: `Paso ${i + 1} · ${t.referenceName || defaultReferenceName(t)} (${t.connectionId ? connections.nameOf(t.connectionId) : '—'})${t.includeData === false ? ' · solo estructura' : ''}${t.format === 'sql' ? ' · .sql (no restaurable)' : t.format === 'vqb' ? ` · .vqb${t.encrypt ? ' cifrada' : ''}` : ''}`,
+            title: `Paso ${i + 1} · ${withConnection(t.referenceName || defaultReferenceName(t, tasks.value, stepNameOf), t.connectionId ? connections.nameOf(t.connectionId) : '—')}${t.includeData === false ? ' · solo estructura' : ''}${t.format === 'sql' ? ' · .sql (no restaurable)' : t.format === 'vqb' ? ` · .vqb${t.encrypt ? ' cifrada' : ''}` : ''}`,
             value: `task:${t.id}`
           }
         ]
@@ -278,7 +302,7 @@ const formatValue = computed(() =>
       <div class="step-settings__heading">
         <h3 ref="titleEl" class="step-settings__title" tabindex="-1">Paso {{ index + 1 }}</h3>
         <span class="step-settings__sub">{{
-          task.referenceName || defaultReferenceName(task, tasks)
+          task.referenceName || defaultReferenceName(task, tasks, stepNameOf)
         }}</span>
       </div>
       <v-btn
@@ -316,7 +340,7 @@ const formatValue = computed(() =>
         <v-text-field
           :model-value="task.referenceName"
           label="Nombre de referencia"
-          :placeholder="defaultReferenceName(task, tasks)"
+          :placeholder="defaultReferenceName(task, tasks, stepNameOf)"
           persistent-placeholder
           data-test="step-reference"
           @update:model-value="update({ referenceName: $event })"

@@ -58,7 +58,7 @@ export const STEP_KINDS: StepKindMeta[] = [
     short: 'Restaurar',
     label: 'Restauración',
     icon: 'mdi-backup-restore',
-    hint: 'Restaura la copia de un paso anterior o la última copia en disco de una base de datos. El destino se elige en los ajustes del paso.'
+    hint: 'Restaura, en la misma ejecución, la copia que hace un paso anterior (o la última copia en disco) en otra conexión: por defecto una local y con copia previa del destino. Cámbialo en los ajustes del paso.'
   }
 ]
 
@@ -136,6 +136,21 @@ export function restoreFromLatest(
   const task = newTask('restoreschema', local?.id ?? '', '')
   task.restoreSource = { kind: 'latest', connectionId: connection.id, schema }
   return task
+}
+
+/**
+ * Drops repeated backup steps of the same connection and database in one batch
+ * («Todas las bases de datos» checked together with one of them).
+ */
+export function dedupeSteps(steps: JobTask[]): JobTask[] {
+  const seen = new Set<string>()
+  return steps.filter((t) => {
+    if (t.type !== 'backupschema') return true
+    const key = `${t.connectionId}\u0000${t.schema}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /** Backup steps of the job a restore can read (not .sql copies), with their position. */

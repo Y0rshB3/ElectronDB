@@ -11,6 +11,7 @@ import { useTabsStore, type WorkspaceTab } from '@renderer/stores/tabs'
 import { ENVIRONMENT_LABELS } from '@renderer/utils/objectTypes'
 import { formatDate } from '@renderer/utils/format'
 import EmptyState from '@renderer/components/common/EmptyState.vue'
+import CopyRestoreDialog from '@renderer/components/automation/CopyRestoreDialog.vue'
 import JobStepBrowser from '@renderer/components/automation/JobStepBrowser.vue'
 import JobStepList from '@renderer/components/automation/JobStepList.vue'
 import JobStepSettings from '@renderer/components/automation/JobStepSettings.vue'
@@ -79,7 +80,9 @@ const selectedStep = ref<string | null>(null)
 const browserCollapsed = ref(false)
 const passwordInput = ref<{ focus: () => void } | null>(null)
 
-const serialized = computed(() => JSON.stringify(buildJobInput(draft.value)))
+/** Connection names for the default names of unnamed steps («Copia de ventas (Staging)»). */
+const stepNameOf = (id: string): string => connections.get(id)?.name ?? ''
+const serialized = computed(() => JSON.stringify(buildJobInput(draft.value, stepNameOf)))
 const dirty = computed(() => !loading.value && serialized.value !== snapshot.value)
 // Risk signature of the last saved state; scheduling changes that touch SQL tasks on guarded
 // connections (production, Ajustes › Seguridad) are confirmed only when this changes.
@@ -91,7 +94,7 @@ function riskOf(input: JobInput): string {
 
 function markClean(): void {
   snapshot.value = serialized.value
-  cleanRisk = riskOf(buildJobInput(draft.value))
+  cleanRisk = riskOf(buildJobInput(draft.value, stepNameOf))
 }
 
 const stepProblems = computed(() =>
@@ -227,7 +230,7 @@ async function save(): Promise<boolean> {
     revealFirstProblem()
     return false
   }
-  const input = buildJobInput(draft.value)
+  const input = buildJobInput(draft.value, stepNameOf)
   const risk = riskOf(input)
   // Main re-checks this rule; the flag tells it the user just confirmed.
   let confirmed = false
@@ -310,6 +313,14 @@ function addSteps(added: JobTask[]): void {
       : `${added.length} pasos añadidos (hasta el ${total})`
   if (added.length === 1) selectedStep.value = added[0].id
   void stepList.value?.revealRow(added[added.length - 1].id)
+}
+
+/** «Copiar y restaurar» dialog and the origin it proposes. */
+const recipeOpen = ref(false)
+const recipeSource = ref<string | null>(null)
+function openRecipe(sourceId: string | null = null): void {
+  recipeSource.value = sourceId
+  recipeOpen.value = true
 }
 
 /** Intro on a row: the settings open and take the keyboard focus. */
@@ -540,6 +551,7 @@ onMounted(load)
                 :problems="stepProblems"
                 :strict="strict"
                 @open="openStep"
+                @recipe="openRecipe()"
               />
               <span class="je-sr" aria-live="polite">{{ announcement }}</span>
             </div>
@@ -549,8 +561,15 @@ onMounted(load)
               v-model:collapsed="browserCollapsed"
               :tasks="draft.tasks"
               @add="addSteps"
+              @recipe="openRecipe"
             />
           </div>
+          <CopyRestoreDialog
+            v-model="recipeOpen"
+            :tasks="draft.tasks"
+            :proposed-source="recipeSource"
+            @add="addSteps"
+          />
         </div>
         <div v-if="selectedStep" class="je-steps__panel">
           <JobStepSettings

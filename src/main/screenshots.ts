@@ -1942,6 +1942,105 @@ const AUTO_STEPS: Step[] = [
 ]
 STEPS.push(...AUTO_STEPS)
 
+/**
+ * «Copiar y restaurar» and «Seleccionar todo» (VORTAQ_SHOTS_ONLY=46): need the
+ * profile and the 5.7 «Staging» databases (ventas, crm, auth) of
+ * scripts/seed-automation-shots.mjs. The last step drops those databases.
+ */
+const AUTO_STAGING = 'shot-auto-staging'
+const NEW_AUTO_JOB = `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.workspace.openJobEditor(null)
+      await H.waitFor('[data-test="step-list-empty"]', 10000)`
+const SET_INPUT = `
+      const setInput = (sel, value) => {
+        const el = H.$(sel)
+        if (!el) throw new Error('input not found: ' + sel)
+        el.value = value
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }`
+const RECIPE_STEPS: Step[] = [
+  {
+    name: '46a-recipe-empty-editor',
+    script: `${NEW_AUTO_JOB}
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46b-recipe-dialog',
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="avail-backup-all:${AUTO_STAGING}"]'), 15000)
+      await H.click('[data-test="browser-recipe"]', 8000)
+      await H.waitFor('[data-test="recipe-db-ventas"]', 15000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46c-recipe-dialog-custom',
+    script: `${SET_INPUT}
+      await H.click('[data-test="recipe-db-navidog_test"] input[type="checkbox"]', 8000)
+      setInput('[data-test="recipe-target-crm"] input', 'crm_pruebas')
+      await H.click('[data-test="recipe-safety-off"]', 8000)
+      await H.settle(S, 700)`
+  },
+  {
+    name: '46d-recipe-job-created',
+    script: `
+      await H.click('[data-test="recipe-safety-on"]', 8000)
+      await H.sleep(200)
+      await H.click('[data-test="recipe-add"]', 8000)
+      await H.waitFor('[data-test="job-task-5"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46e-restore-list',
+    script: `
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '46f-select-all',
+    script: `
+      await H.click('[data-test="step-kind-backup"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="browser-select-all-dbs"] input'), 15000)
+      await H.click('[data-test="avail-backup:${AUTO_STAGING}:ventas"] input[type="checkbox"]', 8000)
+      await H.settle(S, 400)
+      await H.click('[data-test="browser-select-all-dbs"] input', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46g-restore-suggest',
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="browser-recipe-suggest"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46h-recipe-dialog-light',
+    script: `
+      S.settings.settings = { ...S.settings.settings, theme: 'light' }
+      ${NEW_AUTO_JOB}
+      await H.click('[data-test="step-list-recipe-open"]', 8000)
+      await H.waitFor('[data-test="copy-restore-dialog"]', 8000)
+      await H.settle(S, 900)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, theme: 'dark' }`
+  },
+  {
+    name: '46i-recipe-editor-1100',
+    size: { width: 1100, height: 760 },
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="avail-backup-all:${AUTO_STAGING}"]'), 15000)
+      await H.settle(S, 900)`,
+    cleanup: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      for (const db of ['ventas', 'crm', 'auth'])
+        await S.api.invokeSilent('db:execute', '${AUTO_STAGING}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
+  }
+]
+STEPS.push(...RECIPE_STEPS)
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }
