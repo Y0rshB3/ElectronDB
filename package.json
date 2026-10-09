@@ -19,7 +19,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/banner.mjs && electron-vite dev",
     "build": "electron-vite build && node scripts/third-party-licenses.mjs",
     "licenses": "node scripts/third-party-licenses.mjs",
     "preview": "electron-vite preview",
