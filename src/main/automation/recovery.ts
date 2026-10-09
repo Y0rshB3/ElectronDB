@@ -105,11 +105,14 @@ export function markInterrupted(ctx: AppContext, stale: JobRun, now: () => Date)
     interrupted: true,
     safetyCopies: safetyCopiesOf(ctx, run),
     steps: run.tasks.map((t, i) => {
-      // Rollback steps are not in the stored job: their reference name is the label.
+      // A package step became several restores: positions no longer match the job's steps.
+      const expanded = run.tasks.some((x) => x.packageStepId)
+      // Rollback steps and the restores of a package step are not in the stored job: their
+      // reference name is the label.
       const task =
-        run.kind === 'rollback'
+        run.kind === 'rollback' || t.packageStepId
           ? undefined
-          : (job?.tasks.find((x) => x.id === t.taskId) ?? job?.tasks[i])
+          : (job?.tasks.find((x) => x.id === t.taskId) ?? (expanded ? undefined : job?.tasks[i]))
       const label = task && job ? stepLabel(describeStep(ctx, job.tasks, task)) : t.referenceName
       return { index: i + 1, label, status: t.status, message: t.message }
     })

@@ -117,6 +117,14 @@ describe('WHATS_NEW (curated list)', () => {
     expect(versions(whatsNewBetween('0.1.9', '2.0.0-alpha.1'))).toEqual(['2.0.0'])
   })
 
+  it('2.0.1 announces the new job editor with one tour step on Automatización', () => {
+    const entry = whatsNewFor('2.0.1')
+    expect(entry?.highlights.join(' ')).toMatch(/Añadir pasos/)
+    expect(entry?.highlights.join(' ')).toMatch(/«Restaurar paquete»: un solo paso/)
+    expect(entry?.tour).toHaveLength(1)
+    expect(entry?.tour?.[0].target).toBe('toolbar-automation')
+  })
+
   it('0.1.8 announces connections without a password', () => {
     expect(whatsNewFor('0.1.8')?.highlights).toEqual([
       'Conexiones sin contraseña: para proxies, túneles o certificados (Autenticación › Sin contraseña)'

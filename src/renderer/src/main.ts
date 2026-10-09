@@ -18,6 +18,7 @@ import { useObjectActions } from './composables/useObjectActions'
 import { useUpdatesStore } from './stores/updates'
 import { useWorkspace } from './composables/useWorkspace'
 import { applyPlatformClass } from './utils/platform'
+import { hideSplash } from './utils/splash'
 import '@mdi/font/css/materialdesignicons.css'
 import '@fontsource-variable/inter/wght.css'
 import '@fontsource-variable/jetbrains-mono/wght.css'
@@ -42,6 +43,8 @@ window.addEventListener('unhandledrejection', (event) => {
 })
 
 app.use(pinia).use(vuetify).mount('#app')
+// The app has painted its shell: the startup splash can go.
+requestAnimationFrame(() => hideSplash())
 
 /**
  * Screenshot harness hook (src/main/screenshots.ts). The main process only

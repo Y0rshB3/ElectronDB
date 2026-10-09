@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { Job, JobInput, JobRun, RollbackRequest, WriteOptions } from '@shared/types'
+import type {
+  Job,
+  JobInput,
+  JobPackageSummary,
+  JobRun,
+  RollbackRequest,
+  WriteOptions
+} from '@shared/types'
 import { api } from '@renderer/api'
 
 export const useJobsStore = defineStore('jobs', () => {
@@ -8,6 +15,9 @@ export const useJobsStore = defineStore('jobs', () => {
   const runs = ref<JobRun[]>([])
   const loaded = ref(false)
   const loading = ref(false)
+  /** Latest package of every job with copies (jobs:packages); empty until loadPackages(). */
+  const packages = ref<JobPackageSummary[]>([])
+  const packagesLoaded = ref(false)
 
   const sorted = computed(() => [...jobs.value].sort((a, b) => a.name.localeCompare(b.name, 'es')))
   /**
@@ -49,6 +59,22 @@ export const useJobsStore = defineStore('jobs', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  /** Refreshes the job packages; a failure keeps the previous list (the list is a helper). */
+  async function loadPackages(): Promise<JobPackageSummary[]> {
+    try {
+      const list = await api.jobs.packages()
+      packages.value = Array.isArray(list) ? list : []
+      packagesLoaded.value = true
+    } catch {
+      /* invokeSilent: the editor shows the jobs without their packages */
+    }
+    return packages.value
+  }
+
+  function packageOf(jobId: string): JobPackageSummary | undefined {
+    return packages.value.find((p) => p.jobId === jobId)
   }
 
   async function loadRuns(jobId: string, limit = 50): Promise<JobRun[]> {
@@ -121,6 +147,10 @@ export const useJobsStore = defineStore('jobs', () => {
     rollback,
     cancel,
     upsertRun,
-    listen
+    listen,
+    packages,
+    packagesLoaded,
+    loadPackages,
+    packageOf
   }
 })

@@ -491,7 +491,12 @@ describe('drop messages name the object kind with its article', () => {
   it.each([
     ['tables', undefined, 'items', 'Se eliminará la tabla `shop`.`items` de forma permanente.'],
     ['views', undefined, 'v_items', 'Se eliminará la vista `shop`.`v_items` de forma permanente.'],
-    ['functions', 'PROCEDURE', 'purge', 'Se eliminará el procedimiento `shop`.`purge` de forma permanente.'],
+    [
+      'functions',
+      'PROCEDURE',
+      'purge',
+      'Se eliminará el procedimiento `shop`.`purge` de forma permanente.'
+    ],
     ['events', undefined, 'nightly', 'Se eliminará el evento `shop`.`nightly` de forma permanente.']
   ] as const)('%s', async (group, subtype, name, message) => {
     setupDom()

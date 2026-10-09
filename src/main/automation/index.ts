@@ -133,7 +133,7 @@ export function createAutomationService(
     active.set(started.run.id, {
       jobId: job.id,
       rollback: started.run.kind === 'rollback',
-      restores: job.tasks.some((t) => t.type === 'restoreschema'),
+      restores: job.tasks.some((t) => t.type === 'restoreschema' || t.type === 'restorepackage'),
       jobName: started.run.jobName,
       controller,
       done

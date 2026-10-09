@@ -18,6 +18,7 @@ import type {
   ExtensionInfo,
   Job,
   JobInput,
+  JobPackageSummary,
   JobLogEvent,
   JobRun,
   LogEvent,
@@ -538,6 +539,12 @@ export interface IpcInvokeMap {
   'jobs:cancel': { args: [runId: string]; result: void }
   'jobs:runs': { args: [jobId: string | null, limit?: number]; result: JobRun[] }
   'jobs:runLog': { args: [runId: string]; result: string }
+  /**
+   * Latest backup package of every job that makes restorable copies (names,
+   * dates and paths from the run history; no archive is opened): the
+   * «Restauración» list of the job editor and its «Restaurar paquete» steps.
+   */
+  'jobs:packages': { args: []; result: JobPackageSummary[] }
   'jobs:scheduleStatus': {
     args: [id: string]
     result: { inApp: boolean; launchAgent: boolean; nextRun: string | null }
@@ -781,6 +788,7 @@ export const IPC_INVOKE_CHANNELS: readonly IpcChannel[] = [
   'jobs:cancel',
   'jobs:runs',
   'jobs:runLog',
+  'jobs:packages',
   'jobs:scheduleStatus',
   'jobs:rollbackPlan',
   'jobs:rollback',

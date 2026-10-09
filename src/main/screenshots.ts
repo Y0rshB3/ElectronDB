@@ -830,7 +830,12 @@ const STEPS: Step[] = [
       await S.jobs.load()
       const job = S.jobs.jobs.find((j) => j.name === ${JSON.stringify(STAGING_TO_LOCAL_JOB)})
       if (!job) throw new Error('job ${STAGING_TO_LOCAL_JOB} not seeded')
+      // Other editors stay mounted: close them so the row clicked is this job's.
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
       S.workspace.openJobEditor(job.id, job.name)
+      const row = await H.until(() => [...document.querySelectorAll('[data-test="job-task-1"]')]
+        .find((r) => r.getClientRects().length && /Restauración/.test(r.textContent)), 10000)
+      row.click()
       await H.waitFor('[data-test="restore-source"]', 10000)
       await H.settle(S, 1200)`,
     cleanup: `
@@ -1778,6 +1783,376 @@ const MONGO_STEPS: Step[] = [
   }
 ]
 STEPS.push(...MONGO_STEPS)
+
+/**
+ * Job editor screens (VORTAQ_SHOTS_ONLY=45): need the profile and server
+ * fixtures of scripts/seed-automation-shots.mjs (job «Copia nocturna
+ * multimotor» across MySQL, PostgreSQL, MongoDB and MariaDB).
+ */
+const AUTO_JOB = 'shot-auto-multi'
+const AUTO_LOCAL = 'shot-auto-local'
+/** Opens the seeded job in a clean workspace, on the «Pasos» section. */
+const OPEN_AUTO_JOB = `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.jobs.find((j) => j.id === '${AUTO_JOB}')
+      if (!job) throw new Error('job not seeded (run scripts/seed-automation-shots.mjs)')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="job-task-4"]', 10000)`
+const SAVED_QUERIES = JSON.stringify([
+  {
+    id: 'sq-1',
+    name: 'Cerrar pedidos pagados',
+    sql: "UPDATE pedidos SET estado = 'cerrado' WHERE estado = 'pagado';",
+    schema: 'ventas',
+    updatedAt: '2026-10-01T09:00:00.000Z'
+  },
+  {
+    id: 'sq-2',
+    name: 'Recalcular totales',
+    sql: 'CALL recalcular_totales();',
+    schema: 'ventas',
+    updatedAt: '2026-10-02T09:00:00.000Z'
+  },
+  {
+    id: 'sq-3',
+    name: 'Archivar contactos inactivos',
+    sql: 'DELETE FROM contactos WHERE activo = 0;',
+    schema: 'crm',
+    updatedAt: '2026-10-03T09:00:00.000Z'
+  }
+])
+const AUTO_STEPS: Step[] = [
+  {
+    name: '45a-job-editor-empty',
+    script: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.workspace.openJobEditor(null)
+      await H.waitFor('[data-test="step-list-empty"]', 10000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45b-job-editor-steps',
+    script: `${OPEN_AUTO_JOB}
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '45c-job-step-settings',
+    script: `
+      await H.click('[data-test="job-task-0"]', 8000)
+      await H.waitFor('[data-test="step-settings"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45d-job-step-restore-settings',
+    script: `
+      await H.click('[data-test="job-task-4"]', 8000)
+      await H.waitFor('[data-test="restore-source"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45e-job-add-saved-queries',
+    script: `
+      localStorage.setItem('electrondb.queries.${AUTO_LOCAL}', ${JSON.stringify(SAVED_QUERIES)})
+      ${OPEN_AUTO_JOB}
+      await H.click('[data-test="step-kind-savedQuery"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.click('[data-test="browse-expand-${AUTO_LOCAL}"]', 8000)
+      await H.click('[data-test="browse-db-ventas"]', 15000)
+      await H.click('[data-test="avail-query:${AUTO_LOCAL}:sq-1"]', 8000)
+      H.$('[data-test="avail-query:${AUTO_LOCAL}:sq-1"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      H.$('[data-test="avail-query:${AUTO_LOCAL}:sq-2"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45f-job-add-backups',
+    script: `
+      await H.click('[data-test="step-kind-backup"]', 8000)
+      await H.click('[data-test="browse-connection-shot-auto-pg"]', 8000)
+      await H.until(() => H.$('[data-test^="avail-backup:shot-auto-pg:"]'), 15000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45g-job-add-restore',
+    script: `
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.click('[data-test="browse-db-ventas"]', 15000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '45h-job-schedule',
+    script: `
+      await H.click('[data-test="job-schedule-pill"]', 8000)
+      await H.waitFor('[data-test="schedule-builder"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45i-job-options',
+    script: `
+      await H.click('[data-test="job-section-options"]', 8000)
+      await H.settle(S, 700)`
+  },
+  {
+    name: '45j-job-history',
+    script: `
+      await H.click('[data-test="job-section-history"]', 8000)
+      await H.until(() => document.querySelectorAll('[data-test="job-editor"] .run-history, [data-test="job-editor"] [data-test^="run-"]').length, 8000).catch(() => null)
+      await H.settle(S, 1500)`
+  },
+  {
+    name: '45k-job-editor-light',
+    script: `
+      S.settings.settings = { ...S.settings.settings, theme: 'light' }
+      ${OPEN_AUTO_JOB}
+      await H.click('[data-test="job-task-0"]', 8000)
+      await H.click('[data-test="step-kind-savedQuery"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.settle(S, 1200)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, theme: 'dark' }`
+  },
+  {
+    name: '45l-job-editor-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_AUTO_JOB}
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45m-job-step-settings-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_AUTO_JOB}
+      await H.click('[data-test="job-task-4"]', 8000)
+      await H.waitFor('[data-test="step-settings"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '45n-job-add-browser-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_AUTO_JOB}
+      await H.click('[data-test="step-kind-backup"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.until(() => H.$('[data-test="avail-backup:${AUTO_LOCAL}:crm"]'), 15000)
+      await H.settle(S, 900)`,
+    cleanup: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      localStorage.removeItem('electrondb.queries.${AUTO_LOCAL}')
+      for (const db of ['ventas', 'crm'])
+        await S.api.invokeSilent('db:execute', '${AUTO_LOCAL}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
+  }
+]
+STEPS.push(...AUTO_STEPS)
+
+/**
+ * «Copiar y restaurar» and «Seleccionar todo» (VORTAQ_SHOTS_ONLY=46): need the
+ * profile and the 5.7 «Staging» databases (ventas, crm, auth) of
+ * scripts/seed-automation-shots.mjs. The last step drops those databases.
+ */
+const AUTO_STAGING = 'shot-auto-staging'
+const NEW_AUTO_JOB = `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      S.workspace.openJobEditor(null)
+      await H.waitFor('[data-test="step-list-empty"]', 10000)`
+const SET_INPUT = `
+      const setInput = (sel, value) => {
+        const el = H.$(sel)
+        if (!el) throw new Error('input not found: ' + sel)
+        el.value = value
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }`
+const RECIPE_STEPS: Step[] = [
+  {
+    name: '46a-recipe-empty-editor',
+    script: `${NEW_AUTO_JOB}
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46b-recipe-dialog',
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="avail-backup-all:${AUTO_STAGING}"]'), 15000)
+      await H.click('[data-test="browser-recipe"]', 8000)
+      await H.waitFor('[data-test="recipe-db-ventas"]', 15000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46c-recipe-dialog-custom',
+    script: `${SET_INPUT}
+      await H.click('[data-test="recipe-db-navidog_test"] input[type="checkbox"]', 8000)
+      setInput('[data-test="recipe-target-crm"] input', 'crm_pruebas')
+      await H.click('[data-test="recipe-safety-off"]', 8000)
+      await H.settle(S, 700)`
+  },
+  {
+    name: '46d-recipe-job-created',
+    script: `
+      await H.click('[data-test="recipe-safety-on"]', 8000)
+      await H.sleep(200)
+      await H.click('[data-test="recipe-add"]', 8000)
+      await H.waitFor('[data-test="job-task-5"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46e-restore-list',
+    script: `
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '46f-select-all',
+    script: `
+      await H.click('[data-test="step-kind-backup"]', 8000)
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="browser-select-all-dbs"] input'), 15000)
+      await H.click('[data-test="avail-backup:${AUTO_STAGING}:ventas"] input[type="checkbox"]', 8000)
+      await H.settle(S, 400)
+      await H.click('[data-test="browser-select-all-dbs"] input', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46g-restore-suggest',
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="browser-recipe-suggest"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '46h-recipe-dialog-light',
+    script: `
+      S.settings.settings = { ...S.settings.settings, theme: 'light' }
+      ${NEW_AUTO_JOB}
+      await H.click('[data-test="step-list-recipe-open"]', 8000)
+      await H.waitFor('[data-test="copy-restore-dialog"]', 8000)
+      await H.settle(S, 900)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, theme: 'dark' }`
+  },
+  {
+    name: '46i-recipe-editor-1100',
+    size: { width: 1100, height: 760 },
+    script: `${NEW_AUTO_JOB}
+      await H.click('[data-test="browse-connection-${AUTO_STAGING}"]', 8000)
+      await H.until(() => H.$('[data-test="avail-backup-all:${AUTO_STAGING}"]'), 15000)
+      await H.settle(S, 900)`,
+    cleanup: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      for (const db of ['ventas', 'crm', 'auth'])
+        await S.api.invokeSilent('db:execute', '${AUTO_STAGING}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
+  }
+]
+STEPS.push(...RECIPE_STEPS)
+
+/**
+ * «Restaurar paquete» (VORTAQ_SHOTS_ONLY=47): need the profile of
+ * scripts/seed-automation-shots.mjs (jobs «Copias de Local» and «Copia nocturna
+ * Staging» with its last run). The restore list grouped by automation, a package
+ * step row and its settings panel.
+ */
+const PACKAGE_JOB = 'shot-auto-local-copies'
+const OPEN_PACKAGE_JOB = `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.jobs.find((j) => j.id === '${PACKAGE_JOB}')
+      if (!job) throw new Error('job not seeded (run scripts/seed-automation-shots.mjs)')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="job-task-5"]', 10000)`
+const PACKAGE_STEPS: Step[] = [
+  {
+    name: '47a-restore-list-grouped',
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.until(() => H.$('[data-test="avail-pack:job:shot-auto-staging-nightly"]'), 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.until(() => H.$('[data-test^="avail-latest:${AUTO_LOCAL}:"]'), 15000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '47a2-restore-list-disk-copies',
+    script: `
+      // This job's copies folded and the list scrolled to the other jobs and the disk copies.
+      await H.click('[data-test="pack-fold-steps"]', 8000)
+      await H.sleep(200)
+      const list = H.$('[data-test="step-browser-items"]')
+      list.scrollTop = list.scrollHeight
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47b-restore-list-other-job',
+    script: `
+      await H.click('[data-test="pack-fold-job:shot-auto-staging-nightly"]', 8000)
+      await H.waitFor('[data-test="avail-pkg:shot-auto-staging-nightly:auth"]', 8000)
+      H.$('[data-test="avail-pkg:shot-auto-staging-nightly:ventas"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      H.$('[data-test="avail-pkg:shot-auto-staging-nightly:auth"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      H.$('[data-test="avail-pack:job:shot-auto-staging-nightly"]').scrollIntoView({ block: 'start' })
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47c-package-step-row',
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="avail-add-pack:own"]', 8000)
+      await H.waitFor('[data-test="job-task-6"]', 8000)
+      await H.click('[data-test="avail-add-pack:job:shot-auto-staging-nightly"]', 8000)
+      await H.waitFor('[data-test="job-task-7"]', 8000)
+      await H.click('[data-test="step-browser-fold"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47d-package-step-settings',
+    script: `
+      await H.click('[data-test="job-task-6"]', 8000)
+      await H.waitFor('[data-test="package-databases"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47e-package-step-settings-other-job',
+    script: `${SET_INPUT}
+      await H.click('[data-test="job-task-7"]', 8000)
+      await H.waitFor('[data-test="package-db-auth"]', 8000)
+      await H.click('[data-test="package-whole-some"]', 8000)
+      await H.sleep(200)
+      await H.click('[data-test="package-db-pagos"] input[type="checkbox"]', 8000)
+      setInput('[data-test="package-suffix"] input', '_dev')
+      await H.click('[data-test="package-safety-off"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47f-restore-list-light',
+    script: `
+      S.settings.settings = { ...S.settings.settings, theme: 'light' }
+      ${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.settle(S, 1200)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, theme: 'dark' }`
+  },
+  {
+    name: '47g-restore-list-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47h-package-settings-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="avail-add-pack:own"]', 8000)
+      await H.waitFor('[data-test="job-task-6"]', 8000)
+      await H.click('[data-test="job-task-6"]', 8000)
+      await H.waitFor('[data-test="package-databases"]', 8000)
+      await H.settle(S, 900)`,
+    cleanup: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      for (const db of ['ventas', 'crm'])
+        await S.api.invokeSilent('db:execute', '${AUTO_LOCAL}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)
+      for (const db of ['ventas', 'crm', 'auth'])
+        await S.api.invokeSilent('db:execute', '${AUTO_STAGING}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
+  }
+]
+STEPS.push(...PACKAGE_STEPS)
 
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`

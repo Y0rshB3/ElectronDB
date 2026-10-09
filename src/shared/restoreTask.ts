@@ -106,6 +106,12 @@ export interface RestoreCheckOptions {
    * (nobody types the name in a job run). Production is always refused.
    */
   typedEnvironments?: readonly Environment[]
+  /**
+   * The restore is one database of a «Restaurar paquete» step that read
+   * another job's package: its `file` source was resolved by the runner (never
+   * saved in a job). Guarded targets stay refused.
+   */
+  packageFile?: boolean
 }
 
 /**
@@ -139,7 +145,7 @@ export function restoreTaskProblem(
     if (!source.connectionId) return `El ${label} necesita la conexión de origen de la copia.`
     if (!source.schema?.trim()) return `El ${label} necesita el esquema de origen de la copia.`
   } else if (source.kind === 'file') {
-    if (!options.rollback)
+    if (!options.rollback && !options.packageFile)
       return `El ${label} usa un archivo concreto como origen; elige un paso de copia o «Última copia en disco».`
     if (!source.path) return `El ${label} no indica el archivo de la copia.`
   } else {

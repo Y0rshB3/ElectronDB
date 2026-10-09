@@ -1,12 +1,13 @@
 import { jobStepEngineProblem } from '@shared/jobEngines'
 import { restoreTaskProblem } from '@shared/restoreTask'
+import { restorePackageProblem } from '@shared/restorePackage'
 import type { ConnectionConfig, Environment, JobInput } from '@shared/types'
 import { cronToCalendarIntervals, validateCron } from '../automation/cron'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 
 /** jobs:save / jobs:run validation; free of electron so it is unit tested. */
 
-const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema'])
+const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema', 'restorepackage'])
 
 /**
  * Boundary validation for jobs:save; throws actionable Spanish messages.
@@ -22,7 +23,9 @@ const TASK_TYPES = new Set(['backupschema', 'runquery', 'restoreschema'])
 export function validateJobInput(
   input: JobInput,
   lookup: (id: string) => ConnectionConfig | null | undefined = () => null,
-  typedEnvironments: readonly Environment[] = []
+  typedEnvironments: readonly Environment[] = [],
+  /** Whether a job exists («Restaurar paquete» of another job); unchecked when absent. */
+  jobExists?: (id: string) => boolean
 ): void {
   if (!input || typeof input !== 'object') throw new Error('Datos del trabajo no válidos.')
   if (!input.name || !input.name.trim()) throw new Error('El nombre del trabajo es obligatorio.')
@@ -54,6 +57,14 @@ export function validateJobInput(
     if (engineProblem) throw new Error(engineProblem)
     if (task.type === 'restoreschema') {
       const problem = restoreTaskProblem(task, input.tasks, lookup, label, { typedEnvironments })
+      if (problem) throw new Error(problem)
+    }
+    if (task.type === 'restorepackage') {
+      const problem = restorePackageProblem(task, input.tasks, lookup, label, {
+        typedEnvironments,
+        jobId: input.id,
+        jobExists
+      })
       if (problem) throw new Error(problem)
     }
   })
@@ -92,14 +103,13 @@ export function assertRestoreStepsAllowed(
   typedEnvironments: readonly Environment[] = []
 ): void {
   job.tasks.forEach((task, i) => {
-    if (task.type !== 'restoreschema') return
-    const problem = restoreTaskProblem(
-      task,
-      job.tasks,
-      lookup,
-      task.referenceName?.trim() || `paso ${i + 1}`,
-      { typedEnvironments }
-    )
+    const label = task.referenceName?.trim() || `paso ${i + 1}`
+    const problem =
+      task.type === 'restoreschema'
+        ? restoreTaskProblem(task, job.tasks, lookup, label, { typedEnvironments })
+        : task.type === 'restorepackage'
+          ? restorePackageProblem(task, job.tasks, lookup, label, { typedEnvironments })
+          : null
     if (problem) throw new Error(problem)
   })
 }

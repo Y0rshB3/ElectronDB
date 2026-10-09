@@ -18,6 +18,7 @@ import { handle } from './typed'
 import { BACKUP_KEY, hasJobBackupPassword, setJobBackupPassword } from '../automation/backupKeys'
 import { checkBackupPassword } from '../backup/create'
 import type { Job } from '@shared/types'
+import { jobPackageSummaries } from '../automation/jobPackages'
 
 export { assertRestoreStepsAllowed, validateJobInput } from './jobValidation'
 
@@ -42,7 +43,7 @@ export function registerJobsHandlers(ctx: AppContext): void {
     return job ? withKeyFlag(job) : null
   })
   handle('jobs:save', async (input, options) => {
-    validateJobInput(input, lookup, typedConfirmEnvironments(ctx))
+    validateJobInput(input, lookup, typedConfirmEnvironments(ctx), (id) => !!ctx.jobs.get(id))
     assertJobSaveAllowed(ctx, input, input.id ? ctx.jobs.get(input.id) : null, options)
     assertJobPassword(input, !!input.id && hasJobBackupPassword(ctx, input.id))
     const password = input.backupPassword
@@ -76,6 +77,7 @@ export function registerJobsHandlers(ctx: AppContext): void {
   })
   handle('jobs:cancel', (runId) => automation.cancel(runId))
   handle('jobs:runs', (jobId, limit) => ctx.runs.list(jobId, limit))
+  handle('jobs:packages', () => jobPackageSummaries(ctx))
   handle('jobs:runLog', async (runId) => {
     const run = ctx.runs.get(runId)
     if (!run) return NO_LOG

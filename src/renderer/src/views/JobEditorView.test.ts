@@ -93,7 +93,7 @@ describe('schedule builder helpers', () => {
     draft.tasks = [{ ...newTask('runquery', 'c1', ''), sql: 'SELECT 1' }]
     expect(validateDraft(draft)).toEqual([])
     draft.tasks = [newTask('backupschema', 'c1', '')]
-    expect(validateDraft(draft)).toContain('Tarea 1: selecciona un esquema.')
+    expect(validateDraft(draft)).toContain('Paso 1: selecciona la base de datos.')
   })
 
   it('builds a valid JobInput and reports Spanish validation errors', () => {
@@ -152,10 +152,23 @@ describe('JobEditorView', () => {
     return { w: wrapper, tabs, tab }
   }
 
+  async function openSection(w: NonNullable<typeof wrapper>, name: string) {
+    await w.get(`[data-test="job-section-${name}"]`).trigger('click')
+    await settle()
+  }
+
+  async function selectStep(w: NonNullable<typeof wrapper>, index: number) {
+    await w.get(`[data-test="job-task-${index}"]`).trigger('click')
+    await settle()
+  }
+
   it('saves a JobInput whose cron comes from the schedule builder and tracks dirty state', async () => {
     const { w, tabs, tab } = await mountEditor('job-1')
     expect(tabs.tabs.find((t) => t.id === tab.id)?.dirty).toBe(false)
+    expect(w.get('[data-test="job-schedule-pill"]').text()).toContain('02:30')
 
+    await w.get('[data-test="job-schedule-pill"]').trigger('click')
+    await settle()
     await w.get('[data-test="schedule-time"] input').setValue('04:15')
     await w.get('[data-test="job-name"] input').setValue('Nightly billing')
     await settle()
@@ -178,6 +191,7 @@ describe('JobEditorView', () => {
 
   it('offers "Ejecutar aunque la app esté cerrada" on macOS', async () => {
     const { w } = await mountEditor('job-1')
+    await openSection(w, 'schedule')
     expect(w.find('[data-test="job-launch-agent-unsupported"]').exists()).toBe(false)
     const input = w.get('[data-test="job-launch-agent"] input')
     expect((input.element as HTMLInputElement).disabled).toBe(false)
@@ -187,6 +201,7 @@ describe('JobEditorView', () => {
     it(`disables the launchd switch on ${os} and explains Task Scheduler/cron`, async () => {
       ;(window.vortaq as { platform?: string }).platform = os
       const { w } = await mountEditor('job-1')
+      await openSection(w, 'schedule')
       const block = w.get('[data-test="job-launch-agent-unsupported"]')
       expect((block.get('input').element as HTMLInputElement).disabled).toBe(true)
       expect(block.text()).toContain('Solo en macOS')
@@ -203,16 +218,14 @@ describe('JobEditorView', () => {
   it('stores the new job id in the tab payload after the first save', async () => {
     const { w, tabs, tab } = await mountEditor(null)
     expect(tabs.tabs.find((t) => t.id === tab.id)?.dirty).toBe(false)
+    expect(w.get('[data-test="step-list-empty"]').text()).toContain('Elige qué añadir')
     await w.get('[data-test="job-name"] input').setValue('Nightly')
-    await w.get('[data-test="add-backup-task"]').trigger('click')
+    // Browse Staging › billing in «Añadir pasos» and add its backup.
+    await w.get('[data-test="browse-connection-c1"]').trigger('click')
     await settle()
-    // Fill the task through the model to avoid driving Vuetify selects.
-    const tasksEditor = w.findComponent({ name: 'JobTasksEditor' })
-    const current = tasksEditor.props('modelValue') as { connectionId: string; schema: string }[]
-    tasksEditor.vm.$emit('update:modelValue', [
-      { ...current[0], connectionId: 'c1', schema: 'billing' }
-    ])
+    await w.get('[data-test="avail-add-backup:c1:billing"]').trigger('click')
     await settle()
+    expect(w.get('[data-test="job-task-0"]').text()).toContain('billing')
     await w.get('[data-test="job-save"]').trigger('click')
     await settle()
     expect(calls(invoke, 'jobs:save')).toHaveLength(1)
@@ -247,6 +260,7 @@ describe('JobEditorView', () => {
       'jobs:runs': () => []
     })
     const { w } = await mountEditor('job-1')
+    await selectStep(w, 1)
     const content = w.get('[data-test="restore-content"]')
     expect(content.text()).toContain('Contenido')
     expect(content.get('[data-test="replace-content-data"]').classes()).toContain('v-btn--active')
@@ -266,6 +280,7 @@ describe('JobEditorView', () => {
 
   it('a backup step offers «Formato: .nb3 | .sql» and saves .sql with its hint', async () => {
     const { w } = await mountEditor('job-1')
+    await selectStep(w, 0)
     const toggle = w.get('[data-test="task-format"]')
     expect(toggle.get('[data-test="task-format-nb3"]').classes()).toContain('v-btn--active')
     expect(w.find('[data-test="task-format-hint"]').exists()).toBe(false)
@@ -332,7 +347,17 @@ describe('JobEditorView', () => {
           ]
         }),
       'jobs:runs': () => [],
-      'jobs:run': () => ({ id: 'run-1' })
+      'jobs:run': () => ({
+        id: 'run-1',
+        jobId: 'job-3',
+        jobName: 'Purge',
+        status: 'running',
+        trigger: 'manual',
+        startedAt: '2026-10-08T10:00:00.000Z',
+        finishedAt: null,
+        tasks: [],
+        logPath: ''
+      })
     })
   }
 

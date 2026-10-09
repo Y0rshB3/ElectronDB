@@ -210,7 +210,9 @@ async function apply(): Promise<void> {
     : undefined
   const ok = await confirmDestructive({
     connectionId: connectionId.value,
-    title: objectName.value ? `Aplicar cambios en ${typeWithArticle.value}` : `Crear ${typeLabel.value}`,
+    title: objectName.value
+      ? `Aplicar cambios en ${typeWithArticle.value}`
+      : `Crear ${typeLabel.value}`,
     message,
     details: script.value,
     alwaysAsk: replaces,
