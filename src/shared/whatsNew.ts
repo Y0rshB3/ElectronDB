@@ -32,7 +32,8 @@ export const WHATS_NEW: WhatsNewEntry[] = [
       'Busca en conexión › base de datos y añade copias, consultas guardadas, SQL o restauraciones con doble clic, arrastrando o con «Seleccionar todo»',
       '«Copiar y restaurar»: copia todas las bases de datos de una conexión (p. ej. Staging) y restáuralas en otra (Local) en cada ejecución, con o sin copia previa del destino',
       '«Restaurar paquete»: un solo paso restaura todas las copias de la tarea, o el último paquete de otra tarea, con sus nombres de destino; la lista de restauraciones se agrupa por tarea',
-      'Programación, Opciones e Historial en sus propias secciones, con la próxima ejecución a la vista'
+      'Programación, Opciones e Historial en sus propias secciones, con la próxima ejecución a la vista',
+      'Pantalla de inicio con el logo de Vortaq mientras carga la app'
     ],
     tour: [
       {
