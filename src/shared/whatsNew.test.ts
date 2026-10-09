@@ -120,6 +120,7 @@ describe('WHATS_NEW (curated list)', () => {
   it('2.0.1 announces the new job editor with one tour step on Automatización', () => {
     const entry = whatsNewFor('2.0.1')
     expect(entry?.highlights.join(' ')).toMatch(/Añadir pasos/)
+    expect(entry?.highlights.join(' ')).toMatch(/«Restaurar paquete»: un solo paso/)
     expect(entry?.tour).toHaveLength(1)
     expect(entry?.tour?.[0].target).toBe('toolbar-automation')
   })

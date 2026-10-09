@@ -3,10 +3,10 @@
 The automation job editor (`src/renderer/src/views/JobEditorView.vue`) follows a
 browse-and-pick workflow: choose what kind of step to add, browse connection ›
 database for things to run, add them to the job's sequence, order them and set
-the schedule. The job model (`Job`, `JobTask` in `src/shared/types.ts`), the IPC
-channels and the runner are unchanged: every item added becomes an ordinary
-`JobTask`, so jobs saved by earlier versions (and Navicat batch jobs imported
-into Vortaq) open and save exactly as before.
+the schedule. Every item added becomes an ordinary `JobTask` (`src/shared/types.ts`),
+so jobs saved by earlier versions (and Navicat batch jobs imported into Vortaq)
+open and save exactly as before. The only step kind added is «Restaurar paquete»
+(`restorepackage`, see below); a job without one is byte-identical to before.
 
 ## Layout
 
@@ -61,13 +61,26 @@ Pasos    ┌ Secuencia de pasos ────────────────
     database). The step stores a copy of the SQL and takes the query's name.
     Listing them needs no connection.
   - _SQL libre_: an empty query step in the connection or one of its databases.
-  - _Restauración_: the backup steps of this job (restorable formats only), named by
-    what they copy («Copia de ventas (Staging) — estructura y datos») and where the
-    restore lands by default («Paso 1 · .vqb · se restaura en Local con copia previa»),
-    and, for a selected connection/database, «Copias en disco de Local» with
-    «Última copia de auth · Local» and the job copies found on disk. A job without
-    backup steps gets a suggestion that opens «Copiar y restaurar». The target defaults to a local connection of the same engine
-    that does not need the typed name, and is changed in the step settings.
+  - _Restauración_, grouped by automation:
+    - **Esta tarea**: a package header «Paquete de esta tarea · 15 copias» (fold
+      chevron, tri-state checkbox, the source connections as engine/environment
+      pills, an arrow to the default target and «se restaura en Local con copia
+      previa») with the backup steps of this job inside (restorable formats only),
+      named by what they copy («Copia de ventas (Staging) — estructura y datos»,
+      «Paso 1 · .vqb · se restaura en Local con copia previa»). Adding the header
+      (or checking every copy) adds ONE «Restaurar paquete» step; checking some
+      copies adds one restore step per copy, as before.
+    - **Otras tareas**: one folded group per other job that copies databases with
+      data (`jobs:packages`): «Copia nocturna Staging · último paquete (2026-10-07
+      02:00, 15 copias)», or «aún sin paquete» before its first run (its backup
+      steps are listed then). Its items are the databases of that package; the
+      header adds a package step of «todas», some checked items one package step
+      with just those databases.
+    - **Copias en disco de Local**, for a selected connection/database:
+      «Última copia de auth · Local» and the job copies found on disk.
+    A job without backup steps gets a suggestion that opens «Copiar y restaurar».
+    The target defaults to a local connection of the same engine that does not
+    need the typed name, and is changed in the step settings.
     Query kinds list MySQL/MariaDB connections only. System databases are hidden
     (`isHiddenDatabase`: MySQL system schemas, `template0/1`, `admin/local/config`,
     SQLite `temp`). A connection is opened only when the user picks or expands it
@@ -86,11 +99,37 @@ Pasos    ┌ Secuencia de pasos ────────────────
   todo» and one by one), the destination connection (first local one of the same
   engine; targets that need the typed name are listed disabled with the reason),
   the destination name per database (same name by default, or a suffix for all),
-  «Copia previa del destino» (con / sin, explained in one sentence) and the content
-  (estructura y datos / solo estructura). It adds every backup step (.vqb) and then
-  every restore step reading «la copia del paso N»; each restore is checked with the
-  job's own rules (`taskProblems`) before it can be added. Nothing new is stored:
-  the result is ordinary steps.
+  «Copia previa del destino» (con / sin, explained in one sentence), the content
+  (estructura y datos / solo estructura) and «Restauración»: «Un paso «Restaurar
+  paquete»» (default) or «Un paso por base de datos». It adds every backup step
+  (.vqb) and then either one package step of this job's package listing exactly
+  those databases (`packageDatabases`, renamed ones in `packageTargets`) or one
+  restore step per database reading «la copia del paso N». The steps are checked
+  with the job's own rules (`taskProblems`) before they can be added.
+- **Restaurar paquete** — `restorepackage` steps (`shared/restorePackage.ts`, shared
+  by the editor, `jobs:save` and the runner). `connectionId` is the target;
+  `packageSource` is `{ kind: 'own' }` (the restorable backup steps placed before
+  it, copied in this same run) or `{ kind: 'job', jobId, jobName? }` (the newest
+  successful, non-rollback run of that job with restorable copies, looked up when
+  the step runs, `automation/jobPackages.ts`; a newer failed run never replaces a
+  complete package, and a partial one is used only when the job never ended a run
+  well, with a warning in the log). `packageDatabases` absent means
+  «Todas» (databases the package gains later are included); `packageTargets`
+  renames single databases and `packageSuffix` applies to the rest. Structure-only
+  copies are left out of «Todas» unless the step restores the structure only.
+  Row: «Restaurar paquete de «Copia nocturna Staging» en Local · 15 bases (todas) ·
+  con copia previa». Settings: package select (this job or the latest package of
+  each other job, with its date and copies), Todas / Solo las marcadas, sufijo,
+  one target field per database, target connection, content and «Copia previa del
+  destino» (con / sin). When it runs, the runner checks the whole package first
+  (target, guarded environments, missing databases, engines, name collisions,
+  structure-only copies picked by name, every restore's own rules, that each copy
+  was made in this run or is still on disk, and that a stored password opens each
+  encrypted copy) and restores nothing if any check fails; otherwise it replaces the step in the run by
+  one ordinary restore per database (`packageRestoreTasks`, ids `<step>#<n>`, run
+  entries carry `packageStepId`), so each database gets the restore rules, safety
+  copy, log heading and history line of a restore step. Another job's copies are
+  opened with that job's stored backup password.
 - **Programación** — the schedule builder and «Ejecutar aunque la app esté
   cerrada», unchanged in behaviour.
 - **Opciones** — «Continuar en caso de error», the job's backup password (only
@@ -105,9 +144,11 @@ store, and browsing inside the editor must not move the user's place there.
 ## Rules kept
 
 - Typed confirmation: running or scheduling SQL on guarded connections still asks
-  through `useJobProductionGuard`, and restore steps can never target a connection
-  that needs the typed name (disabled in the target list, refused by
-  `restoreTaskProblem` and again by main).
+  through `useJobProductionGuard`, and restore and package steps can never target a
+  connection that needs the typed name (disabled in the target list, refused by
+  `restoreTaskProblem` / `restorePackageProblem`, by `jobs:save`, `jobs:run` and
+  again by the runner). System databases are never targets, and a copy only
+  restores into its own engine.
 - Per-engine step rules come from `shared/jobEngines.ts` in the browser (kinds
   and formats offered) and in validation.
 - Viewing a job never opens a connection: database lists load only for
