@@ -9,8 +9,8 @@
 MySQL · MariaDB · PostgreSQL · SQLite · MongoDB
 
 [![Última versión](https://img.shields.io/github/v/release/Y0rshB3/Vortaq?label=%C3%BAltima%20versi%C3%B3n&color=7c3aed&cacheSeconds=300)](https://github.com/Y0rshB3/Vortaq/releases/latest)
-[![Descargas de la última versión](https://img.shields.io/github/downloads/Y0rshB3/Vortaq/latest/total?label=descargas%20de%20esta%20versi%C3%B3n&color=f59e0b&cacheSeconds=300)](https://github.com/Y0rshB3/Vortaq/releases/latest)
-[![Descargas totales](https://img.shields.io/github/downloads/Y0rshB3/Vortaq/total?label=descargas%20totales&color=ec4899&cacheSeconds=300)](https://github.com/Y0rshB3/Vortaq/releases)
+[![Descargas de la última versión](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FY0rshB3%2FVortaq%2Fbadges%2Fdownloads-latest.json)](https://github.com/Y0rshB3/Vortaq/releases/latest)
+[![Descargas totales](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FY0rshB3%2FVortaq%2Fbadges%2Fdownloads-total.json)](https://github.com/Y0rshB3/Vortaq/releases)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-22c55e)](LICENSE)
 [![Plataformas](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-0ea5e9)](https://github.com/Y0rshB3/Vortaq/releases/latest)
 

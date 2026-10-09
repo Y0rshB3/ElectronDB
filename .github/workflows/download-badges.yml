@@ -1,0 +1,50 @@
+# Hourly README download counters: sums only installer downloads (no
+# latest*.yml update checks, blockmaps or checksums) and publishes the shields.io
+# endpoint JSON on the `badges` branch, so main's history stays clean.
+name: Contadores de descargas
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: download-badges
+  cancel-in-progress: false
+
+jobs:
+  badges:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Contar descargas de instaladores
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/download-badges.mjs "$RUNNER_TEMP/badges"
+      - name: Publicar en la rama badges
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin badges >/dev/null; then
+            git fetch --depth 1 origin badges
+            git switch badges
+          else
+            git switch --orphan badges
+            git rm -rf --quiet . || true
+          fi
+          cp "$RUNNER_TEMP"/badges/*.json .
+          git add downloads-latest.json downloads-total.json
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+          else
+            git commit -m "Contadores de descargas"
+            git push origin badges
+          fi
