@@ -506,6 +506,12 @@ describe('job editor: sequence, browser and settings', () => {
     // Every database (system ones excluded) is checked; the target is the local connection.
     expect(dialog().get('[data-test="recipe-count"]').text()).toBe('2/2')
     expect(dialog().text()).not.toContain('information_schema')
+    // One «Restaurar paquete» step by default; one restore per database on request.
+    expect(dialog().get('[data-test="recipe-summary"]').text()).toBe(
+      'Añadirá 3 pasos: 2 copias de Staging y, después, un paso «Restaurar paquete» que las restaura en Local con copia previa.'
+    )
+    await dialog().get('[data-test="recipe-restore-steps"]').trigger('click')
+    await settle()
     expect(dialog().get('[data-test="recipe-summary"]').text()).toBe(
       'Añadirá 4 pasos: 2 copias de Staging y, después, 2 restauraciones en Local con copia previa.'
     )
@@ -553,6 +559,182 @@ describe('job editor: sequence, browser and settings', () => {
       referenceName: 'Restaurar crm_copia en Local',
       restoreSource: { kind: 'task', taskId: b2.id }
     })
+  })
+
+  it('«Copiar y restaurar» as one «Restaurar paquete» step keeps the per-database names', async () => {
+    current = makeJob({ ...current, tasks: [] })
+    const w = await mountEditor()
+    await w.get('[data-test="step-list-recipe-open"]').trigger('click')
+    await settle()
+    const dialog = () => w.get('[data-test="copy-restore-dialog"]')
+    w.findAllComponents({ name: 'VSelect' })
+      .find((c) => c.attributes('data-test') === 'recipe-source')!
+      .vm.$emit('update:modelValue', 'c1')
+    await settle()
+    await dialog().get('[data-test="recipe-target-crm"] input').setValue('crm_copia')
+    await settle()
+    expect(w.get('[data-test="recipe-add"]').text()).toContain('Añadir 3 pasos')
+    await w.get('[data-test="recipe-add"]').trigger('click')
+    await settle()
+    expect(rowNames(w)).toHaveLength(3)
+    expect(rowNames(w)[2]).toContain('Restaurar paquete de esta tarea en Local')
+    expect(w.get('[data-test="job-task-2"] [data-test="step-detail"]').text()).toBe(
+      '2 bases elegidas · con copia previa'
+    )
+    await w.get('[data-test="job-name"] input').setValue('Staging a Local')
+    const input = await saved(w)
+    expect(input.tasks.map((t) => t.type)).toEqual([
+      'backupschema',
+      'backupschema',
+      'restorepackage'
+    ])
+    expect(input.tasks[2]).toMatchObject({
+      connectionId: 'l1',
+      referenceName: 'Restaurar paquete de esta tarea en Local',
+      packageSource: { kind: 'own' },
+      packageDatabases: ['shop', 'crm'],
+      packageTargets: { crm: 'crm_copia' },
+      safetyBackup: true,
+      includeData: true
+    })
+  })
+
+  it('restore list: this job as one package, other automations by their latest package', async () => {
+    invoke = mockVortaq({
+      'connections:list': () => [mysql, local, prod, pg],
+      'jobs:get': () => current,
+      'jobs:save': (input) => ({ ...current, ...(input as JobInput), id: 'job-1' }),
+      'jobs:runs': () => [],
+      'backups:list': () => [],
+      'jobs:packages': () => [
+        {
+          jobId: 'job-1',
+          jobName: 'Nocturna',
+          steps: [{ schema: 'shop', connectionId: 'c1', includeData: true }],
+          latest: null
+        },
+        {
+          jobId: 'job-2',
+          jobName: 'Copia nocturna Staging',
+          steps: [],
+          latest: {
+            runId: 'run-9',
+            startedAt: '2026-10-07T02:00:00.000Z',
+            status: 'success',
+            copies: ['auth', 'ventas', 'logs'].map((schema, i) => ({
+              schema,
+              connectionId: 'c1',
+              taskId: `t${i}`,
+              path: `/b/${schema}.vqb`,
+              structureOnly: schema === 'logs',
+              encrypted: false
+            }))
+          }
+        }
+      ]
+    })
+    const w = await mountEditor()
+    await w.get('[data-test="step-kind-restore"]').trigger('click')
+    await settle()
+    const items = w.get('[data-test="step-browser-items"]')
+    // This job: a package header with its two restorable copies inside.
+    const own = items.get('[data-test="avail-pack:own"]')
+    expect(own.text()).toContain('Paquete de esta tarea · 2 copias')
+    expect(own.text()).toContain('Staging')
+    expect(own.text()).toContain('Se restaura en Local con copia previa · un paso con todas')
+    expect(items.find('[data-test="avail-step:b1"]').exists()).toBe(true)
+    // The other automation, folded, with its latest package; never the job itself.
+    const other = items.get('[data-test="avail-pack:job:job-2"]')
+    expect(other.text()).toContain('Copia nocturna Staging · último paquete (')
+    expect(other.text()).toContain('3 copias)')
+    expect(items.find('[data-test="avail-pack:job:job-1"]').exists()).toBe(false)
+    expect(items.find('[data-test="avail-pkg:job-2:auth"]').exists()).toBe(false)
+    await items.get('[data-test="pack-fold-job:job-2"]').trigger('click')
+    await settle()
+    expect(items.get('[data-test="avail-pkg:job-2:logs"]').text()).toContain('solo estructura')
+
+    // The whole package of this job is ONE step.
+    await items.get('[data-test="avail-add-pack:own"]').trigger('click')
+    await settle()
+    expect(rowNames(w)).toHaveLength(4)
+    expect(rowNames(w)[3]).toContain('Restaurar paquete de esta tarea en Local')
+    expect(w.get('[data-test="job-task-3"] [data-test="step-detail"]').text()).toBe(
+      '2 bases (todas) · con copia previa'
+    )
+    // Two databases of the other package checked: one package step with just those.
+    await w.get('[data-test="avail-pkg:job-2:auth"]').trigger('keydown', { key: ' ' })
+    await w.get('[data-test="avail-pkg:job-2:ventas"]').trigger('keydown', { key: ' ' })
+    await settle()
+    expect(w.get('[data-test="browser-add"]').text()).toContain('Añadir (1)')
+    await w.get('[data-test="browser-add"]').trigger('click')
+    await settle()
+    expect(rowNames(w)[4]).toContain('Restaurar paquete de «Copia nocturna Staging» en Local')
+    expect(w.get('[data-test="job-task-4"] [data-test="step-detail"]').text()).toBe(
+      '2 bases elegidas · con copia previa'
+    )
+    const input = await saved(w)
+    expect(input.tasks[3]).toMatchObject({
+      type: 'restorepackage',
+      connectionId: 'l1',
+      packageSource: { kind: 'own' }
+    })
+    expect(input.tasks[3].packageDatabases).toBeUndefined()
+    expect(input.tasks[4]).toMatchObject({
+      type: 'restorepackage',
+      packageSource: { kind: 'job', jobId: 'job-2', jobName: 'Copia nocturna Staging' },
+      packageDatabases: ['auth', 'ventas']
+    })
+  })
+
+  it('package step settings: todas / solo las marcadas, names per database, safety copy', async () => {
+    current = makeJob({
+      ...current,
+      tasks: [
+        ...steps().slice(0, 2),
+        {
+          id: 'p1',
+          type: 'restorepackage',
+          connectionId: 'l1',
+          schema: '',
+          referenceName: '',
+          packageSource: { kind: 'own' },
+          safetyBackup: true,
+          includeData: true
+        }
+      ]
+    })
+    const w = await mountEditor()
+    await w.get('[data-test="job-task-2"]').trigger('click')
+    await settle()
+    const panel = () => w.get('[data-test="step-settings"]')
+    expect(panel().text()).toContain('2 copias de los pasos anteriores de esta tarea')
+    expect(panel().find('[data-test="package-db-shop"]').exists()).toBe(true)
+    await panel().get('[data-test="package-whole-some"]').trigger('click')
+    await settle()
+    await panel().get('[data-test="package-db-crm"] input[type="checkbox"]').setValue(false)
+    await panel().get('[data-test="package-target-shop"] input').setValue('shop_dev')
+    await panel().get('[data-test="package-safety-off"]').trigger('click')
+    await settle()
+    expect(w.get('[data-test="job-task-2"] [data-test="step-detail"]').text()).toBe(
+      '1 base elegida · sin copia previa'
+    )
+    const input = await saved(w)
+    expect(input.tasks[2]).toMatchObject({
+      packageDatabases: ['shop'],
+      packageTargets: { shop: 'shop_dev' },
+      safetyBackup: false
+    })
+    // A production target is refused like any restore.
+    await w.get('[data-test="job-task-2"]').trigger('click')
+    await settle()
+    const target = w
+      .findAllComponents({ name: 'VSelect' })
+      .find((c) => c.attributes('data-test') === 'package-target')!
+    target.vm.$emit('update:modelValue', 'p1')
+    await settle()
+    expect(w.get('[data-test="job-task-2"] [data-test="step-problem"]').text()).toContain(
+      'producción'
+    )
   })
 
   it('a default step name follows its target; a name the user typed stays', async () => {

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { engineOf } from '@shared/engines'
-import type { BackupFile, ConnectionConfig, JobTask } from '@shared/types'
+import { backupFamilyOf } from '@shared/jobEngines'
+import { packageDate } from '@shared/backupPackages'
+import type { BackupFile, ConnectionConfig, JobPackageSummary, JobTask } from '@shared/types'
 import { useBackupsStore } from '@renderer/stores/backups'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useJobsStore } from '@renderer/stores/jobs'
 import { useQueriesStore } from '@renderer/stores/queries'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { ENVIRONMENT_LABELS } from '@renderer/utils/objectTypes'
 import { formatDate } from '@renderer/utils/format'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 import { automationConnections, canBackup } from '@renderer/components/backups/backupHelpers'
-import { TASK_ICONS } from './jobForm'
+import { TASK_ICONS, newPackageTask } from './jobForm'
 import {
   STEP_KINDS,
   backupStep,
@@ -35,7 +38,11 @@ import { ADD_DRAG_TYPE, endAddDrag, startAddDrag } from './stepDrag'
  * checked, or dragging them onto the sequence). Connections are opened only
  * when the user expands them.
  */
-const props = defineProps<{ tasks: JobTask[] }>()
+const props = defineProps<{
+  tasks: JobTask[]
+  /** The job being edited (its own packages are «Esta tarea», not another automation). */
+  jobId?: string | null
+}>()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
 const emit = defineEmits<{
   add: [tasks: JobTask[]]
@@ -47,6 +54,7 @@ const connections = useConnectionsStore()
 const settings = useSettingsStore()
 const queries = useQueriesStore()
 const backups = useBackupsStore()
+const jobs = useJobsStore()
 const schemaLoader = useSchemaLoader()
 
 const kind = ref<StepKind>('backup')
@@ -92,6 +100,14 @@ watch(kind, () => {
   }
 })
 watch([selectedConnection, selectedDatabase], () => (checked.value = []))
+// The packages of the other automations are read when the restore list is shown.
+watch(
+  kind,
+  (k) => {
+    if (k === 'restore') void jobs.loadPackages()
+  },
+  { immediate: true }
+)
 
 const ENV_PILL: Record<string, string> = {
   production: 'nd-pill--production',
@@ -139,9 +155,36 @@ interface Item {
   inJob?: string
   build: () => JobTask[]
 }
+/** Connection shown as a pill in a package header. */
+interface PackPill {
+  id: string
+  name: string
+  icon: string
+  environment: string
+}
+/**
+ * Header row of a package group: adds the whole package as one «Restaurar
+ * paquete» step (also by checking every item of the group).
+ */
+interface PackHeader {
+  key: string
+  title: string
+  subtitle: string
+  sources: PackPill[]
+  target: PackPill | null
+  inJob?: string
+  build: () => JobTask[]
+  /** Some items checked: what they add (default: each item's own step). */
+  buildSome?: (items: Item[]) => JobTask[]
+}
 interface ItemGroup {
   key: string
   title: string
+  pack?: PackHeader
+  /** Section heading above the group (absent = the title; null = none). */
+  heading?: string | null
+  /** Package groups fold to their header. */
+  collapsible?: boolean
   /** Muted text after the title. */
   note?: string
   items: Item[]
@@ -183,6 +226,103 @@ function databaseItems(c: ConnectionConfig): string[] {
   return selectedDatabase.value ? all.filter((d) => d === selectedDatabase.value) : all
 }
 
+/** Folded package groups (another automation's packages start folded). */
+const folded = ref<Record<string, boolean>>({})
+const isFolded = (g: ItemGroup): boolean => folded.value[g.key] ?? g.key.startsWith('job:')
+function toggleFold(g: ItemGroup): void {
+  folded.value = { ...folded.value, [g.key]: !isFolded(g) }
+}
+
+function pillOf(id: string | null | undefined): PackPill | null {
+  const c = id ? connections.get(id) : undefined
+  return c ? { id: c.id, name: c.name, icon: engineOf(c).icon, environment: c.environment } : null
+}
+
+function pillsOf(ids: (string | null | undefined)[]): PackPill[] {
+  return [...new Set(ids.filter((id): id is string => !!id))]
+    .map((id) => pillOf(id))
+    .filter((p): p is PackPill => !!p)
+}
+
+/** Engine family of the first known connection of a package (its default target's engine). */
+function familyOf(ids: (string | null | undefined)[]): ReturnType<typeof backupFamilyOf> | null {
+  for (const id of ids) {
+    const c = id ? connections.get(id) : undefined
+    if (c) return backupFamilyOf(engineOf(c).id)
+  }
+  return null
+}
+
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
+const copies = (n: number): string => `${n} ${n === 1 ? 'copia' : 'copias'}`
+
+/** Another automation's package group: its latest package (or its steps, before its first run). */
+function jobPackageGroup(pkg: JobPackageSummary, tasks: JobTask[]): ItemGroup {
+  const latest = pkg.latest
+  const entries = latest
+    ? latest.copies.map((c) => ({
+        schema: c.schema,
+        connectionId: c.connectionId,
+        structureOnly: c.structureOnly,
+        encrypted: c.encrypted
+      }))
+    : pkg.steps.map((s) => ({
+        schema: s.schema,
+        connectionId: s.connectionId,
+        structureOnly: !s.includeData,
+        encrypted: false
+      }))
+  const ids = entries.map((e) => e.connectionId)
+  const family = familyOf(ids)
+  const source = { kind: 'job' as const, jobId: pkg.jobId, jobName: pkg.jobName }
+  const sourceIds = ids.filter((id): id is string => !!id)
+  const build = (databases?: string[]): JobTask[] => [
+    newPackageTask(source, usable.value, blocked, family, databases, sourceIds)
+  ]
+  const preview = build()[0]
+  const already = tasks.some(
+    (t) =>
+      t.type === 'restorepackage' &&
+      t.packageSource?.kind === 'job' &&
+      t.packageSource.jobId === pkg.jobId
+  )
+  const date = latest ? packageDate(latest.startedAt) : ''
+  return {
+    key: `job:${pkg.jobId}`,
+    title: pkg.jobName,
+    collapsible: true,
+    pack: {
+      key: `pack:job:${pkg.jobId}`,
+      title: latest
+        ? `${pkg.jobName} · último paquete (${date}, ${copies(latest.copies.length)})`
+        : `${pkg.jobName} · aún sin paquete`,
+      subtitle: `${capitalize(restoreTargetText(preview))} · un paso con su último paquete en cada ejecución${latest ? (latest.status === 'success' ? '' : ' · su última ejecución terminó con errores') : ' · aún no se ha ejecutado'}`,
+      sources: pillsOf(ids),
+      target: pillOf(preview.connectionId),
+      inJob: already ? 'ya en la tarea' : undefined,
+      build: () => build(),
+      // Some databases: one package step restoring just those.
+      buildSome: (items) => build(items.map((i) => i.key.slice(`pkg:${pkg.jobId}:`.length)))
+    },
+    items: entries.map((e) => {
+      const conn = e.connectionId ? connections.get(e.connectionId)?.name : undefined
+      return {
+        key: `pkg:${pkg.jobId}:${e.schema}`,
+        icon: 'mdi-database-outline',
+        title: `${e.schema}${conn ? ` · ${conn}` : ''}`,
+        subtitle: [
+          latest ? `copia del ${date}` : 'aún sin copia',
+          e.structureOnly ? 'solo estructura (no se restaura con datos)' : 'estructura y datos',
+          e.encrypted ? 'cifrada' : ''
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        build: () => build([e.schema])
+      }
+    })
+  }
+}
+
 /** Where a restore item lands by default: «se restaura en Local con copia previa». */
 function restoreTargetText(task: JobTask): string {
   const target = task.connectionId ? connections.get(task.connectionId) : undefined
@@ -197,12 +337,33 @@ const groups = computed<ItemGroup[]>(() => {
   const tasks = props.tasks
   if (kind.value === 'restore') {
     const steps = restorableSteps(tasks)
+    const stepIds = steps.map(({ task }) => task.connectionId)
+    const ownFamily = familyOf(stepIds)
+    const ownSources = stepIds.filter(Boolean)
+    const ownPackage = () =>
+      newPackageTask({ kind: 'own' }, usable.value, blocked, ownFamily, undefined, ownSources)
+    const ownPreview = ownPackage()
+    const ownAlready = tasks.some(
+      (t) => t.type === 'restorepackage' && t.packageSource?.kind === 'own'
+    )
     const out: ItemGroup[] = [
       {
         key: 'steps',
-        title: 'Copias que hace esta tarea',
-        note: 'se restauran después de hacerlas, en la misma ejecución',
+        title: 'Esta tarea',
+        note: 'sus copias se restauran después de hacerlas, en la misma ejecución',
         recipe: true,
+        collapsible: true,
+        pack: steps.length
+          ? {
+              key: 'pack:own',
+              title: `Paquete de esta tarea · ${copies(steps.length)}`,
+              subtitle: `${capitalize(restoreTargetText(ownPreview))} · un paso con todas las copias anteriores (también las que añadas)`,
+              sources: pillsOf(stepIds),
+              target: pillOf(ownPreview.connectionId),
+              inJob: ownAlready ? 'ya en la tarea' : undefined,
+              build: () => [ownPackage()]
+            }
+          : undefined,
         items: steps.map(({ task, index }) => {
           const used = restoresOf(task.id, tasks).length
           const preview = restoreFromStep(task, usable.value, blocked)
@@ -218,6 +379,20 @@ const groups = computed<ItemGroup[]>(() => {
         })
       }
     ]
+    // Other automations that copy databases with their data: their latest package.
+    let first = true
+    for (const pkg of jobs.packages) {
+      if (pkg.jobId === props.jobId) continue
+      const withData = pkg.latest
+        ? pkg.latest.copies.some((c) => !c.structureOnly)
+        : pkg.steps.some((s) => s.includeData)
+      if (!withData) continue
+      const group = jobPackageGroup(pkg, tasks)
+      group.heading = first ? 'Otras tareas' : null
+      group.note = first ? 'el último paquete de cada una, al ejecutarse este paso' : undefined
+      first = false
+      out.push(group)
+    }
     if (c) {
       const names = databaseItems(c)
       out.push({
@@ -343,9 +518,6 @@ const groups = computed<ItemGroup[]>(() => {
   return [{ key: 'sql', title: `SQL libre · ${db ?? c.name}`, items }]
 })
 
-const allItems = computed(() => groups.value.flatMap((g) => g.items))
-const checkedItems = computed(() => allItems.value.filter((i) => checked.value.includes(i.key)))
-
 function toggleChecked(key: string): void {
   checked.value = checked.value.includes(key)
     ? checked.value.filter((k) => k !== key)
@@ -377,9 +549,70 @@ function addItems(items: Item[]): void {
   checked.value = []
 }
 
-function addChecked(): void {
-  addItems(checkedItems.value)
+/** Steps of the checked items: a package whose items are all checked is one package step. */
+function checkedSteps(): JobTask[] {
+  const out: JobTask[] = []
+  for (const g of groups.value) {
+    const picked = g.items.filter((i) => checked.value.includes(i.key))
+    if (!picked.length) continue
+    if (g.pack && picked.length === g.items.length) out.push(...g.pack.build())
+    else if (g.pack?.buildSome) out.push(...g.pack.buildSome(picked))
+    else out.push(...picked.flatMap((i) => i.build()))
+  }
+  return dedupeSteps(out)
 }
+
+function addChecked(): void {
+  const built = checkedSteps()
+  if (built.length) emit('add', built)
+  checked.value = []
+}
+
+function addPack(g: ItemGroup): void {
+  if (!g.pack) return
+  emit('add', g.pack.build())
+  checked.value = []
+}
+
+/** Package header: every item of the group checked, some, or none. */
+function packState(g: ItemGroup): 'all' | 'some' | 'none' {
+  const n = g.items.filter((i) => checked.value.includes(i.key)).length
+  return n === 0 ? 'none' : n === g.items.length ? 'all' : 'some'
+}
+
+function togglePack(g: ItemGroup): void {
+  const keys = g.items.map((i) => i.key)
+  checked.value =
+    packState(g) === 'all'
+      ? checked.value.filter((k) => !keys.includes(k))
+      : [...checked.value, ...keys.filter((k) => !checked.value.includes(k))]
+}
+
+function onPackKey(event: KeyboardEvent, g: ItemGroup): void {
+  if (event.target !== event.currentTarget) return
+  if (event.key === 'Enter') addPack(g)
+  else if (event.key === ' ') togglePack(g)
+  else if (event.key === 'ArrowLeft' && !isFolded(g)) toggleFold(g)
+  else if (event.key === 'ArrowRight' && isFolded(g)) toggleFold(g)
+  else return
+  event.preventDefault()
+}
+
+function onPackDblClick(event: MouseEvent, g: ItemGroup): void {
+  if ((event.target as HTMLElement | null)?.closest('.pack-head__check, .pack-head__fold')) return
+  addPack(g)
+}
+
+function onPackDragStart(event: DragEvent, g: ItemGroup): void {
+  if (!g.pack) return
+  const pack = g.pack
+  startAddDrag(() => pack.build())
+  event.dataTransfer?.setData(ADD_DRAG_TYPE, pack.key)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+}
+
+/** Number of steps «Añadir» adds (a whole package counts as one). */
+const checkedCount = computed(() => (checked.value.length ? checkedSteps().length : 0))
 
 function onItemKey(event: KeyboardEvent, item: Item): void {
   if (event.target !== event.currentTarget) return
@@ -399,8 +632,9 @@ function onItemDblClick(event: MouseEvent, item: Item): void {
 }
 
 function onItemDragStart(event: DragEvent, item: Item): void {
-  const items = checked.value.includes(item.key) ? checkedItems.value : [item]
-  startAddDrag(() => dedupeSteps(items.flatMap((i) => i.build())))
+  startAddDrag(() =>
+    checked.value.includes(item.key) ? checkedSteps() : dedupeSteps(item.build())
+  )
   event.dataTransfer?.setData(ADD_DRAG_TYPE, item.key)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
 }
@@ -591,9 +825,106 @@ const emptyTree = computed(() =>
           Elige una conexión o una base de datos para ver lo que puedes añadir.
         </p>
         <template v-for="g in groups" :key="g.key">
-          <h4 class="step-browser__group">
-            {{ g.title }}<span v-if="g.note" class="step-browser__group-note"> · {{ g.note }}</span>
+          <h4 v-if="g.heading !== null" class="step-browser__group">
+            {{ g.heading ?? g.title
+            }}<span v-if="g.note" class="step-browser__group-note"> · {{ g.note }}</span>
           </h4>
+          <div
+            v-if="g.pack"
+            class="pack-head nd-transition"
+            :class="{
+              'pack-head--checked': packState(g) === 'all',
+              'pack-head--folded': isFolded(g)
+            }"
+            tabindex="0"
+            draggable="true"
+            :aria-label="`${g.pack.title}. ${g.pack.subtitle}. Intro para añadir el paquete como un paso, espacio para marcar sus copias.`"
+            :aria-expanded="!isFolded(g)"
+            :data-test="`avail-${g.pack.key}`"
+            @dblclick="onPackDblClick($event, g)"
+            @keydown="onPackKey($event, g)"
+            @dragstart="onPackDragStart($event, g)"
+            @dragend="endAddDrag"
+          >
+            <button
+              type="button"
+              class="pack-head__fold"
+              tabindex="-1"
+              :aria-label="
+                isFolded(g)
+                  ? `Mostrar las copias de ${g.title}`
+                  : `Ocultar las copias de ${g.title}`
+              "
+              :title="isFolded(g) ? 'Mostrar las copias' : 'Ocultar las copias'"
+              :data-test="`pack-fold-${g.key}`"
+              @click.stop="toggleFold(g)"
+            >
+              <v-icon :icon="isFolded(g) ? 'mdi-chevron-right' : 'mdi-chevron-down'" size="16" />
+            </button>
+            <v-checkbox-btn
+              :model-value="packState(g) === 'all'"
+              :indeterminate="packState(g) === 'some'"
+              density="compact"
+              tabindex="-1"
+              class="pack-head__check"
+              :aria-label="`Marcar todo el paquete: ${g.title}`"
+              :data-test="`pack-check-${g.key}`"
+              @update:model-value="togglePack(g)"
+            />
+            <v-icon
+              icon="mdi-package-variant-closed"
+              size="18"
+              class="pack-head__icon"
+              aria-hidden="true"
+            />
+            <span class="pack-head__text">
+              <span class="pack-head__title">{{ g.pack.title }}</span>
+              <span class="pack-head__route">
+                <span v-for="p in g.pack.sources" :key="p.id" class="pack-pill">
+                  <v-icon :icon="p.icon" size="12" aria-hidden="true" />{{ p.name }}
+                  <span
+                    v-if="p.environment !== 'other'"
+                    class="nd-pill pack-pill__env"
+                    :class="ENV_PILL[p.environment]"
+                    >{{ ENVIRONMENT_LABELS[p.environment] }}</span
+                  >
+                </span>
+                <v-icon
+                  icon="mdi-arrow-right"
+                  size="13"
+                  class="pack-head__arrow"
+                  aria-hidden="true"
+                />
+                <span v-if="g.pack.target" class="pack-pill pack-pill--target">
+                  <v-icon :icon="g.pack.target.icon" size="12" aria-hidden="true" />{{
+                    g.pack.target.name
+                  }}
+                  <span
+                    v-if="g.pack.target.environment !== 'other'"
+                    class="nd-pill pack-pill__env"
+                    :class="ENV_PILL[g.pack.target.environment]"
+                    >{{ ENVIRONMENT_LABELS[g.pack.target.environment] }}</span
+                  >
+                </span>
+                <span v-else class="pack-pill pack-pill--missing">elige el destino</span>
+              </span>
+              <span class="pack-head__sub" :title="g.pack.subtitle">{{ g.pack.subtitle }}</span>
+            </span>
+            <span v-if="g.pack.inJob" class="nd-pill nd-pill--info avail-item__pill">{{
+              g.pack.inJob
+            }}</span>
+            <v-btn
+              icon="mdi-plus"
+              size="x-small"
+              variant="tonal"
+              class="pack-head__add"
+              :aria-label="`Añadir ${g.pack.title} como un paso`"
+              title="Añadir el paquete como un paso «Restaurar paquete»"
+              tabindex="-1"
+              :data-test="`avail-add-${g.pack.key}`"
+              @click.stop="addPack(g)"
+            />
+          </div>
           <div
             v-if="!g.items.length && g.recipe"
             class="step-browser__suggest"
@@ -620,7 +951,7 @@ const emptyTree = computed(() =>
           </div>
           <p v-else-if="!g.items.length" class="step-browser__muted">{{ g.empty }}</p>
           <v-checkbox
-            v-if="g.items.length > 1 && !g.noSelectAll"
+            v-if="g.items.length > 1 && !g.noSelectAll && !g.pack"
             :model-value="groupState(g) === 'all'"
             :indeterminate="groupState(g) === 'some'"
             density="compact"
@@ -641,7 +972,12 @@ const emptyTree = computed(() =>
               ></template
             >
           </v-checkbox>
-          <ul v-if="g.items.length" class="avail-list" :aria-label="g.title">
+          <ul
+            v-if="g.items.length && !(g.collapsible && g.pack && isFolded(g))"
+            class="avail-list"
+            :class="{ 'avail-list--nested': !!g.pack }"
+            :aria-label="g.title"
+          >
             <li
               v-for="item in g.items"
               :key="item.key"
@@ -697,11 +1033,11 @@ const emptyTree = computed(() =>
         color="primary"
         variant="flat"
         prepend-icon="mdi-playlist-plus"
-        :disabled="!checkedItems.length"
+        :disabled="!checkedCount"
         data-test="browser-add"
         @click="addChecked"
       >
-        Añadir{{ checkedItems.length ? ` (${checkedItems.length})` : '' }}
+        Añadir{{ checkedCount ? ` (${checkedCount})` : '' }}
       </v-btn>
     </footer>
   </section>
@@ -1032,6 +1368,123 @@ const emptyTree = computed(() =>
 .avail-item:focus-visible .avail-item__add,
 .avail-item--checked .avail-item__add {
   opacity: 1;
+}
+.pack-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 3px;
+  padding: 5px 6px 5px 2px;
+  border-radius: var(--nd-radius-control);
+  border: 1px solid var(--nd-border);
+  background: var(--nd-bg-raised);
+  cursor: grab;
+  outline: none;
+  user-select: none;
+}
+.pack-head + .pack-head,
+.avail-list--nested + .pack-head {
+  margin-top: 8px;
+}
+.pack-head:hover {
+  border-color: rgba(var(--nd-accent-rgb), 0.45);
+}
+.pack-head:focus-visible {
+  box-shadow: 0 0 0 2px rgba(var(--nd-accent-rgb), 0.55);
+}
+.pack-head--checked {
+  background: var(--nd-selected);
+  border-color: rgba(var(--nd-accent-rgb), 0.45);
+}
+.pack-head__fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 24px;
+  color: var(--nd-text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--nd-radius-sm);
+  cursor: pointer;
+}
+.pack-head__fold:hover {
+  color: var(--nd-text);
+  background: var(--nd-hover);
+}
+.pack-head__check {
+  flex: none;
+}
+.pack-head__icon {
+  flex: none;
+  color: var(--nd-accent);
+}
+.pack-head__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pack-head__title {
+  font-size: var(--nd-fs-dense);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pack-head__route {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.pack-head__arrow {
+  color: var(--nd-text-muted);
+}
+.pack-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--nd-radius-pill);
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+  background: var(--nd-bg-sunken);
+  border: 1px solid var(--nd-border);
+  white-space: nowrap;
+}
+.pack-pill--target {
+  color: var(--nd-text);
+  border-color: rgba(var(--nd-accent-rgb), 0.4);
+}
+.pack-pill--missing {
+  color: var(--nd-warning, var(--nd-text-2));
+  border-style: dashed;
+}
+.pack-pill__env {
+  height: 14px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+.pack-head__sub {
+  font-size: var(--nd-fs-xs);
+  color: var(--nd-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pack-head__add {
+  flex: none;
+}
+.avail-list--nested {
+  margin-left: 22px;
+  padding-left: 8px;
+  border-left: 1px solid var(--nd-hairline);
 }
 .step-browser__foot {
   display: flex;

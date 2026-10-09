@@ -3,7 +3,9 @@
  * Seeds a scratch profile and the throwaway test servers for the job editor
  * screenshots (steps 45* of src/main/screenshots.ts): one job with steps on
  * MySQL, PostgreSQL, MongoDB and MariaDB, a restore step, a few past runs and
- * an encrypted copy (fixture password).
+ * an encrypted copy (fixture password); for the «Restaurar paquete» steps 47*,
+ * «Copias de Local» (six backup steps) and «Copia nocturna Staging» with one
+ * past run whose copies are empty placeholder files in the scratch profile.
  *
  *   node scripts/seed-automation-shots.mjs
  *   npm run build
@@ -288,6 +290,68 @@ const runs = [
   run('auto-run-3', MULTI, 'success', daysAgo(2), 39, ok)
 ]
 
+// «Restaurar paquete» screens (steps 47*): a job copying six databases of Local Test
+// (its own package) and a backup-only job of Staging 5.7 whose last run is a package.
+const LOCAL_DBS = ['ventas', 'crm', 'auth', 'facturas', 'inventario', 'logs']
+const LOCAL_COPIES = {
+  id: 'shot-auto-local-copies',
+  name: 'Copias de Local',
+  continueOnError: true,
+  tasks: LOCAL_DBS.map((db, i) =>
+    task(`l${i + 1}`, 'backupschema', 'shot-auto-local', db, `Copia de ${db} (Local Test)`, {
+      includeData: db !== 'logs',
+      format: 'vqb'
+    })
+  ),
+  schedule: { enabled: true, cron: '30 1 * * *', launchAgent: false },
+  createdAt: iso,
+  updatedAt: iso,
+  lastRunAt: null
+}
+const STAGING_DBS = ['ventas', 'crm', 'auth', 'pagos']
+const STAGING_NIGHTLY = {
+  id: 'shot-auto-staging-nightly',
+  name: 'Copia nocturna Staging',
+  continueOnError: true,
+  tasks: STAGING_DBS.map((db, i) =>
+    task(`s${i + 1}`, 'backupschema', 'shot-auto-staging', db, `Copia de ${db} (Staging 5.7)`, {
+      includeData: true,
+      format: 'vqb'
+    })
+  ),
+  schedule: { enabled: true, cron: '0 3 * * *', launchAgent: false },
+  createdAt: iso,
+  updatedAt: iso,
+  lastRunAt: daysAgo(0, 3).toISOString()
+}
+const nightlyStart = daysAgo(0, 3)
+const stamp = nightlyStart.toISOString().replace(/[-:T]/g, '').slice(0, 14)
+const nightlyRun = {
+  ...run('auto-run-nightly', STAGING_NIGHTLY, 'success', nightlyStart, 18, []),
+  trigger: 'schedule'
+}
+nightlyRun.tasks = STAGING_NIGHTLY.tasks.map((t) => {
+  const dir = join(PROFILE, 'backups', t.schema)
+  mkdirSync(dir, { recursive: true })
+  const path = join(dir, `${stamp}-copia-nocturna-staging.vqb`)
+  writeFileSync(path, '')
+  return {
+    taskId: t.id,
+    referenceName: t.referenceName,
+    status: 'success',
+    startedAt: nightlyStart.toISOString(),
+    finishedAt: nightlyStart.toISOString(),
+    message: null,
+    outputPath: path,
+    type: 'backupschema',
+    connectionId: t.connectionId,
+    schema: t.schema,
+    includeData: true,
+    format: 'vqb'
+  }
+})
+runs.push(nightlyRun)
+
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64')
 const write = (name, data) =>
   writeFileSync(join(PROFILE, name), JSON.stringify(data, null, 2), { mode: 0o600 })
@@ -301,7 +365,7 @@ write('credentials.json', {
     'backupKey:shot-auto-multi': b64('fixture-password-1234')
   }
 })
-write('jobs.json', { version: 1, items: [MULTI] })
+write('jobs.json', { version: 1, items: [MULTI, LOCAL_COPIES, STAGING_NIGHTLY] })
 write('job-runs.json', { version: 1, items: runs })
 write('settings.json', { theme: 'dark', checkUpdatesOnStartup: false })
 for (const r of runs)

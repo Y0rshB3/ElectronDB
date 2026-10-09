@@ -58,7 +58,7 @@ export const STEP_KINDS: StepKindMeta[] = [
     short: 'Restaurar',
     label: 'Restauración',
     icon: 'mdi-backup-restore',
-    hint: 'Restaura, en la misma ejecución, la copia que hace un paso anterior (o la última copia en disco) en otra conexión: por defecto una local y con copia previa del destino. Cámbialo en los ajustes del paso.'
+    hint: 'El paquete de esta tarea en un paso (o copia a copia), el último paquete de otra tarea o la última copia en disco; por defecto en una conexión local con copia previa.'
   }
 ]
 

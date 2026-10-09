@@ -173,9 +173,14 @@ describe('job steps per engine', () => {
   ]
   const find = (id: string) => engines.find((c) => c.id === id)
 
-  it('a new restore step of a SQLite copy targets a local SQLite connection', () => {
+  it('a new restore step of a SQLite copy targets another local SQLite connection', () => {
     const backup = { ...newTask('backupschema', 'lite', 'main'), id: 'b1' }
-    expect(newRestoreTask([backup], engines).connectionId).toBe('lite')
+    // Not the copy's own connection (same name there would restore it onto itself).
+    expect(newRestoreTask([backup], engines).connectionId).toBe('lite2')
+    // The only local SQLite connection is still proposed when there is no other.
+    expect(newRestoreTask([backup], engines.filter((c) => c.id !== 'lite2')).connectionId).toBe(
+      'lite'
+    )
   })
 
   it('accepts .vqb backups of SQLite and MongoDB, refuses query steps there', () => {

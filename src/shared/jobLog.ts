@@ -153,6 +153,8 @@ export interface StepInfo {
   sourceConnectionName?: string
   /** restoreschema «Solo estructura»: objects without rows. */
   structureOnly?: boolean
+  /** restorepackage: «esta tarea» or «"Copia nocturna"» (the package it restores). */
+  packageName?: string
 }
 
 /** Name of the replace content mode that creates every object with empty tables. */
@@ -180,6 +182,8 @@ export function restoreLabel(step: StepInfo): string {
 export function stepLabel(step: StepInfo): string {
   if (step.type === 'backupschema') return `Base de datos ${step.schema} (${step.connectionName})`
   if (step.type === 'restoreschema') return restoreLabel(step)
+  if (step.type === 'restorepackage')
+    return `Paquete de ${step.packageName || 'copias'} -> ${step.connectionName}${step.structureOnly ? ' (solo estructura)' : ''}`
   const where = step.schema ? `${step.schema} (${step.connectionName})` : step.connectionName
   return `Consulta «${step.referenceName}» · ${where}`
 }

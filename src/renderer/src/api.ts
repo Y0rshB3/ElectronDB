@@ -340,6 +340,8 @@ export const api = {
     cancel: (runId: string) => invoke('jobs:cancel', runId),
     runs: (jobId: string | null, limit?: number) => invoke('jobs:runs', jobId, limit),
     runLog: (runId: string) => invoke('jobs:runLog', runId),
+    /** Latest backup package of every job (the «Restauración» list of the job editor). */
+    packages: () => invokeSilent('jobs:packages'),
     scheduleStatus: (id: string) => invokeSilent('jobs:scheduleStatus', id),
     /** Plan of a run (its id) or of backup files picked in the backups list. */
     rollbackPlan: (

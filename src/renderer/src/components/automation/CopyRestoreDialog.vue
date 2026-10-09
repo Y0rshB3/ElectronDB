@@ -50,6 +50,8 @@ const targets = ref<Record<string, string>>({})
 const suffix = ref('')
 const safetyBackup = ref(true)
 const includeData = ref(true)
+/** One «Restaurar paquete» step (default) or one restore step per database. */
+const restoreAs = ref<'package' | 'steps'>('package')
 
 const nameOf = (id: string): string => connections.get(id)?.name ?? ''
 const blocked = (c: ConnectionConfig): boolean => settings.needsTypedConfirm(c.environment)
@@ -128,6 +130,7 @@ watch(
     suffix.value = ''
     safetyBackup.value = true
     includeData.value = true
+    restoreAs.value = 'package'
     targetId.value = null
     const proposed =
       props.proposedSource && sources.value.some((c) => c.id === props.proposedSource)
@@ -177,7 +180,8 @@ const recipe = computed<CopyRestoreRecipe>(() => ({
     .filter((d) => checked.value.includes(d))
     .map((name) => ({ name, target: targetName(name) })),
   safetyBackup: safetyBackup.value,
-  includeData: includeData.value
+  includeData: includeData.value,
+  restoreAs: restoreAs.value
 }))
 
 /** Steps the recipe would add, with stable ids so the problems do not flicker. */
@@ -208,7 +212,24 @@ const rowProblems = computed<Record<string, string>>(() => {
   return out
 })
 
-const problems = computed(() => copyRestoreProblems(recipe.value))
+/** Problem of the «Restaurar paquete» step the recipe would add (whole recipe). */
+const packageProblem = computed(() => {
+  const step = preview.value.find((t) => t.type === 'restorepackage')
+  if (!step || !targetId.value) return null
+  const problem = taskProblems(
+    step,
+    props.tasks.length + preview.value.length - 1,
+    [...props.tasks, ...preview.value],
+    (id) => connections.get(id),
+    settings.typedEnvironments
+  )[0]
+  return problem ? problem.replace(/^Paso \d+: /, '') : null
+})
+
+const problems = computed(() => [
+  ...copyRestoreProblems(recipe.value),
+  ...(packageProblem.value ? [packageProblem.value] : [])
+])
 const canAdd = computed(
   () =>
     !problems.value.length &&
@@ -219,10 +240,19 @@ const canAdd = computed(
 const count = computed(() => recipe.value.databases.length)
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many)
 
+/** Steps the recipe adds: the copies plus one package step, or one restore per copy. */
+const stepCount = computed(() =>
+  restoreAs.value === 'package' ? count.value + 1 : 2 * count.value
+)
+
 const summary = computed(() => {
   const n = count.value
   if (!n || !source.value || !target.value) return ''
-  return `Añadirá ${2 * n} pasos: ${n} ${plural(n, 'copia', 'copias')} de ${source.value.name} y, después, ${n} ${plural(n, 'restauración', 'restauraciones')} en ${target.value.name} ${safetyBackup.value ? 'con' : 'sin'} copia previa.`
+  const copies = `${n} ${plural(n, 'copia', 'copias')} de ${source.value.name}`
+  const safety = `${safetyBackup.value ? 'con' : 'sin'} copia previa`
+  return restoreAs.value === 'package'
+    ? `Añadirá ${stepCount.value} pasos: ${copies} y, después, un paso «Restaurar paquete» que las restaura en ${target.value.name} ${safety}.`
+    : `Añadirá ${stepCount.value} pasos: ${copies} y, después, ${n} ${plural(n, 'restauración', 'restauraciones')} en ${target.value.name} ${safety}.`
 })
 
 const safetyText = computed(() => {
@@ -419,6 +449,39 @@ function add(): void {
             </div>
           </div>
           <ReplaceContentToggle v-model="includeData" class="copy-restore__option" />
+          <div class="copy-restore__option">
+            <div id="recipe-restore-as-label" class="copy-restore__option-label">Restauración</div>
+            <v-btn-toggle
+              v-model="restoreAs"
+              mandatory
+              divided
+              density="compact"
+              variant="outlined"
+              class="copy-restore__toggle"
+              aria-labelledby="recipe-restore-as-label"
+              data-test="recipe-restore-as"
+            >
+              <v-btn
+                value="package"
+                prepend-icon="mdi-package-variant-closed"
+                data-test="recipe-restore-package"
+                >Un paso «Restaurar paquete»</v-btn
+              >
+              <v-btn
+                value="steps"
+                prepend-icon="mdi-format-list-numbered"
+                data-test="recipe-restore-steps"
+                >Un paso por base de datos</v-btn
+              >
+            </v-btn-toggle>
+            <div class="copy-restore__option-hint" data-test="recipe-restore-as-hint">
+              {{
+                restoreAs === 'package'
+                  ? 'La secuencia queda corta: un solo paso restaura todas las copias, cada una con su nombre de destino.'
+                  : 'Un paso de restauración por base de datos, para ajustar cada uno por separado.'
+              }}
+            </div>
+          </div>
         </div>
 
         <ul
@@ -443,7 +506,7 @@ function add(): void {
           data-test="recipe-add"
           @click="add"
         >
-          {{ count ? `Añadir ${2 * count} pasos` : 'Añadir pasos' }}
+          {{ count ? `Añadir ${stepCount} pasos` : 'Añadir pasos' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -559,6 +622,9 @@ function add(): void {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 16px;
+}
+.copy-restore__options > .copy-restore__option:nth-child(3) {
+  grid-column: 1 / -1;
 }
 .copy-restore__option-label {
   margin-bottom: 4px;

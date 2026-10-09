@@ -3,6 +3,8 @@ import { computed, nextTick, ref } from 'vue'
 import { engineOf } from '@shared/engines'
 import type { JobTask } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
+import { useJobsStore } from '@renderer/stores/jobs'
+import { ownPackageEntries, restoresWholePackage, splitByEngine } from '@shared/restorePackage'
 import { ENVIRONMENT_LABELS } from '@renderer/utils/objectTypes'
 import { TASK_ICONS, defaultReferenceName, duplicateTask, moveItem } from './jobForm'
 import { restoreSourceLabel } from './jobSteps'
@@ -29,13 +31,16 @@ const emit = defineEmits<{
 }>()
 
 const connections = useConnectionsStore()
+const jobs = useJobsStore()
 const stepNameOf = (id: string): string => connections.get(id)?.name ?? ''
+const jobNameOf = (id: string): string | undefined => jobs.get(id)?.name
 const listEl = ref<HTMLElement | null>(null)
 
 const TYPE_LABELS: Record<JobTask['type'], string> = {
   backupschema: 'Copia',
   runquery: 'Consulta',
-  restoreschema: 'Restauración'
+  restoreschema: 'Restauración',
+  restorepackage: 'Paquete'
 }
 const ENV_PILL: Record<string, string> = {
   production: 'nd-pill--production',
@@ -80,6 +85,16 @@ const rows = computed<Row[]>(() =>
         .find((l) => l && !l.startsWith('--'))
       detail = line ? (line.length > 80 ? `${line.slice(0, 80)}…` : line) : 'sin SQL'
       mono = !!line
+    } else if (task.type === 'restorepackage') {
+      const suffix = task.packageSuffix?.trim() ?? ''
+      database = suffix ? `nombre + «${suffix}»` : 'mismo nombre'
+      detail = [
+        packageCountText(task, tasks.value),
+        task.includeData === false ? 'solo estructura' : '',
+        task.safetyBackup === false ? 'sin copia previa' : 'con copia previa'
+      ]
+        .filter(Boolean)
+        .join(' · ')
     } else {
       const sourceSchema =
         task.restoreSource?.kind === 'latest'
@@ -95,7 +110,7 @@ const rows = computed<Row[]>(() =>
     return {
       task,
       index,
-      name: task.referenceName || defaultReferenceName(task, tasks.value, stepNameOf),
+      name: task.referenceName || defaultReferenceName(task, tasks.value, stepNameOf, jobNameOf),
       connectionName:
         connection?.name ?? (task.connectionId ? 'Conexión eliminada' : 'Sin conexión'),
       engineIcon: engine?.icon ?? 'mdi-help-circle-outline',
@@ -108,6 +123,31 @@ const rows = computed<Row[]>(() =>
     }
   })
 )
+
+const bases = (n: number): string => `${n} ${n === 1 ? 'base' : 'bases'}`
+
+/** «15 bases», «3 bases elegidas», «todas sus bases» (another job's package not read yet). */
+function packageCountText(task: JobTask, all: JobTask[]): string {
+  if (!restoresWholePackage(task)) {
+    const n = task.packageDatabases?.length ?? 0
+    return `${bases(n)} ${n === 1 ? 'elegida' : 'elegidas'}`
+  }
+  const source = task.packageSource
+  const lookup = (id: string) => connections.get(id)
+  const usable = (entries: { connectionId: string | null; structureOnly: boolean }[]) =>
+    splitByEngine(
+      task,
+      entries.map((e) => ({ schema: '', ...e })),
+      lookup
+    ).same.filter((e) => task.includeData === false || !e.structureOnly).length
+  if (source?.kind === 'job') {
+    const copies = jobs.packageOf(source.jobId)?.latest?.copies
+    const n = copies ? usable(copies) : 0
+    return n ? `${bases(n)} (todas)` : 'todas sus bases'
+  }
+  const n = usable(ownPackageEntries(task, all))
+  return n ? `${bases(n)} (todas)` : 'sin copias antes'
+}
 
 function select(id: string): void {
   selected.value = selected.value === id ? selected.value : id
@@ -257,8 +297,8 @@ defineExpose({ focusRow, revealRow })
         <div class="step-list__recipe-text">
           <strong>¿Llevar Staging a Local cada noche?</strong>
           <span
-            >«Copiar y restaurar» añade de una vez la copia de cada base de datos y su restauración
-            en el destino, con o sin copia previa.</span
+            >«Copiar y restaurar» añade de una vez la copia de cada base de datos y un paso que las
+            restaura todas en el destino, con o sin copia previa.</span
           >
         </div>
         <v-btn
@@ -348,7 +388,7 @@ defineExpose({ focusRow, revealRow })
           <span class="step-row__conn">
             <v-icon :icon="row.engineIcon" size="13" :title="row.engineLabel" aria-hidden="true" />
             <span
-              v-if="row.task.type === 'restoreschema'"
+              v-if="row.task.type === 'restoreschema' || row.task.type === 'restorepackage'"
               class="step-row__arrow"
               aria-hidden="true"
               >→</span
@@ -521,7 +561,8 @@ defineExpose({ focusRow, revealRow })
 .step-row__type--runquery .v-icon {
   color: var(--nd-cyan);
 }
-.step-row__type--restoreschema .v-icon {
+.step-row__type--restoreschema .v-icon,
+.step-row__type--restorepackage .v-icon {
   color: var(--nd-warning);
 }
 .step-row__main,

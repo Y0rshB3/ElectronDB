@@ -203,6 +203,8 @@ async function load(): Promise<void> {
   loadError.value = ''
   try {
     if (!connections.loaded) await connections.load().catch(() => undefined)
+    // Packages of the other automations: «Restaurar paquete» rows and the Restauración list.
+    void jobs.loadPackages()
     if (!jobId.value) {
       draft.value = emptyDraft()
       return
@@ -560,6 +562,7 @@ onMounted(load)
             <JobStepBrowser
               v-model:collapsed="browserCollapsed"
               :tasks="draft.tasks"
+              :job-id="draft.id ?? null"
               @add="addSteps"
               @recipe="openRecipe"
             />
@@ -579,6 +582,7 @@ onMounted(load)
             :task-id="selectedStep"
             :problems="stepProblems[selectedStep]"
             :password-ready="draft.hasBackupPassword || !!draft.backupPassword"
+            :job-id="draft.id ?? null"
             @close="closeStep"
             @open-options="openOptions"
           />
@@ -1050,7 +1054,7 @@ onMounted(load)
 }
 .je-browser {
   flex: 0 0 auto;
-  height: clamp(220px, 46%, 400px);
+  height: clamp(220px, 50%, 520px);
   border-top: 1px solid var(--nd-border);
   background: var(--nd-bg-panel);
 }

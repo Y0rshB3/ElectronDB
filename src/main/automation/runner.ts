@@ -8,6 +8,7 @@ import {
   objectLine,
   oneLine,
   plural,
+  restoreLabel,
   resultLine,
   runStartLine,
   stampLine,
@@ -25,6 +26,19 @@ import {
   sqlCopyRefusal
 } from '@shared/restoreTask'
 import { environmentPhrase } from '@shared/typedConfirm'
+import {
+  ownPackageEntries,
+  packageRestoreTasks,
+  packageSourceLabel,
+  packageTargetsProblem,
+  restorePackageProblem,
+  restoresWholePackage,
+  selectPackageEntries,
+  splitByEngine,
+  type PackageEntry
+} from '@shared/restorePackage'
+import { packageDate } from '@shared/backupPackages'
+import { existsSync } from 'node:fs'
 import type {
   BackupCreateResult,
   Job,
@@ -44,14 +58,15 @@ import {
   type ReplaceResult,
   type SchemaCharset
 } from '../backup/replace'
-import { isMysqlFamilyEngine } from '@shared/engines'
-import { jobStepEngineProblem } from '@shared/jobEngines'
+import { engineOf, isMysqlFamilyEngine } from '@shared/engines'
+import { backupFamilyName, backupFamilyOf, jobStepEngineProblem } from '@shared/jobEngines'
 import type { AppContext } from '../context'
 import { needsTypedConfirm, typedConfirmEnvironments } from '../ipc/productionGuard'
 import { CAPABILITY_MESSAGES, requireConnectionCapability } from '../db/errors'
 import type { SessionFactory } from '../mysql/types'
 import { newId, nowIso } from '../storage/ids'
 import { findLatestJobBackup } from './latestBackup'
+import { latestJobPackage } from './jobPackages'
 import { RunLog } from './runLog'
 import { MISSING_JOB_PASSWORD, jobBackupPassword } from './backupKeys'
 import { pickBackupPassword } from '../backup/passwords'
@@ -210,8 +225,33 @@ export function describeStep(ctx: AppContext, tasks: JobTask[], task: JobTask): 
       ? connectionName(ctx, source.connectionId)
       : 'backup'
     if (task.includeData === false) info.structureOnly = true
+  } else if (task.type === 'restorepackage') {
+    info.packageName = packageSourceLabel(task, (id) => ctx.jobs.get(id)?.name)
+    if (task.includeData === false) info.structureOnly = true
   }
   return info
+}
+
+/** Run entry of a step when the run starts (restores of a package step get `packageStepId`). */
+export function newTaskRun(t: JobTask, tasks: JobTask[], packageStepId?: string): JobTaskRun {
+  return {
+    taskId: t.id,
+    referenceName: t.referenceName,
+    status: 'queued',
+    startedAt: null,
+    finishedAt: null,
+    message: null,
+    outputPath: null,
+    type: t.type,
+    connectionId: t.connectionId,
+    schema: t.type === 'restoreschema' ? restoreTargetSchema(t, tasks) : t.schema,
+    ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {}),
+    ...(t.type === 'backupschema' && (t.format === 'sql' || t.format === 'vqb')
+      ? { format: t.format }
+      : {}),
+    ...(t.type === 'backupschema' && t.format === 'vqb' && t.encrypt ? { encrypted: true } : {}),
+    ...(packageStepId ? { packageStepId } : {})
+  }
 }
 
 function requireConnectionName(ctx: AppContext, task: JobTask): string {
@@ -252,8 +292,13 @@ class RunExecution {
   private seq = 0
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private readonly startedMs: number
-  /** Summary note of successful steps, by step index («Solo estructura: …»). */
-  private readonly notes = new Map<number, string>()
+  /** Summary note of successful steps, by step id («Solo estructura: …»). */
+  private readonly notes = new Map<string, string>()
+  /**
+   * Restores a «Restaurar paquete» step became that read another job's package:
+   * restore id -> that job (its stored password opens encrypted copies).
+   */
+  private readonly packageFiles = new Map<string, string>()
 
   constructor(
     private readonly ctx: AppContext,
@@ -358,6 +403,15 @@ class RunExecution {
         this.say(resultLine(this.aborted ? 'CANCELADO' : 'OMITIDO', [taskRun.message]))
         continue
       }
+      if (task.type === 'restorepackage') {
+        // The step becomes one restore per database, placed where it was: run them next.
+        if (await this.expandPackage(task, taskRun, i)) i--
+        else {
+          anyFailed = true
+          if (this.aborted || !this.job.continueOnError) stopRemaining = true
+        }
+        continue
+      }
       const ok = await this.runTask(task, taskRun, i)
       if (!ok) {
         anyFailed = true
@@ -383,7 +437,7 @@ class RunExecution {
         label: this.job.tasks[i] ? stepLabel(this.stepInfo(this.job.tasks[i])) : t.referenceName,
         status: t.status,
         message: t.message,
-        note: this.notes.get(i) ?? null
+        note: (this.job.tasks[i] && this.notes.get(this.job.tasks[i].id)) ?? null
       }))
     })
     if (total === 0) lines.splice(1, 0, '  El trabajo no tiene pasos.')
@@ -401,7 +455,7 @@ class RunExecution {
           ? task.schema
           : task.type === 'restoreschema'
             ? restoreTargetSchema(task, this.job.tasks)
-            : task.referenceName
+            : task.referenceName || 'paquete'
     }
   }
 
@@ -419,6 +473,209 @@ class RunExecution {
       kind: 'job',
       detail: { ...event.detail, ...step }
     })
+  }
+
+  /**
+   * «Restaurar paquete»: resolves the package (this run's copies, or the newest
+   * package of another job), checks it before anything is touched, and
+   * replaces the step in the job and the run by one ordinary restore per
+   * database. False when the step failed (nothing was restored).
+   */
+  private async expandPackage(task: JobTask, taskRun: JobTaskRun, index: number): Promise<boolean> {
+    const stepStart = this.now().getTime()
+    taskRun.status = 'running'
+    taskRun.startedAt = nowIso()
+    this.say(stepHeading(index + 1, this.job.tasks.length, this.stepInfo(task)))
+    this.publish()
+    try {
+      const targetName = requireConnectionName(this.ctx, task)
+      const label = `paso «${task.referenceName || 'Restaurar paquete'}»`
+      const problem = restorePackageProblem(
+        task,
+        this.job.tasks,
+        (id) => this.ctx.connections.get(id),
+        label,
+        {
+          typedEnvironments: typedConfirmEnvironments(this.ctx),
+          jobId: this.job.id,
+          jobExists: (id) => !!this.ctx.jobs.get(id)
+        }
+      )
+      if (problem) throw new Error(problem)
+      const target = this.ctx.connections.get(task.connectionId)!
+      // Defence in depth: a package step never writes where the typed name is needed.
+      if (needsTypedConfirm(this.ctx, target))
+        throw new Error(
+          `«${target.name}» es una conexión de ${environmentPhrase(target.environment)}: un paso de una tarea no puede reemplazar sus bases de datos.`
+        )
+      const source = task.packageSource!
+      let entries: PackageEntry[]
+      let packageJobId: string | null = null
+      let from: string
+      if (source.kind === 'own') {
+        entries = ownPackageEntries(task, this.job.tasks)
+        from = 'esta tarea'
+        this.say(
+          `  Paquete de esta tarea: las copias de ${plural(entries.length, 'paso anterior', 'pasos anteriores')} de esta ejecución`
+        )
+      } else {
+        const job = this.ctx.jobs.get(source.jobId)
+        from = `«${job?.name ?? source.jobName ?? 'otra tarea'}»`
+        const latest = latestJobPackage(this.ctx, source.jobId)
+        if (!latest)
+          throw new Error(
+            `${from} aún no tiene ningún paquete de copias .vqb o .nb3 terminado: ejecútala antes; no se restaura nada.`
+          )
+        packageJobId = source.jobId
+        entries = latest.copies.map((c) => ({
+          schema: c.schema,
+          connectionId: c.connectionId,
+          structureOnly: c.structureOnly,
+          path: c.path
+        }))
+        this.say(
+          `  Último paquete de ${from}: ejecución del ${packageDate(latest.run.startedAt)}, ${plural(entries.length, 'copia', 'copias')}`
+        )
+        if (latest.run.status !== 'success')
+          this.say(
+            '  Aviso: esa ejecución terminó con errores; solo se restauran las copias que llegó a hacer.'
+          )
+      }
+      const picked = selectPackageEntries(task, entries)
+      const { missing, skipped } = picked
+      let selected = picked.selected
+      // Picked by name, a structure-only copy would leave the target's tables empty.
+      const bare =
+        task.includeData !== false && !restoresWholePackage(task)
+          ? selected.find((e) => e.structureOnly)
+          : undefined
+      if (bare)
+        throw new Error(
+          `La copia de «${bare.schema}» del paquete de ${from} es solo de estructura (sin datos): las tablas de destino quedarían vacías; no se restaura nada. Quítala de la lista, marca «Solo estructura» en este paso o incluye datos en esa copia.`
+        )
+      if (restoresWholePackage(task)) {
+        // «Todas»: the copies of the target's engine (a package may span engines).
+        const split = splitByEngine(task, selected, (id) => this.ctx.connections.get(id))
+        selected = split.same
+        for (const entry of split.other)
+          this.say(
+            `  Aviso: «${entry.schema}» no se restaura: es una copia de «${connectionName(this.ctx, entry.connectionId)}», de otro motor que «${targetName}»`
+          )
+      }
+      for (const entry of skipped)
+        this.say(
+          `  Aviso: «${entry.schema}» no se restaura: su copia es solo de estructura y este paso restaura datos`
+        )
+      if (missing.length)
+        throw new Error(
+          `El paquete de ${from} no tiene ${missing.map((n) => `«${n}»`).join(', ')}; no se restaura nada. Quítala${missing.length === 1 ? '' : 's'} de la lista del paso o vuelve a ejecutar la tarea que la copia.`
+        )
+      if (!selected.length)
+        throw new Error(`El paquete de ${from} no tiene ninguna copia que restaurar con este paso.`)
+      const targetsProblem = packageTargetsProblem(task, selected, target, label)
+      if (targetsProblem) throw new Error(targetsProblem)
+      // Copies of another job: their engine is known now (MySQL and MariaDB share one).
+      const family = backupFamilyOf(engineOf(target).id)
+      for (const entry of selected) {
+        const conn = entry.connectionId ? this.ctx.connections.get(entry.connectionId) : null
+        const fromFamily = conn ? backupFamilyOf(engineOf(conn).id) : null
+        if (fromFamily && fromFamily !== family)
+          throw new Error(
+            `El paquete de ${from} tiene una copia de ${backupFamilyName(fromFamily)} («${entry.schema}» de «${conn!.name}») y «${target.name}» es ${backupFamilyName(family)}: una copia solo se restaura en una conexión del mismo motor; no se restaura nada.`
+          )
+      }
+      const restores = packageRestoreTasks(task, selected, (entry, targetSchema) =>
+        restoreLabel({
+          type: 'restoreschema',
+          schema: targetSchema,
+          connectionName: targetName,
+          referenceName: '',
+          sourceSchema: entry.schema,
+          sourceConnectionName: connectionName(this.ctx, entry.connectionId),
+          structureOnly: task.includeData === false || entry.structureOnly
+        })
+      )
+      await this.preflightPackage(restores, packageJobId, label)
+      for (const r of restores)
+        if (packageJobId && r.restoreSource?.kind === 'file')
+          this.packageFiles.set(r.id, packageJobId)
+      this.say(
+        `  ${plural(restores.length, 'base de datos', 'bases de datos')} -> ${targetName} ${task.safetyBackup !== false ? 'con' : 'sin'} copia previa: ${restores.map((r) => r.schema).join(', ')}`
+      )
+      const total = this.job.tasks.length - 1 + restores.length
+      this.say(
+        resultLine('OK', [
+          restores.length === 1
+            ? `se restaura en el paso ${index + 1} de ${total}`
+            : `se restaura en los pasos ${index + 1} a ${index + restores.length} de ${total}`,
+          formatElapsed(this.elapsedSince(stepStart))
+        ])
+      )
+      this.job.tasks.splice(index, 1, ...restores)
+      this.run.tasks.splice(
+        index,
+        1,
+        ...restores.map((r) => newTaskRun(r, this.job.tasks, task.id))
+      )
+      this.flush()
+      this.publish()
+      return true
+    } catch (err) {
+      const elapsed = formatElapsed(this.elapsedSince(stepStart))
+      taskRun.status = this.aborted ? 'cancelled' : 'failed'
+      taskRun.message = this.aborted ? CANCELLED_MESSAGE : errorMessage(err)
+      this.say(resultLine(this.aborted ? 'CANCELADO' : 'ERROR', [taskRun.message, elapsed]))
+      taskRun.finishedAt = nowIso()
+      this.flush()
+      this.publish()
+      return false
+    }
+  }
+
+  /**
+   * Everything each restore of a package will need, checked before the first
+   * database is replaced: the restore rules (self-restore, guarded targets,
+   * system databases), the copy itself (made in this run, or still on disk)
+   * and a password that opens it when it is encrypted.
+   */
+  private async preflightPackage(
+    restores: JobTask[],
+    packageJobId: string | null,
+    label: string
+  ): Promise<void> {
+    const all = [...this.job.tasks, ...restores]
+    const ownKey = jobBackupPassword(this.ctx, this.job.id)
+    const sourceKey = packageJobId ? jobBackupPassword(this.ctx, packageJobId) : null
+    for (const r of restores) {
+      const problem = restoreTaskProblem(r, all, (id) => this.ctx.connections.get(id), label, {
+        typedEnvironments: typedConfirmEnvironments(this.ctx),
+        packageFile: true
+      })
+      if (problem) throw new Error(`${problem} No se restaura nada.`)
+      const source = r.restoreSource!
+      let path: string
+      if (source.kind === 'task') {
+        const refRun = this.run.tasks.find((t) => t.taskId === source.taskId)
+        if (!refRun || refRun.status !== 'success' || !refRun.outputPath)
+          throw new Error(
+            `La copia de «${r.schema}» no se hizo en esta ejecución (su paso de copia no terminó bien); no se restaura nada del paquete.`
+          )
+        path = refRun.outputPath
+      } else if (source.kind === 'file') {
+        path = source.path
+        if (!existsSync(path))
+          throw new Error(
+            `La copia de «${source.schema}» del paquete ya no está en disco (${path}); no se restaura nada.`
+          )
+      } else continue
+      try {
+        await pickBackupPassword(path, [sourceKey, ownKey])
+      } catch (err) {
+        throw new Error(
+          `La copia de «${r.schema}» no se puede abrir: ${errorMessage(err)} No se restaura nada del paquete.`
+        )
+      }
+    }
   }
 
   private async runTask(task: JobTask, taskRun: JobTaskRun, index: number): Promise<boolean> {
@@ -460,7 +717,7 @@ class RunExecution {
           this.say(resultLine('OK', [...counts, formatElapsed(this.elapsedSince(stepStart))]))
         } else {
           const summary = structureOnlySummary(restored.objectsRestored)
-          this.notes.set(index, summary)
+          this.notes.set(task.id, summary)
           this.say(resultLine('OK', [summary, formatElapsed(this.elapsedSince(stepStart))]))
         }
       } else if (task.type === 'runquery') {
@@ -578,6 +835,15 @@ class RunExecution {
     const source = task.restoreSource
     if (!source) throw new Error(`El paso "${task.referenceName}" no indica qué copia restaurar.`)
     const ownKey = jobBackupPassword(this.ctx, this.job.id)
+    const packageJob = this.packageFiles.get(task.id)
+    if (source.kind === 'file' && packageJob) {
+      // A copy of another job's package: opened with that job's password.
+      if (!existsSync(source.path))
+        throw new Error(
+          `La copia de «${source.schema}» del paquete ya no está en disco (${source.path}); no se restaura.`
+        )
+      return { ...source, passwords: [jobBackupPassword(this.ctx, packageJob), ownKey] }
+    }
     if (source.kind === 'file')
       return { ...source, passwords: [this.options.backupPassword ?? null, ownKey] }
     if (source.kind === 'task') {
@@ -632,7 +898,8 @@ class RunExecution {
       `paso "${task.referenceName}"`,
       {
         rollback: this.options.allowProductionRestore === true || this.run.kind === 'rollback',
-        typedEnvironments: typedConfirmEnvironments(this.ctx)
+        typedEnvironments: typedConfirmEnvironments(this.ctx),
+        packageFile: this.packageFiles.has(task.id)
       }
     )
     if (problem) throw new Error(problem)
@@ -797,23 +1064,7 @@ export function startJobWith(
     trigger,
     startedAt: nowIso(),
     finishedAt: null,
-    tasks: job.tasks.map((t) => ({
-      taskId: t.id,
-      referenceName: t.referenceName,
-      status: 'queued',
-      startedAt: null,
-      finishedAt: null,
-      message: null,
-      outputPath: null,
-      type: t.type,
-      connectionId: t.connectionId,
-      schema: t.type === 'restoreschema' ? restoreTargetSchema(t, job.tasks) : t.schema,
-      ...(t.type === 'backupschema' ? { includeData: t.includeData !== false } : {}),
-      ...(t.type === 'backupschema' && (t.format === 'sql' || t.format === 'vqb')
-        ? { format: t.format }
-        : {}),
-      ...(t.type === 'backupschema' && t.format === 'vqb' && t.encrypt ? { encrypted: true } : {})
-    })),
+    tasks: job.tasks.map((t) => newTaskRun(t, job.tasks)),
     logPath: runLogPath(ctx, runId),
     pid: process.pid
   }

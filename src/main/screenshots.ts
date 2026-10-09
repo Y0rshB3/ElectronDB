@@ -2041,6 +2041,119 @@ const RECIPE_STEPS: Step[] = [
 ]
 STEPS.push(...RECIPE_STEPS)
 
+/**
+ * «Restaurar paquete» (VORTAQ_SHOTS_ONLY=47): need the profile of
+ * scripts/seed-automation-shots.mjs (jobs «Copias de Local» and «Copia nocturna
+ * Staging» with its last run). The restore list grouped by automation, a package
+ * step row and its settings panel.
+ */
+const PACKAGE_JOB = 'shot-auto-local-copies'
+const OPEN_PACKAGE_JOB = `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      await S.jobs.load()
+      const job = S.jobs.jobs.find((j) => j.id === '${PACKAGE_JOB}')
+      if (!job) throw new Error('job not seeded (run scripts/seed-automation-shots.mjs)')
+      S.workspace.openJobEditor(job.id, job.name)
+      await H.waitFor('[data-test="job-task-5"]', 10000)`
+const PACKAGE_STEPS: Step[] = [
+  {
+    name: '47a-restore-list-grouped',
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.until(() => H.$('[data-test="avail-pack:job:shot-auto-staging-nightly"]'), 8000)
+      await H.click('[data-test="browse-connection-${AUTO_LOCAL}"]', 8000)
+      await H.until(() => H.$('[data-test^="avail-latest:${AUTO_LOCAL}:"]'), 15000)
+      await H.settle(S, 1200)`
+  },
+  {
+    name: '47a2-restore-list-disk-copies',
+    script: `
+      // This job's copies folded and the list scrolled to the other jobs and the disk copies.
+      await H.click('[data-test="pack-fold-steps"]', 8000)
+      await H.sleep(200)
+      const list = H.$('[data-test="step-browser-items"]')
+      list.scrollTop = list.scrollHeight
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47b-restore-list-other-job',
+    script: `
+      await H.click('[data-test="pack-fold-job:shot-auto-staging-nightly"]', 8000)
+      await H.waitFor('[data-test="avail-pkg:shot-auto-staging-nightly:auth"]', 8000)
+      H.$('[data-test="avail-pkg:shot-auto-staging-nightly:ventas"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      H.$('[data-test="avail-pkg:shot-auto-staging-nightly:auth"]').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+      H.$('[data-test="avail-pack:job:shot-auto-staging-nightly"]').scrollIntoView({ block: 'start' })
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47c-package-step-row',
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="avail-add-pack:own"]', 8000)
+      await H.waitFor('[data-test="job-task-6"]', 8000)
+      await H.click('[data-test="avail-add-pack:job:shot-auto-staging-nightly"]', 8000)
+      await H.waitFor('[data-test="job-task-7"]', 8000)
+      await H.click('[data-test="step-browser-fold"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47d-package-step-settings',
+    script: `
+      await H.click('[data-test="job-task-6"]', 8000)
+      await H.waitFor('[data-test="package-databases"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47e-package-step-settings-other-job',
+    script: `${SET_INPUT}
+      await H.click('[data-test="job-task-7"]', 8000)
+      await H.waitFor('[data-test="package-db-auth"]', 8000)
+      await H.click('[data-test="package-whole-some"]', 8000)
+      await H.sleep(200)
+      await H.click('[data-test="package-db-pagos"] input[type="checkbox"]', 8000)
+      setInput('[data-test="package-suffix"] input', '_dev')
+      await H.click('[data-test="package-safety-off"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47f-restore-list-light',
+    script: `
+      S.settings.settings = { ...S.settings.settings, theme: 'light' }
+      ${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.settle(S, 1200)`,
+    cleanup: `S.settings.settings = { ...S.settings.settings, theme: 'dark' }`
+  },
+  {
+    name: '47g-restore-list-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.waitFor('[data-test="avail-pack:own"]', 8000)
+      await H.settle(S, 900)`
+  },
+  {
+    name: '47h-package-settings-1100',
+    size: { width: 1100, height: 760 },
+    script: `${OPEN_PACKAGE_JOB}
+      await H.click('[data-test="step-kind-restore"]', 8000)
+      await H.click('[data-test="avail-add-pack:own"]', 8000)
+      await H.waitFor('[data-test="job-task-6"]', 8000)
+      await H.click('[data-test="job-task-6"]', 8000)
+      await H.waitFor('[data-test="package-databases"]', 8000)
+      await H.settle(S, 900)`,
+    cleanup: `
+      for (const t of [...S.tabs.tabs]) if (t.closable) S.tabs.close(t.id)
+      for (const db of ['ventas', 'crm'])
+        await S.api.invokeSilent('db:execute', '${AUTO_LOCAL}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)
+      for (const db of ['ventas', 'crm', 'auth'])
+        await S.api.invokeSilent('db:execute', '${AUTO_STAGING}', 'DROP DATABASE IF EXISTS ' + db, {}).catch(() => null)`
+  }
+]
+STEPS.push(...PACKAGE_STEPS)
+
 function wrap(body: string): string {
   return `(async () => { const S = window.__vortaqShots; const H = window.__ndShotHelpers; ${body}\n; return true })()`
 }

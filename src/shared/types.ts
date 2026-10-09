@@ -1232,7 +1232,19 @@ export interface RestoreResult {
 
 /* ---------- Automation ---------- */
 
-export type JobTaskType = 'backupschema' | 'runquery' | 'restoreschema'
+export type JobTaskType = 'backupschema' | 'runquery' | 'restoreschema' | 'restorepackage'
+
+/**
+ * Which package a 'restorepackage' step restores (a package = the copies one
+ * run of a job made together):
+ * - `own`: the copies made in this same run by the backup steps of the job
+ *   placed before the step;
+ * - `job`: the newest package of another job (its latest finished run with
+ *   restorable copies), resolved when the step runs. `jobName` is only a label
+ *   for when that job no longer exists.
+ */
+export type RestorePackageSource =
+  { kind: 'own' } | { kind: 'job'; jobId: string; jobName?: string }
 
 /**
  * Where a restore step ('restoreschema') takes its .nb3 from:
@@ -1265,8 +1277,20 @@ export interface JobTask {
   includeData?: boolean
   /** For restoreschema: backup to restore. */
   restoreSource?: RestoreTaskSource
-  /** For restoreschema: back up the target schema before replacing it (default true). */
+  /** For restoreschema and restorepackage: back up each target database before replacing it (default true). */
   safetyBackup?: boolean
+  /** restorepackage: the package restored into `connectionId` (the target; `schema` is unused). */
+  packageSource?: RestorePackageSource
+  /**
+   * restorepackage: databases of the package to restore (the names they were
+   * copied from). Absent = all of them, including databases the package gains
+   * later.
+   */
+  packageDatabases?: string[]
+  /** restorepackage: target name of a database (by its copied name); absent = name + suffix. */
+  packageTargets?: Record<string, string>
+  /** restorepackage: added to the name of every database without its own target name. */
+  packageSuffix?: string
   /**
    * backupschema: file format. 'vqb' (the default of new steps) and 'nb3' are
    * restorable; 'sql' writes a plain .sql dump other managers can read (a
@@ -1338,6 +1362,38 @@ export interface JobTaskRun {
   format?: BackupFormat
   /** backupschema: the .vqb was encrypted with the job's password. */
   encrypted?: boolean
+  /**
+   * restoreschema run task that a 'restorepackage' step became when it ran
+   * (one per database of the package): the id of that step.
+   */
+  packageStepId?: string
+}
+
+/** Latest package of a job, for the «Restauración» list of the job editor (jobs:packages). */
+export interface JobPackageSummary {
+  jobId: string
+  jobName: string
+  /** Databases the job's backup steps copy (restorable formats), in step order. */
+  steps: { schema: string; connectionId: string; includeData: boolean }[]
+  /** Newest finished run with restorable copies; null = none yet. */
+  latest: {
+    runId: string
+    startedAt: string
+    status: RunStatus
+    copies: JobPackageCopy[]
+  } | null
+}
+
+/** One copy of a job package (a database copied by one backup step of a run). */
+export interface JobPackageCopy {
+  schema: string
+  connectionId: string | null
+  /** Backup step of the job that made it. */
+  taskId: string
+  path: string
+  /** Structure only (no rows). */
+  structureOnly: boolean
+  encrypted: boolean
 }
 
 export interface JobRun {

@@ -1,6 +1,7 @@
 import { backupFamilyOf, jobStepEngineProblem } from '@shared/jobEngines'
 import { naturalStepName, type ConnectionName } from '@shared/jobRecipes'
 import { restoreSourceOf, restoreTaskProblem } from '@shared/restoreTask'
+import { restorePackageProblem } from '@shared/restorePackage'
 import type {
   ConnectionConfig,
   Environment,
@@ -42,13 +43,15 @@ export const encryptsBackups = (tasks: JobTask[]): boolean =>
 export const TASK_TYPES: { value: JobTaskType; title: string }[] = [
   { value: 'backupschema', title: 'Copia de seguridad' },
   { value: 'runquery', title: 'Ejecutar consulta' },
-  { value: 'restoreschema', title: 'Restaurar' }
+  { value: 'restoreschema', title: 'Restaurar' },
+  { value: 'restorepackage', title: 'Restaurar paquete' }
 ]
 
 export const TASK_ICONS: Record<JobTaskType, string> = {
   backupschema: 'mdi-archive-outline',
   runquery: 'mdi-console-line',
-  restoreschema: 'mdi-backup-restore'
+  restoreschema: 'mdi-backup-restore',
+  restorepackage: 'mdi-package-variant-closed'
 }
 
 /** Id of a new step. */
@@ -66,6 +69,11 @@ export function newTask(type: JobTaskType, connectionId = '', schema = ''): JobT
     task.format = 'vqb'
   } else if (type === 'restoreschema') {
     task.restoreSource = { kind: 'task', taskId: '' }
+    task.safetyBackup = true
+    task.includeData = true
+  } else if (type === 'restorepackage') {
+    // Every database of this job's package (also those added later), same names.
+    task.packageSource = { kind: 'own' }
     task.safetyBackup = true
     task.includeData = true
   } else task.sql = ''
@@ -92,12 +100,40 @@ export function newRestoreTask(
   // A copy restores into a connection of its own engine (MySQL and MariaDB share one).
   const from = source ? connections.find((c) => c.id === source.connectionId) : undefined
   const family = from ? backupFamilyOf(from.engine) : null
-  const local = connections.find(
+  const candidates = connections.filter(
     (c) =>
       c.environment === 'local' && !blocked(c) && (!family || backupFamilyOf(c.engine) === family)
   )
+  // Restoring a copy onto the connection it came from (same name) is refused: prefer another.
+  const local = candidates.find((c) => c.id !== source?.connectionId) ?? candidates[0]
   const task = newTask('restoreschema', local?.id ?? '', '')
   task.restoreSource = { kind: 'task', taskId: source?.id ?? '' }
+  return task
+}
+
+/**
+ * «Restaurar paquete» step of `source` (this job's package or another job's
+ * latest one), into the first local connection of `family` that does not need
+ * the typed name, preferably not one the copies come from (changed in its
+ * settings). `databases` absent = all of them.
+ */
+export function newPackageTask(
+  source: NonNullable<JobTask['packageSource']>,
+  connections: ConnectionConfig[],
+  blocked: (connection: ConnectionConfig) => boolean,
+  family: ReturnType<typeof backupFamilyOf> | null,
+  databases?: string[],
+  /** Connections the copies come from: another local connection is preferred as target. */
+  sources: string[] = []
+): JobTask {
+  const candidates = connections.filter(
+    (c) =>
+      c.environment === 'local' && !blocked(c) && (!family || backupFamilyOf(c.engine) === family)
+  )
+  const local = candidates.find((c) => !sources.includes(c.id)) ?? candidates[0]
+  const task = newTask('restorepackage', local?.id ?? '', '')
+  task.packageSource = { ...source }
+  if (databases) task.packageDatabases = [...databases]
   return task
 }
 
@@ -109,9 +145,11 @@ export function newRestoreTask(
 export function defaultReferenceName(
   task: JobTask,
   tasks: JobTask[] = [],
-  nameOf?: ConnectionName
+  nameOf?: ConnectionName,
+  jobName?: (id: string) => string | undefined
 ): string {
-  if (nameOf && task.type !== 'runquery') return naturalStepName(task, tasks, nameOf)
+  if (nameOf && task.type !== 'runquery') return naturalStepName(task, tasks, nameOf, jobName)
+  if (task.type === 'restorepackage') return naturalStepName(task, tasks, () => '', jobName)
   if (task.type === 'backupschema') return `Backup ${task.schema}`.trim()
   if (task.type === 'restoreschema')
     return `Restaurar ${task.schema || restoreSourceOf(task, tasks)?.schema || ''}`.trim()
@@ -183,7 +221,7 @@ export function taskProblems(
   if (task.type === 'runquery' && !task.sql?.trim())
     errors.push(`Paso ${n}: escribe la consulta SQL a ejecutar.`)
   // Same per-engine rules as main (restore steps get them through restoreTaskProblem).
-  if (task.type !== 'restoreschema') {
+  if (task.type !== 'restoreschema' && task.type !== 'restorepackage') {
     const problem = jobStepEngineProblem(task, tasks, lookup, `paso ${n}`)
     if (problem) errors.push(problem)
   }
@@ -195,6 +233,14 @@ export function taskProblems(
       referenceName: task.referenceName.trim() || defaultReferenceName(task, tasks)
     }
     const problem = restoreTaskProblem(named, tasks, lookup, `paso ${n}`, { typedEnvironments })
+    if (problem) errors.push(problem)
+  }
+  if (task.type === 'restorepackage' && task.connectionId) {
+    const named = {
+      ...task,
+      referenceName: task.referenceName.trim() || defaultReferenceName(task, tasks)
+    }
+    const problem = restorePackageProblem(named, tasks, lookup, `paso ${n}`, { typedEnvironments })
     if (problem) errors.push(problem)
   }
   return errors
@@ -272,6 +318,20 @@ export function buildJobInput(draft: JobDraft, nameOf?: ConnectionName): JobInpu
         out.safetyBackup = task.safetyBackup !== false
         // Absent in jobs saved before 0.1.6: structure and data.
         out.includeData = task.includeData !== false
+      } else if (task.type === 'restorepackage') {
+        out.schema = ''
+        if (task.packageSource) out.packageSource = { ...task.packageSource }
+        // Absent = every database of the package, also those it gains later.
+        if (Array.isArray(task.packageDatabases)) out.packageDatabases = [...task.packageDatabases]
+        const targets = Object.fromEntries(
+          Object.entries(task.packageTargets ?? {})
+            .map(([k, v]) => [k, (v ?? '').trim()] as const)
+            .filter(([, v]) => v)
+        )
+        if (Object.keys(targets).length) out.packageTargets = targets
+        if (task.packageSuffix?.trim()) out.packageSuffix = task.packageSuffix.trim()
+        out.safetyBackup = task.safetyBackup !== false
+        out.includeData = task.includeData !== false
       } else out.sql = task.sql ?? ''
       return out
     }),
@@ -299,5 +359,8 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
 export function duplicateTask(task: JobTask): JobTask {
   const copy: JobTask = { ...task, id: newStepId() }
   if (task.restoreSource) copy.restoreSource = { ...task.restoreSource }
+  if (task.packageSource) copy.packageSource = { ...task.packageSource }
+  if (task.packageDatabases) copy.packageDatabases = [...task.packageDatabases]
+  if (task.packageTargets) copy.packageTargets = { ...task.packageTargets }
   return copy
 }

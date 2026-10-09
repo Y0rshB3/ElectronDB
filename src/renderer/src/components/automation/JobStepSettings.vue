@@ -2,15 +2,24 @@
 import { computed, ref, watch } from 'vue'
 import { restoreSourceOf } from '@shared/restoreTask'
 import {
+  ownPackageEntries,
+  packageTargetName,
+  restoresWholePackage,
+  type PackageEntry
+} from '@shared/restorePackage'
+import { packageDate } from '@shared/backupPackages'
+import { engineOf } from '@shared/engines'
+import {
   backupFamilyName,
   backupFamilyOf,
   jobBackupFormats,
   jobDatabaseLabel,
   supportsQuerySteps
 } from '@shared/jobEngines'
-import type { JobTask, JobTaskType } from '@shared/types'
+import type { ConnectionConfig, JobTask, JobTaskType } from '@shared/types'
 import { useConnectionsStore } from '@renderer/stores/connections'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useJobsStore } from '@renderer/stores/jobs'
 import SqlEditor from '@renderer/components/common/SqlEditor.vue'
 import { useSchemaLoader } from '@renderer/components/backups/useSchemaLoader'
 import { automationConnections, environmentLabel } from '@renderer/components/backups/backupHelpers'
@@ -20,6 +29,7 @@ import {
   TASK_TYPES,
   defaultReferenceName,
   hasAutoName,
+  newPackageTask,
   newRestoreTask,
   newTask
 } from './jobForm'
@@ -35,12 +45,16 @@ const props = defineProps<{
   problems?: string[]
   /** The job has a stored backup password, or one typed in Opciones. */
   passwordReady?: boolean
+  /** The job being edited (never offered as «último paquete de otra tarea»). */
+  jobId?: string | null
 }>()
 const emit = defineEmits<{ close: []; openOptions: [] }>()
 
 const connections = useConnectionsStore()
 const settings = useSettingsStore()
+const jobs = useJobsStore()
 const schemaLoader = useSchemaLoader()
+const jobNameOf = (id: string): string | undefined => jobs.get(id)?.name
 
 const index = computed(() => tasks.value.findIndex((t) => t.id === props.taskId))
 const task = computed<JobTask | null>(() => tasks.value[index.value] ?? null)
@@ -78,16 +92,168 @@ function databaseLabel(connectionId: string | null | undefined): string {
   return jobDatabaseLabel(connectionOf(connectionId) ?? null)
 }
 
+/* ---------- «Restaurar paquete» ---------- */
+
+/** Copies of the step's package as far as the editor knows them (another job: its latest package). */
+const packageEntries = computed<PackageEntry[]>(() => {
+  const t = task.value
+  if (t?.type !== 'restorepackage') return []
+  const source = t.packageSource
+  if (!source || source.kind === 'own') return ownPackageEntries(t, tasks.value)
+  const pkg = jobs.packageOf(source.jobId)
+  if (pkg?.latest)
+    return pkg.latest.copies.map((c) => ({
+      schema: c.schema,
+      connectionId: c.connectionId,
+      structureOnly: c.structureOnly,
+      path: c.path
+    }))
+  return (pkg?.steps ?? []).map((s) => ({
+    schema: s.schema,
+    connectionId: s.connectionId,
+    structureOnly: !s.includeData
+  }))
+})
+
+/** Databases listed in the panel: the package's, plus chosen ones it does not have (now). */
+const packageRows = computed(() => {
+  const t = task.value
+  if (!t) return []
+  const rows = packageEntries.value.map((e) => ({ ...e, missing: false }))
+  for (const name of t.packageDatabases ?? [])
+    if (!rows.some((r) => r.schema === name))
+      rows.push({ schema: name, connectionId: null, structureOnly: false, missing: true })
+  return rows
+})
+
+watch(
+  () => task.value?.type === 'restorepackage',
+  (isPackage) => {
+    if (isPackage && !jobs.packagesLoaded) void jobs.loadPackages()
+  },
+  { immediate: true }
+)
+
+const packageSourceItems = computed(() => {
+  const own = {
+    title: 'Paquete de esta tarea',
+    subtitle: 'Las copias de los pasos anteriores, recién hechas en la misma ejecución',
+    value: 'own'
+  }
+  const current = task.value?.packageSource
+  const others = jobs.packages
+    .filter((p) => p.jobId !== props.jobId)
+    .map((p) => ({
+      title: `Último paquete de «${p.jobName}»`,
+      subtitle: p.latest
+        ? `${packageDate(p.latest.startedAt)} · ${p.latest.copies.length} ${p.latest.copies.length === 1 ? 'copia' : 'copias'}`
+        : 'Aún no se ha ejecutado',
+      value: `job:${p.jobId}`
+    }))
+  // A job that no longer exists (or not loaded yet) stays selectable under its saved name.
+  if (current?.kind === 'job' && !others.some((o) => o.value === `job:${current.jobId}`))
+    others.push({
+      title: `Último paquete de «${jobNameOf(current.jobId) ?? current.jobName ?? 'tarea eliminada'}»`,
+      subtitle: jobs.packagesLoaded ? 'No se encuentra la tarea ni sus copias' : 'Cargando…',
+      value: `job:${current.jobId}`
+    })
+  return [own, ...others]
+})
+
+const packageSourceValue = computed(() => {
+  const source = task.value?.packageSource
+  if (!source) return null
+  return source.kind === 'own' ? 'own' : `job:${source.jobId}`
+})
+
+function changePackageSource(value: string | null): void {
+  if (!value) return
+  if (value === 'own') update({ packageSource: { kind: 'own' }, packageDatabases: undefined })
+  else {
+    const jobId = value.slice(4)
+    const name = jobs.packageOf(jobId)?.jobName ?? jobNameOf(jobId)
+    update({
+      packageSource: { kind: 'job', jobId, ...(name ? { jobName: name } : {}) },
+      packageDatabases: undefined
+    })
+  }
+}
+
+/** One line under the package select: what it holds now. */
+const packageInfo = computed(() => {
+  const t = task.value
+  if (t?.type !== 'restorepackage') return ''
+  const n = packageEntries.value.length
+  const copies = `${n} ${n === 1 ? 'copia' : 'copias'}`
+  if (t.packageSource?.kind !== 'job')
+    return n
+      ? `${copies} de los pasos anteriores de esta tarea. Si añades más copias antes de este paso, también entran.`
+      : 'Aún no hay pasos de copia antes de este paso: añádelos antes o elige el paquete de otra tarea.'
+  const pkg = jobs.packageOf(t.packageSource.jobId)
+  if (!pkg?.latest)
+    return 'Esa tarea aún no ha hecho ningún paquete: se usará el de su próxima ejecución.'
+  return `Ahora: ejecución del ${packageDate(pkg.latest.startedAt)}, ${copies}. En cada ejecución se busca otra vez su último paquete.`
+})
+
+const wholePackage = computed(() => (task.value ? restoresWholePackage(task.value) : true))
+
+function changeWhole(value: string | null): void {
+  if (value === 'all') update({ packageDatabases: undefined })
+  else if (value === 'some' && wholePackage.value)
+    update({ packageDatabases: packageEntries.value.map((e) => e.schema) })
+}
+
+function togglePackageDb(name: string, on: boolean): void {
+  const current = task.value?.packageDatabases ?? []
+  const next = on
+    ? packageRows.value.map((r) => r.schema).filter((n) => n === name || current.includes(n))
+    : current.filter((n) => n !== name)
+  update({ packageDatabases: next })
+}
+
+function setPackageTarget(name: string, value: string | null): void {
+  const targets = { ...(task.value?.packageTargets ?? {}) }
+  const v = (value ?? '').trim()
+  if (v && v !== `${name}${task.value?.packageSuffix?.trim() ?? ''}`) targets[name] = v
+  else delete targets[name]
+  update({ packageTargets: Object.keys(targets).length ? targets : undefined })
+}
+
+function setPackageSuffix(value: string | null): void {
+  const v = (value ?? '').trim()
+  update({ packageSuffix: v || undefined })
+}
+
+const safetyText = computed(() => {
+  const name = connectionOf(task.value?.connectionId)?.name ?? 'el destino'
+  return task.value?.safetyBackup !== false
+    ? `Antes de reemplazar cada base de datos de ${name} se guarda una copia de lo que tenía (etiqueta «previo-rollback»), para poder deshacer la restauración.`
+    : `Las bases de datos de ${name} se reemplazan directamente: lo que tenían se pierde.`
+})
+
 /** Engine of the copies a restore step reads (its source connection), when known. */
 const sourceFamily = computed(() => {
   if (!task.value) return null
+  if (task.value.type === 'restorepackage') {
+    for (const e of packageEntries.value) {
+      const c = connectionOf(e.connectionId)
+      if (c) return backupFamilyOf(engineOf(c).id)
+    }
+    return null
+  }
   const from = restoreSourceOf(task.value, tasks.value)?.connectionId
   const connection = connectionOf(from)
   return connection ? backupFamilyOf(connection.engine) : null
 })
 
 /** Changes that alter a step's default name («Copia de ventas (Staging)»…). */
-const NAMING: (keyof JobTask)[] = ['connectionId', 'schema', 'restoreSource', 'type']
+const NAMING: (keyof JobTask)[] = [
+  'connectionId',
+  'schema',
+  'restoreSource',
+  'packageSource',
+  'type'
+]
 
 function update(changes: Partial<JobTask>): void {
   if (index.value < 0) return
@@ -97,7 +263,9 @@ function update(changes: Partial<JobTask>): void {
   if (
     !('referenceName' in changes) &&
     NAMING.some((k) => k in changes) &&
-    hasAutoName(current, tasks.value, stepNameOf)
+    (hasAutoName(current, tasks.value, stepNameOf) ||
+      current.referenceName.trim() ===
+        defaultReferenceName(current, tasks.value, stepNameOf, jobNameOf))
   )
     changes = { ...changes, referenceName: '' }
   next[index.value] = { ...current, ...changes }
@@ -146,14 +314,22 @@ const blockedHint = computed(() => {
 function changeType(type: JobTaskType): void {
   const current = task.value
   if (!current || current.type === type) return
+  const before = tasks.value.slice(0, index.value)
+  const blocked = (c: ConnectionConfig): boolean => settings.needsTypedConfirm(c.environment)
+  const firstCopy = before.find((t) => t.type === 'backupschema' && connectionOf(t.connectionId))
   const base =
     type === 'restoreschema'
-      ? newRestoreTask(
-          tasks.value.slice(0, index.value),
-          automationConnections(connections.sorted),
-          (c) => settings.needsTypedConfirm(c.environment)
-        )
-      : newTask(type, current.connectionId, current.schema)
+      ? newRestoreTask(before, automationConnections(connections.sorted), blocked)
+      : type === 'restorepackage'
+        ? newPackageTask(
+            { kind: 'own' },
+            automationConnections(connections.sorted),
+            blocked,
+            firstCopy ? backupFamilyOf(connectionOf(firstCopy.connectionId)!.engine) : null,
+            undefined,
+            before.filter((t) => t.type === 'backupschema').map((t) => t.connectionId)
+          )
+        : newTask(type, current.connectionId, current.schema)
   const next = [...tasks.value]
   next[index.value] = { ...base, id: current.id, referenceName: current.referenceName }
   tasks.value = next
@@ -347,7 +523,176 @@ const formatValue = computed(() =>
         />
       </div>
 
-      <template v-if="task.type === 'restoreschema'">
+      <template v-if="task.type === 'restorepackage'">
+        <h4 class="step-settings__section">Paquete</h4>
+        <div class="step-settings__group">
+          <v-select
+            :model-value="packageSourceValue"
+            :items="packageSourceItems"
+            label="Paquete a restaurar"
+            :hint="packageInfo"
+            persistent-hint
+            prepend-inner-icon="mdi-package-variant-closed"
+            data-test="package-source"
+            @update:model-value="changePackageSource($event)"
+          />
+        </div>
+        <h4 class="step-settings__section">Bases de datos</h4>
+        <div class="step-settings__dbs-head">
+          <v-btn-toggle
+            :model-value="wholePackage ? 'all' : 'some'"
+            mandatory
+            divided
+            density="compact"
+            variant="outlined"
+            class="step-settings__toggle"
+            aria-label="Bases de datos del paquete"
+            data-test="package-whole"
+            @update:model-value="changeWhole($event)"
+          >
+            <v-btn value="all" data-test="package-whole-all">Todas</v-btn>
+            <v-btn value="some" data-test="package-whole-some">Solo las marcadas</v-btn>
+          </v-btn-toggle>
+          <v-text-field
+            :model-value="task.packageSuffix ?? ''"
+            density="compact"
+            hide-details
+            label="Sufijo en destino"
+            placeholder="sin sufijo"
+            persistent-placeholder
+            class="step-settings__suffix step-settings__mono"
+            data-test="package-suffix"
+            @update:model-value="setPackageSuffix($event)"
+          />
+        </div>
+        <p class="step-settings__hint">
+          {{
+            wholePackage
+              ? 'Todas las bases del paquete, también las que entren en él más adelante.'
+              : 'Solo las marcadas; una base nueva en el paquete no se restaura hasta que la marques.'
+          }}
+          {{
+            task.includeData !== false && packageRows.some((r) => r.structureOnly)
+              ? 'Las copias solo de estructura no se restauran con datos.'
+              : ''
+          }}
+        </p>
+        <ul
+          v-if="packageRows.length"
+          class="step-settings__dbs"
+          aria-label="Bases de datos del paquete"
+          data-test="package-databases"
+        >
+          <li
+            v-for="row in packageRows"
+            :key="row.schema"
+            class="step-settings__db"
+            :class="{
+              'step-settings__db--off':
+                (!wholePackage && !task.packageDatabases?.includes(row.schema)) ||
+                (task.includeData !== false && row.structureOnly)
+            }"
+            :data-test="`package-db-${row.schema}`"
+          >
+            <v-checkbox-btn
+              :model-value="
+                wholePackage
+                  ? !(task.includeData !== false && row.structureOnly)
+                  : !!task.packageDatabases?.includes(row.schema)
+              "
+              :disabled="wholePackage"
+              density="compact"
+              :aria-label="`Restaurar ${row.schema}`"
+              @update:model-value="togglePackageDb(row.schema, !!$event)"
+            />
+            <span class="step-settings__db-name nd-mono" :title="row.schema">{{ row.schema }}</span>
+            <v-icon icon="mdi-arrow-right" size="13" class="step-settings__db-arrow" />
+            <v-text-field
+              :model-value="task.packageTargets?.[row.schema] ?? ''"
+              density="compact"
+              hide-details
+              :placeholder="packageTargetName({ ...task, packageTargets: {} }, row.schema)"
+              persistent-placeholder
+              :aria-label="`Base de datos de destino de ${row.schema}`"
+              class="step-settings__db-target step-settings__mono"
+              :data-test="`package-target-${row.schema}`"
+              @update:model-value="setPackageTarget(row.schema, $event)"
+            />
+            <span v-if="row.missing" class="nd-pill nd-pill--staging step-settings__db-tag"
+              >no está en el paquete</span
+            >
+            <span v-else-if="row.structureOnly" class="nd-pill step-settings__db-tag"
+              >solo estructura</span
+            >
+          </li>
+        </ul>
+        <p v-else class="step-settings__hint">
+          {{
+            jobs.packagesLoaded || task.packageSource?.kind !== 'job'
+              ? 'El paquete aún no tiene copias.'
+              : 'Cargando el paquete…'
+          }}
+        </p>
+        <h4 class="step-settings__section">Destino</h4>
+        <div class="step-settings__group">
+          <v-select
+            :model-value="task.connectionId || null"
+            :items="targetItems"
+            :hint="targetHint"
+            :persistent-hint="!!targetHint"
+            label="Conexión de destino"
+            prepend-inner-icon="mdi-server-network"
+            no-data-text="No hay conexiones del mismo motor"
+            data-test="package-target"
+            @update:model-value="update({ connectionId: $event ?? '' })"
+          />
+        </div>
+        <ReplaceContentToggle
+          :model-value="task.includeData !== false"
+          class="step-settings__content"
+          data-test="package-content"
+          @update:model-value="update({ includeData: $event })"
+        />
+        <div class="step-settings__safety">
+          <div id="package-safety-label" class="step-settings__format-label">
+            Copia previa del destino
+          </div>
+          <v-btn-toggle
+            :model-value="task.safetyBackup !== false"
+            mandatory
+            divided
+            density="compact"
+            variant="outlined"
+            class="step-settings__toggle"
+            aria-labelledby="package-safety-label"
+            data-test="package-safety"
+            @update:model-value="update({ safetyBackup: !!$event })"
+          >
+            <v-btn
+              :value="true"
+              prepend-icon="mdi-shield-check-outline"
+              data-test="package-safety-on"
+              >Con copia previa</v-btn
+            >
+            <v-btn :value="false" prepend-icon="mdi-flash-outline" data-test="package-safety-off"
+              >Sin copia previa</v-btn
+            >
+          </v-btn-toggle>
+          <p class="step-settings__hint" data-test="package-safety-hint">{{ safetyText }}</p>
+        </div>
+        <p class="step-settings__hint">
+          Cada base de datos de destino se borra y se crea de nuevo con
+          {{
+            task.includeData === false
+              ? 'la estructura de su copia (tablas vacías).'
+              : 'el contenido de su copia.'
+          }}
+          Al ejecutarse, el paso se convierte en una restauración por base de datos (cada una con su
+          línea en el registro). {{ blockedHint }}
+        </p>
+      </template>
+
+      <template v-else-if="task.type === 'restoreschema'">
         <h4 class="step-settings__section">Origen</h4>
         <div class="step-settings__group">
           <v-select
@@ -688,6 +1033,77 @@ const formatValue = computed(() =>
   flex: 1;
 }
 .step-settings__content {
+  margin-top: 4px;
+}
+.step-settings__toggle :deep(.v-btn) {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.step-settings__dbs-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.step-settings__suffix {
+  flex: 1;
+  min-width: 120px;
+}
+.step-settings__mono :deep(input) {
+  font-family: var(--nd-font-mono, ui-monospace, monospace);
+}
+.step-settings__dbs {
+  flex: none;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--nd-border);
+  border-radius: var(--nd-radius-control);
+  background: var(--nd-bg-sunken);
+}
+.step-settings__db {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding-right: 4px;
+}
+.step-settings__db > :deep(.v-selection-control) {
+  flex: none;
+}
+.step-settings__db-target {
+  flex: 1.3 1 0;
+  min-width: 0;
+}
+.step-settings__db--off .step-settings__db-name,
+.step-settings__db--off .step-settings__db-target {
+  opacity: 0.55;
+}
+.step-settings__db-name {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--nd-fs-dense);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.step-settings__db-arrow {
+  flex: none;
+  color: var(--nd-text-muted);
+}
+.step-settings__db-tag {
+  flex: none;
+  white-space: nowrap;
+}
+.step-settings__safety {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 4px;
 }
 .step-settings__sql {
