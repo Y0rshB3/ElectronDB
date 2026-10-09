@@ -4,6 +4,7 @@ import {
   buildJobInput,
   defaultReferenceName,
   emptyDraft,
+  newPackageTask,
   newRestoreTask,
   newTask,
   validateDraft
@@ -22,6 +23,34 @@ function stagingToLocal(): JobTask[] {
 }
 
 describe('restore steps in the job form', () => {
+  it('prefers a local target of the same engine as the copies, not the source', () => {
+    const mixed = [
+      { id: 'maria', name: 'MariaDB Local', environment: 'local', engine: 'mariadb' },
+      { id: 'mysqlSrc', name: 'Local Test', environment: 'local', engine: 'mysql' },
+      { id: 'mysqlOther', name: 'Otra local', environment: 'local', engine: 'mysql' }
+    ] as ConnectionConfig[]
+    const pkg = newPackageTask(
+      { kind: 'thisJob' } as never,
+      mixed,
+      () => false,
+      'mysql' as never,
+      undefined,
+      ['mysqlSrc']
+    )
+    expect(pkg.connectionId).toBe('mysqlOther')
+    const onlyMaria = mixed.filter((c) => c.id !== 'mysqlOther')
+    expect(
+      newPackageTask(
+        { kind: 'thisJob' } as never,
+        onlyMaria,
+        () => false,
+        'mysql' as never,
+        undefined,
+        ['mysqlSrc']
+      ).connectionId
+    ).toBe('maria')
+  })
+
   it('a new restore step uses the last backup step and the first local connection', () => {
     const [backup, restore] = stagingToLocal()
     expect(restore).toMatchObject({
@@ -178,9 +207,12 @@ describe('job steps per engine', () => {
     // Not the copy's own connection (same name there would restore it onto itself).
     expect(newRestoreTask([backup], engines).connectionId).toBe('lite2')
     // The only local SQLite connection is still proposed when there is no other.
-    expect(newRestoreTask([backup], engines.filter((c) => c.id !== 'lite2')).connectionId).toBe(
-      'lite'
-    )
+    expect(
+      newRestoreTask(
+        [backup],
+        engines.filter((c) => c.id !== 'lite2')
+      ).connectionId
+    ).toBe('lite')
   })
 
   it('accepts .vqb backups of SQLite and MongoDB, refuses query steps there', () => {

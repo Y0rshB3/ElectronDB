@@ -105,10 +105,25 @@ export function newRestoreTask(
       c.environment === 'local' && !blocked(c) && (!family || backupFamilyOf(c.engine) === family)
   )
   // Restoring a copy onto the connection it came from (same name) is refused: prefer another.
-  const local = candidates.find((c) => c.id !== source?.connectionId) ?? candidates[0]
+  const local = preferredTarget(candidates, source ? [source.connectionId] : [], from?.engine)
   const task = newTask('restoreschema', local?.id ?? '', '')
   task.restoreSource = { kind: 'task', taskId: source?.id ?? '' }
   return task
+}
+
+/**
+ * Default restore target among `candidates` (already filtered): a connection
+ * the copies do not come from, then one of the same engine as the copies
+ * (MySQL before MariaDB for a MySQL copy), keeping the list order otherwise.
+ */
+function preferredTarget(
+  candidates: ConnectionConfig[],
+  sources: string[],
+  engine: ConnectionConfig['engine'] | undefined
+): ConnectionConfig | undefined {
+  const rank = (c: ConnectionConfig): number =>
+    (sources.includes(c.id) ? 2 : 0) + (engine && c.engine !== engine ? 1 : 0)
+  return [...candidates].sort((a, b) => rank(a) - rank(b))[0]
 }
 
 /**
@@ -130,7 +145,8 @@ export function newPackageTask(
     (c) =>
       c.environment === 'local' && !blocked(c) && (!family || backupFamilyOf(c.engine) === family)
   )
-  const local = candidates.find((c) => !sources.includes(c.id)) ?? candidates[0]
+  const engine = connections.find((c) => sources.includes(c.id))?.engine
+  const local = preferredTarget(candidates, sources, engine)
   const task = newTask('restorepackage', local?.id ?? '', '')
   task.packageSource = { ...source }
   if (databases) task.packageDatabases = [...databases]
